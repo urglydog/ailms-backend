@@ -1,0 +1,27 @@
+# =====================================================================
+# Backend dev image — Spring Boot 3 + Maven + Java 17
+#
+# Dùng image có sẵn Maven nên máy host KHÔNG cần cài JDK/Maven.
+# Java 17 theo đặc tả dự án (record DTO, pattern matching).
+# =====================================================================
+FROM maven:3.9-eclipse-temurin-17
+
+WORKDIR /app
+
+# curl cho healthcheck của docker-compose
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Tải dependency trước, tách khỏi source để cache layer:
+# sửa code Java sẽ không phải tải lại toàn bộ dependency.
+COPY pom.xml .
+RUN mvn -B dependency:go-offline
+
+COPY src ./src
+
+EXPOSE 8080
+
+# spring-boot-devtools tự restart khi .class thay đổi.
+# Bind mount ./:/app + volume cache /root/.m2 được khai trong docker-compose.
+CMD ["mvn", "-B", "spring-boot:run", "-Dspring-boot.run.jvmArguments=-Dspring.devtools.restart.enabled=true"]
