@@ -12,4 +12,6 @@ import org.springframework.stereotype.Repository;
  */
 @Repository
 public interface InstructorRequestRepository extends JpaRepository<InstructorRequest, Long> {
+    boolean existsByUserIdAndStatus(Long userId, com.lms.common.enums.RequestStatus status);
+    java.util.List<InstructorRequest> findByStatus(com.lms.common.enums.RequestStatus status);
 }

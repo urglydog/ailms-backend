@@ -1,0 +1,270 @@
+{
+  "info": {
+    "name": "AI-Powered LMS API (Phân theo Role)",
+    "description": "Tập hợp các API phân chia theo Role (GUEST, STUDENT, INSTRUCTOR, ADMIN). Các API đăng nhập sẽ tự động lưu accessToken vào biến môi trường.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "access_token",
+      "value": ""
+    },
+    {
+      "key": "refresh_token",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "1. GUEST (Không cần đăng nhập)",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "url": "http://localhost:8080/actuator/health"
+          }
+        },
+        {
+          "name": "Đăng ký (Register)",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"test_student@lms.local\",\n    \"password\": \"Password123!\",\n    \"fullName\": \"Nguyễn Văn Test\"\n}"
+            },
+            "url": "http://localhost:8080/api/v1/auth/register"
+          }
+        },
+        {
+          "name": "Xác nhận OTP (Verify Registration)",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"test_student@lms.local\",\n    \"otp\": \"123456\"\n}"
+            },
+            "url": "http://localhost:8080/api/v1/auth/register/verify"
+          }
+        },
+        {
+          "name": "Lấy danh sách khóa học public",
+          "request": {
+            "method": "GET",
+            "url": "http://localhost:8080/api/v1/courses"
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. STUDENT (Học viên)",
+      "item": [
+        {
+          "name": "Đăng nhập (Học viên)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.collectionVariables.set(\"access_token\", jsonData.accessToken);",
+                  "    pm.collectionVariables.set(\"refresh_token\", jsonData.refreshToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"test_student@lms.local\",\n    \"password\": \"Password123!\"\n}"
+            },
+            "url": "http://localhost:8080/api/v1/auth/login"
+          }
+        },
+        {
+          "name": "Lấy thông tin cá nhân (My Profile)",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}],
+            "url": "http://localhost:8080/api/v1/users/me"
+          }
+        },
+        {
+          "name": "Gửi yêu cầu nâng cấp Giảng viên",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{access_token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"reason\": \"Tôi có bằng IELTS 8.0 và muốn tạo khóa học\"\n}"
+            },
+            "url": "http://localhost:8080/api/v1/instructor-requests"
+          }
+        },
+        {
+          "name": "Đăng xuất",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"refreshToken\": \"{{refresh_token}}\"\n}"
+            },
+            "url": "http://localhost:8080/api/v1/auth/logout"
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. INSTRUCTOR (Giảng viên)",
+      "item": [
+        {
+          "name": "Đăng nhập (Giảng viên)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.collectionVariables.set(\"access_token\", jsonData.accessToken);",
+                  "    pm.collectionVariables.set(\"refresh_token\", jsonData.refreshToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"test_instructor@lms.local\",\n    \"password\": \"Password123!\"\n}"
+            },
+            "url": "http://localhost:8080/api/v1/auth/login"
+          }
+        },
+        {
+          "name": "Tạo khóa học mới",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{access_token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"title\": \"Tiếng Anh Giao Tiếp\",\n    \"description\": \"Khóa học cơ bản\",\n    \"categoryId\": 1,\n    \"price\": 500000\n}"
+            },
+            "url": "http://localhost:8080/api/v1/courses"
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. ADMIN (Quản trị viên)",
+      "item": [
+        {
+          "name": "Đăng nhập (Admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.collectionVariables.set(\"access_token\", jsonData.accessToken);",
+                  "    pm.collectionVariables.set(\"refresh_token\", jsonData.refreshToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"test_admin@lms.local\",\n    \"password\": \"Password123!\"\n}"
+            },
+            "url": "http://localhost:8080/api/v1/auth/login"
+          }
+        },
+        {
+          "name": "Lấy danh sách toàn bộ người dùng",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}],
+            "url": "http://localhost:8080/api/v1/users"
+          }
+        },
+        {
+          "name": "Xem chi tiết user (ID=1)",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}],
+            "url": "http://localhost:8080/api/v1/users/1"
+          }
+        },
+        {
+          "name": "Sửa thông tin user (ID=1)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{access_token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"fullName\": \"Tên Mới\",\n    \"role\": \"INSTRUCTOR\",\n    \"isActive\": true\n}"
+            },
+            "url": "http://localhost:8080/api/v1/users/1"
+          }
+        },
+        {
+          "name": "Khóa user (ID=1)",
+          "request": {
+            "method": "DELETE",
+            "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}],
+            "url": "http://localhost:8080/api/v1/users/1"
+          }
+        },
+        {
+          "name": "Lấy danh sách yêu cầu chờ duyệt (PENDING)",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}],
+            "url": "http://localhost:8080/api/v1/instructor-requests?status=PENDING"
+          }
+        },
+        {
+          "name": "Duyệt yêu cầu nâng cấp",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{access_token}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"status\": \"APPROVED\",\n    \"adminNotes\": \"Hồ sơ hợp lệ\"\n}"
+            },
+            "url": "http://localhost:8080/api/v1/instructor-requests/1/status"
+          }
+        }
+      ]
+    }
+  ]
+}
