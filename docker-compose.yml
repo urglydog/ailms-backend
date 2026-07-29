@@ -1,0 +1,264 @@
+# =====================================================================
+# AI-Powered LMS — Môi trường phát triển
+#
+# File này nằm trong repo `be` (service lõi) nhưng điều phối cả 3 service.
+# ĐIỀU KIỆN: 3 repo phải được clone NGANG HÀNG:
+#     project/
+#       ├─ be/          ← chạy lệnh docker compose từ đây
+#       ├─ fe/
+#       └─ ai-worker/
+#
+# Chạy:  cd project/be && docker compose up -d
+# Hướng dẫn đầy đủ: ./RUNNING.md
+#
+# Lưu ý: KHÔNG có key `version:` — Compose V2 đã bỏ, để lại sẽ cảnh báo.
+# =====================================================================
+
+services:
+  # ── Cơ sở dữ liệu ─────────────────────────────────────────────
+  mysql:
+    image: mysql:8.0
+    container_name: lms_mysql
+    restart: unless-stopped
+    # utf8mb4 là BẮT BUỘC: transcript tiếng Việt/Nhật/Hàn sẽ lỗi với charset mặc định
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --default-authentication-plugin=caching_sha2_password
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-lms_db}
+      # App dùng user riêng, không dùng root (nguyên tắc least-privilege)
+      MYSQL_USER: ${MYSQL_USER:-lms_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-lms_pass}
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-root}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    container_name: lms_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    # Healthcheck để backend/worker chờ đúng thời điểm Redis sẵn sàng
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ── Công cụ hỗ trợ dev ────────────────────────────────────────
+  adminer:
+    image: adminer:latest
+    container_name: lms_adminer
+    restart: unless-stopped
+    ports:
+      - "${ADMINER_PORT:-8081}:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: mysql
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  # Mail server giả để test OTP đăng ký / quên mật khẩu (BR-AUTH-02)
+  # Không cần SMTP thật khi dev. UI xem mail: http://localhost:8025
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: lms_mailpit
+    restart: unless-stopped
+    ports:
+      - "${MAILPIT_UI_PORT:-8025}:8025"
+      - "${MAILPIT_SMTP_PORT:-1025}:1025"
+    environment:
+      MP_MAX_MESSAGES: 500
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+
+  # ── Service 1: Backend lõi (Spring Boot 3 + Maven) ────────────
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: lms_backend
+    restart: unless-stopped
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
+      # Datasource
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-lms_db}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Ho_Chi_Minh&characterEncoding=utf8
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-lms_user}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-lms_pass}
+      # QUAN TRỌNG: Spring Boot 3 dùng SPRING_DATA_REDIS_*, KHÔNG phải SPRING_REDIS_*
+      # (property đã đổi tên từ Boot 3.0 — dùng tên cũ là Redis không kết nối được)
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      # Mail (Mailpit)
+      SPRING_MAIL_HOST: mailpit
+      SPRING_MAIL_PORT: 1025
+      # JWT — thời hạn theo BR-AUTH-04
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET chua duoc dat trong .env}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
+      JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-7d}
+      # Hạn ngạch nghiệp vụ (BR-DUB-06, BR-MAT-08, BR-TUTOR-04, BR-DISCOVERY-01)
+      QUOTA_DUB_STUDENT_PER_DAY: ${QUOTA_DUB_STUDENT_PER_DAY:-15}
+      QUOTA_DUB_INSTRUCTOR_PER_DAY: ${QUOTA_DUB_INSTRUCTOR_PER_DAY:-30}
+      QUOTA_MATERIAL_PER_DAY: ${QUOTA_MATERIAL_PER_DAY:-6}
+      QUOTA_TUTOR_MSG_PER_DAY: ${QUOTA_TUTOR_MSG_PER_DAY:-30}
+      QUOTA_DISCOVERY_GUEST_PER_HOUR: ${QUOTA_DISCOVERY_GUEST_PER_HOUR:-15}
+      # Cloud storage
+      B2_BUCKET_NAME: ${B2_BUCKET_NAME:-}
+      B2_KEY_ID: ${B2_KEY_ID:-}
+      B2_APPLICATION_KEY: ${B2_APPLICATION_KEY:-}
+      # Cổng thanh toán (Sandbox)
+      MOMO_PARTNER_CODE: ${MOMO_PARTNER_CODE:-}
+      MOMO_ACCESS_KEY: ${MOMO_ACCESS_KEY:-}
+      MOMO_SECRET_KEY: ${MOMO_SECRET_KEY:-}
+      ZALOPAY_APP_ID: ${ZALOPAY_APP_ID:-}
+      ZALOPAY_KEY1: ${ZALOPAY_KEY1:-}
+      ZALOPAY_KEY2: ${ZALOPAY_KEY2:-}
+      VNPAY_TMN_CODE: ${VNPAY_TMN_CODE:-}
+      VNPAY_HASH_SECRET: ${VNPAY_HASH_SECRET:-}
+      # Token nội bộ để AI Worker gọi callback về đây
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-dev-internal-token}
+    volumes:
+      - .:/app                              # hot-reload khi sửa code
+      - backend_maven_cache:/root/.m2       # cache dependency Maven giữa các lần chạy
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 120s   # Maven tải dependency lần đầu rất lâu
+
+  # ── Service 2a: AI API (FastAPI, HTTP đồng bộ) ────────────────
+  # Phục vụ UC30 Socratic Tutor và UC49 Course Discovery — hai UC này
+  # trả lời trực tiếp cho người dùng nên KHÔNG đi qua Celery.
+  ai-api:
+    build:
+      context: ../ai-worker
+      dockerfile: Dockerfile
+    container_name: lms_ai_api
+    restart: unless-stopped
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "${AI_API_PORT:-8000}:8000"
+    environment: &ai_env
+      REDIS_URL: redis://redis:6379/0
+      # AI Worker KHÔNG kết nối MySQL trực tiếp (xem architecture.md) —
+      # mọi thay đổi dữ liệu phải gọi callback về backend.
+      INTERNAL_BE_URL: http://backend:8080
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-dev-internal-token}
+      # STT: Groq mặc định (§5.1.1 — không phụ thuộc GPU).
+      # Đổi thành whisperx_local khi cần đo đối chứng cho Chương 6.
+      ASR_BACKEND: ${ASR_BACKEND:-groq}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_ASR_MODEL: ${GROQ_ASR_MODEL:-whisper-large-v3-turbo}
+      # LLM: tên model đọc từ env, KHÔNG hardcode (BR-DUB-02)
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.0-flash}
+      # TTS
+      EDGE_TTS_REGION: ${EDGE_TTS_REGION:-}
+      # RAG cho Socratic Tutor (BR-TUTOR-03)
+      SUPABASE_VECTOR_URL: ${SUPABASE_VECTOR_URL:-}
+      SUPABASE_VECTOR_KEY: ${SUPABASE_VECTOR_KEY:-}
+      # Cloud storage
+      B2_BUCKET_NAME: ${B2_BUCKET_NAME:-}
+      B2_KEY_ID: ${B2_KEY_ID:-}
+      B2_APPLICATION_KEY: ${B2_APPLICATION_KEY:-}
+      # Tham số pipeline (BR-CHUNK-02, BR-CHUNK-04)
+      CHUNK_MINUTES: ${CHUNK_MINUTES:-10}
+      MAX_RETRY: ${MAX_RETRY:-3}
+    volumes:
+      - ../ai-worker:/app
+      - ai_tmp_storage:/tmp/lms-processing   # file trung gian, xoá ≤24h (BR-STORAGE-01)
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # ── Service 2b: Celery worker (tác vụ nặng bất đồng bộ) ───────
+  # UC19 pipeline lồng tiếng, UC25 sinh học liệu
+  ai-worker:
+    build:
+      context: ../ai-worker
+      dockerfile: Dockerfile
+    container_name: lms_ai_worker
+    restart: unless-stopped
+    command: celery -A app.celery_app worker --loglevel=info --concurrency=2
+    environment: *ai_env
+    volumes:
+      - ../ai-worker:/app
+      - ai_tmp_storage:/tmp/lms-processing
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # ── Service 2c: Celery beat (tác vụ định kỳ) ──────────────────
+  # BR-STORAGE-01 dọn file trung gian 24h · BR-NOTIFY-01 dọn thông báo 90 ngày
+  # + nhắc lịch ôn Flashcards · BR-DUB-08 báo cáo audio ít dùng hàng tuần
+  ai-beat:
+    build:
+      context: ../ai-worker
+      dockerfile: Dockerfile
+    container_name: lms_ai_beat
+    restart: unless-stopped
+    command: celery -A app.celery_app beat --loglevel=info
+    environment: *ai_env
+    volumes:
+      - ../ai-worker:/app
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # ── Service 3: Frontend (Next.js) ─────────────────────────────
+  frontend:
+    build:
+      context: ../fe
+      dockerfile: Dockerfile.dev
+    container_name: lms_frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    environment:
+      # Browser gọi qua localhost (người dùng thật gõ URL này)
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080}
+      # Server Component fetch TỪ TRONG container — phải dùng tên service,
+      # localhost trong container là chính container frontend, không phải backend.
+      INTERNAL_API_URL: http://backend:8080
+      NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-http://localhost:8080}
+      WATCHPACK_POLLING: "true"   # hot-reload qua bind mount trên Windows/WSL2
+    volumes:
+      - ../fe:/app
+      - frontend_node_modules:/app/node_modules   # giữ node_modules của container
+      - frontend_next_cache:/app/.next
+    depends_on:
+      backend:
+        condition: service_started
+
+volumes:
+  mysql_data:
+  redis_data:
+  backend_maven_cache:
+  frontend_node_modules:
+  frontend_next_cache:
+  ai_tmp_storage:
+
+networks:
+  default:
+    name: lms_network
