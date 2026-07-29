@@ -1,0 +1,25 @@
+# Giảm build context — Docker chỉ cần pom.xml + src/
+target/
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+
+# Tài liệu không cần trong image
+*.md
+docker-compose.yml
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath
+
+# Log & OS
+logs/
+*.log
+.DS_Store
+Thumbs.db
