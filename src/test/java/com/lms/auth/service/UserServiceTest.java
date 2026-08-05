@@ -1,5 +1,7 @@
 package com.lms.auth.service;
 
+import com.lms.auth.dto.UserDto.UpdateMyProfileReq;
+import com.lms.auth.dto.UserDto.UserRes;
 import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
 import com.lms.common.enums.Role;
@@ -107,6 +109,102 @@ class UserServiceTest {
 
         assertThrows(RuntimeException.class, () ->
             userService.changePassword(email, "anything", "NewPassword!")
+        );
+
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    /**
+     * Unit tests for UserService - UC06: Update My Profile
+     * Tests profile update for authenticated users
+     */
+    @Test
+    void testUpdateMyProfile_ShouldUpdateAllProvidedFields() {
+        String email = "student@lms.local";
+        User user = new User();
+        user.setId(1L);
+        user.setEmail(email);
+        user.setFullName("Old Name");
+        user.setAvatarUrl("https://old-avatar.url");
+        user.setPreferredLanguage("en");
+        user.setRole(Role.STUDENT);
+        user.setAuthProvider("LOCAL");
+        user.setIsActive(true);
+
+        when(userRepository.findByEmail(email)).thenReturn(Optional.of(user));
+        when(userRepository.save(any(User.class))).thenReturn(user);
+
+        UpdateMyProfileReq req = new UpdateMyProfileReq(
+            "Nguyễn Văn A",
+            "https://new-avatar.url",
+            "vi"
+        );
+        UserRes result = userService.updateMyProfile(email, req);
+
+        assertEquals("Nguyễn Văn A", result.fullName());
+        assertEquals("https://new-avatar.url", result.avatarUrl());
+        assertEquals("vi", result.preferredLanguage());
+        verify(userRepository, times(1)).save(user);
+    }
+
+    @Test
+    void testUpdateMyProfile_ShouldUpdatePartialFields() {
+        String email = "student@lms.local";
+        User user = new User();
+        user.setId(1L);
+        user.setEmail(email);
+        user.setFullName("Old Name");
+        user.setAvatarUrl("https://old-avatar.url");
+        user.setPreferredLanguage("en");
+        user.setRole(Role.STUDENT);
+        user.setAuthProvider("LOCAL");
+        user.setIsActive(true);
+
+        when(userRepository.findByEmail(email)).thenReturn(Optional.of(user));
+        when(userRepository.save(any(User.class))).thenReturn(user);
+
+        UpdateMyProfileReq req = new UpdateMyProfileReq("New Name", null, null);
+        UserRes result = userService.updateMyProfile(email, req);
+
+        assertEquals("New Name", result.fullName());
+        assertEquals("https://old-avatar.url", result.avatarUrl());
+        assertEquals("en", result.preferredLanguage());
+        verify(userRepository, times(1)).save(user);
+    }
+
+    @Test
+    void testUpdateMyProfile_ShouldNotUpdateBlankFields() {
+        String email = "student@lms.local";
+        User user = new User();
+        user.setId(1L);
+        user.setEmail(email);
+        user.setFullName("Original Name");
+        user.setAvatarUrl("https://original-avatar.url");
+        user.setPreferredLanguage("en");
+        user.setRole(Role.STUDENT);
+        user.setAuthProvider("LOCAL");
+        user.setIsActive(true);
+
+        when(userRepository.findByEmail(email)).thenReturn(Optional.of(user));
+        when(userRepository.save(any(User.class))).thenReturn(user);
+
+        UpdateMyProfileReq req = new UpdateMyProfileReq("  ", "", null);
+        UserRes result = userService.updateMyProfile(email, req);
+
+        assertEquals("Original Name", result.fullName());
+        assertEquals("https://original-avatar.url", result.avatarUrl());
+        assertEquals("en", result.preferredLanguage());
+        verify(userRepository, times(1)).save(user);
+    }
+
+    @Test
+    void testUpdateMyProfile_ShouldThrowIfUserNotFound() {
+        when(userRepository.findByEmail("nonexistent@lms.local"))
+            .thenReturn(Optional.empty());
+
+        UpdateMyProfileReq req = new UpdateMyProfileReq("Name", "url", "en");
+        assertThrows(RuntimeException.class, () ->
+            userService.updateMyProfile("nonexistent@lms.local", req)
         );
 
         verify(userRepository, never()).save(any(User.class));

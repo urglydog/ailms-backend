@@ -1,5 +1,6 @@
 package com.lms.auth.service;
 
+import com.lms.auth.dto.UserDto.UpdateMyProfileReq;
 import com.lms.auth.dto.UserDto.UpdateUserReq;
 import com.lms.auth.dto.UserDto.UserRes;
 import com.lms.auth.entity.User;
@@ -87,6 +88,29 @@ public class UserService {
 
         user.setPasswordHash(passwordEncoder.encode(newPassword));
         userRepository.save(user);
+    }
+
+    /**
+     * UC06 - Update My Profile: Allow authenticated users to update their own profile
+     * Users can update fullName, avatarUrl, and preferredLanguage (all optional)
+     */
+    @Transactional
+    public UserRes updateMyProfile(String email, UpdateMyProfileReq req) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("Tài khoản không tồn tại"));
+
+        if (req.fullName() != null && !req.fullName().isBlank()) {
+            user.setFullName(req.fullName());
+        }
+        if (req.avatarUrl() != null && !req.avatarUrl().isBlank()) {
+            user.setAvatarUrl(req.avatarUrl());
+        }
+        if (req.preferredLanguage() != null && !req.preferredLanguage().isBlank()) {
+            user.setPreferredLanguage(req.preferredLanguage());
+        }
+
+        userRepository.save(user);
+        return mapToRes(user);
     }
 
     private UserRes mapToRes(User user) {
