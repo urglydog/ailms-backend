@@ -69,4 +69,9 @@ public class AuthRequestDto {
             @Size(min = 8, message = "Mật khẩu phải ≥ 8 ký tự")
             String newPassword
     ) {}
+
+    public record GoogleOAuthCallbackReq(
+            @NotBlank(message = "Google ID Token không được để trống")
+            String idToken
+    ) {}
 }

@@ -1,9 +1,12 @@
 package com.lms.auth.service;
 
+import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
 import com.lms.auth.dto.AuthResponseDto.TokenRes;
 import com.lms.auth.entity.User;
+import com.lms.auth.provider.GoogleOAuthProvider;
 import com.lms.auth.repository.UserRepository;
 import com.lms.auth.security.JwtTokenProvider;
+import com.lms.common.enums.Role;
 import com.lms.common.exception.BusinessRuleViolationException;
 import com.lms.common.exception.ResourceNotFoundException;
 import org.junit.jupiter.api.Test;
@@ -16,6 +19,8 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.io.IOException;
+import java.security.GeneralSecurityException;
 import java.time.Duration;
 import java.util.Optional;
 
@@ -50,6 +55,9 @@ class AuthServiceTest {
 
     @Mock
     private JwtTokenProvider jwtTokenProvider;
+
+    @Mock
+    private GoogleOAuthProvider googleOAuthProvider;
 
     @InjectMocks
     private AuthService authService;
@@ -263,6 +271,85 @@ class AuthServiceTest {
         );
 
         // Verify password was NOT changed
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    /**
+     * UC02 extend - Google OAuth2 Login: Create new user if not exists
+     * Tests Google token verification, user creation, and JWT generation
+     */
+    @Test
+    void testLoginWithGoogle_ShouldCreateUserIfNotExists() throws GeneralSecurityException, IOException {
+        String googleEmail = "user@gmail.com";
+        String idToken = "valid-google-token";
+
+        GoogleIdToken.Payload payload = mock(GoogleIdToken.Payload.class);
+        when(payload.getEmail()).thenReturn(googleEmail);
+        when(payload.get("name")).thenReturn("Google User");
+        when(payload.get("picture")).thenReturn("https://example.com/pic.jpg");
+        when(googleOAuthProvider.verifyToken(idToken)).thenReturn(payload);
+
+        when(userRepository.findByEmail(googleEmail)).thenReturn(Optional.empty());
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(jwtTokenProvider.generateAccessToken(any())).thenReturn("access_token");
+        when(jwtTokenProvider.generateRefreshToken(any())).thenReturn("refresh_token");
+
+        TokenRes tokens = authService.loginWithGoogle(idToken);
+
+        assertNotNull(tokens);
+        assertNotNull(tokens.accessToken());
+        assertNotNull(tokens.refreshToken());
+
+        ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(userCaptor.capture());
+        User savedUser = userCaptor.getValue();
+        assertEquals(googleEmail, savedUser.getEmail());
+        assertEquals("Google User", savedUser.getFullName());
+        assertEquals("https://example.com/pic.jpg", savedUser.getAvatarUrl());
+        assertEquals("GOOGLE", savedUser.getAuthProvider());
+        assertEquals(Role.STUDENT, savedUser.getRole());
+        assertTrue(savedUser.getIsActive());
+        assertNull(savedUser.getPasswordHash());
+    }
+
+    @Test
+    void testLoginWithGoogle_ShouldUpdateExistingUser() throws GeneralSecurityException, IOException {
+        String googleEmail = "existing@gmail.com";
+        String idToken = "valid-google-token";
+
+        GoogleIdToken.Payload payload = mock(GoogleIdToken.Payload.class);
+        when(payload.getEmail()).thenReturn(googleEmail);
+        when(payload.get("name")).thenReturn("Updated Name");
+        when(payload.get("picture")).thenReturn("https://example.com/new-pic.jpg");
+        when(googleOAuthProvider.verifyToken(idToken)).thenReturn(payload);
+
+        User existingUser = new User();
+        existingUser.setEmail(googleEmail);
+        existingUser.setFullName("Old Name");
+        existingUser.setAvatarUrl("https://example.com/old-pic.jpg");
+        when(userRepository.findByEmail(googleEmail)).thenReturn(Optional.of(existingUser));
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(jwtTokenProvider.generateAccessToken(any())).thenReturn("access_token");
+        when(jwtTokenProvider.generateRefreshToken(any())).thenReturn("refresh_token");
+
+        TokenRes tokens = authService.loginWithGoogle(idToken);
+
+        assertNotNull(tokens);
+        assertNotNull(tokens.accessToken());
+        assertEquals("Updated Name", existingUser.getFullName());
+        assertEquals("https://example.com/new-pic.jpg", existingUser.getAvatarUrl());
+        verify(userRepository).save(existingUser);
+    }
+
+    @Test
+    void testLoginWithGoogle_ShouldThrowOnInvalidToken() throws GeneralSecurityException, IOException {
+        String invalidToken = "invalid-token";
+        when(googleOAuthProvider.verifyToken(invalidToken))
+            .thenThrow(new RuntimeException("Invalid Google ID token"));
+
+        assertThrows(RuntimeException.class, () -> authService.loginWithGoogle(invalidToken));
+
+        // Verify no user was created or modified
         verify(userRepository, never()).save(any(User.class));
     }
 }

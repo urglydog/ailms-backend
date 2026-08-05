@@ -1,8 +1,10 @@
 package com.lms.auth.service;
 
+import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
 import com.lms.auth.dto.AuthRequestDto.*;
 import com.lms.auth.dto.AuthResponseDto.*;
 import com.lms.auth.entity.User;
+import com.lms.auth.provider.GoogleOAuthProvider;
 import com.lms.auth.repository.UserRepository;
 import com.lms.auth.security.CustomUserDetails;
 import com.lms.auth.security.JwtTokenProvider;
@@ -22,6 +24,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.IOException;
+import java.security.GeneralSecurityException;
 import java.time.Duration;
 
 @Slf4j
@@ -36,6 +40,7 @@ public class AuthService {
     private final OtpService otpService;
     private final StringRedisTemplate redisTemplate;
     private final EmailService emailService;
+    private final GoogleOAuthProvider googleOAuthProvider;
 
     private static final String LOGIN_FAIL_PREFIX = "login_fail:";
     private static final String REFRESH_TOKEN_PREFIX = "refresh_token:";
@@ -236,6 +241,56 @@ public class AuthService {
         redisTemplate.delete("otp:forgot:wrong:" + email);
 
         // Auto-login user and return tokens
+        Authentication authentication = new UsernamePasswordAuthenticationToken(
+                new CustomUserDetails(user), null, new CustomUserDetails(user).getAuthorities());
+
+        return generateTokens(authentication);
+    }
+
+    /**
+     * UC02 extend - Google OAuth2 Login
+     * BR-AUTH-01: Create/update user from Google OAuth2 token
+     * BR-AUTH-04: Sinh và lưu Refresh Token vào Redis
+     *
+     * @param idToken Google ID token from frontend
+     * @return TokenRes containing access and refresh tokens
+     * @throws GeneralSecurityException if token verification fails
+     * @throws IOException if token verification fails
+     */
+    @Transactional
+    public TokenRes loginWithGoogle(String idToken) throws GeneralSecurityException, IOException {
+        GoogleIdToken.Payload payload = googleOAuthProvider.verifyToken(idToken);
+
+        String email = payload.getEmail();
+        Optional<User> existingUser = userRepository.findByEmail(email);
+
+        User user;
+        if (existingUser.isPresent()) {
+            user = existingUser.get();
+            // Update profile fields from Google
+            if (payload.get("name") != null) {
+                user.setFullName((String) payload.get("name"));
+            }
+            if (payload.get("picture") != null) {
+                user.setAvatarUrl((String) payload.get("picture"));
+            }
+            log.info("Updated existing Google OAuth user: {}", email);
+        } else {
+            // Create new user from Google OAuth
+            user = new User();
+            user.setEmail(email);
+            user.setFullName((String) payload.get("name"));
+            user.setAvatarUrl((String) payload.get("picture"));
+            user.setAuthProvider("GOOGLE");
+            user.setRole(Role.STUDENT);
+            user.setIsActive(true);
+            user.setPasswordHash(null);  // No password for Google OAuth users (BR-AUTH-01)
+            log.info("Created new Google OAuth user: {}", email);
+        }
+
+        userRepository.save(user);
+
+        // Create authentication and generate tokens
         Authentication authentication = new UsernamePasswordAuthenticationToken(
                 new CustomUserDetails(user), null, new CustomUserDetails(user).getAuthorities());
 
