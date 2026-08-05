@@ -1,7 +1,9 @@
 package com.lms.auth.service;
 
+import com.lms.auth.dto.AuthResponseDto.TokenRes;
 import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
+import com.lms.auth.security.JwtTokenProvider;
 import com.lms.common.exception.BusinessRuleViolationException;
 import com.lms.common.exception.ResourceNotFoundException;
 import org.junit.jupiter.api.Test;
@@ -12,6 +14,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.Duration;
 import java.util.Optional;
@@ -41,6 +44,12 @@ class AuthServiceTest {
 
     @Mock
     private ValueOperations<String, String> valueOperations;
+
+    @Mock
+    private PasswordEncoder passwordEncoder;
+
+    @Mock
+    private JwtTokenProvider jwtTokenProvider;
 
     @InjectMocks
     private AuthService authService;
@@ -131,5 +140,129 @@ class AuthServiceTest {
 
         // Verify email was still sent (count is 1, limit is 3)
         verify(emailService, times(1)).sendOtpEmail(email, generatedOtp);
+    }
+
+    /**
+     * UC04.2 - Reset Password: Verify OTP and reset password
+     * Tests OTP validation, password hashing, and token generation
+     */
+    @Test
+    void testResetPassword_ShouldValidateOtpAndResetPassword() {
+        String email = "student@lms.local";
+        String otp = "123456";
+        String newPassword = "NewPassword123!";
+        String hashedPassword = "$2a$10$hashedPassword";
+
+        User user = new User();
+        user.setEmail(email);
+        user.setId(1L);
+
+        when(userRepository.findByEmail(email)).thenReturn(Optional.of(user));
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get("otp:forgot:" + email)).thenReturn(otp);
+        when(passwordEncoder.encode(newPassword)).thenReturn(hashedPassword);
+        when(userRepository.save(any(User.class))).thenReturn(user);
+        when(jwtTokenProvider.generateAccessToken(any())).thenReturn("access_token");
+        when(jwtTokenProvider.generateRefreshToken(any())).thenReturn("refresh_token");
+
+        TokenRes tokens = authService.resetPassword(email, otp, newPassword);
+
+        assertNotNull(tokens);
+        assertNotNull(tokens.accessToken());
+        assertNotNull(tokens.refreshToken());
+
+        // Verify OTP was deleted after successful reset
+        verify(redisTemplate, times(1)).delete("otp:forgot:" + email);
+        verify(redisTemplate, times(1)).delete("otp:forgot:wrong:" + email);
+
+        // Verify password was encoded and user was saved
+        verify(passwordEncoder, times(1)).encode(newPassword);
+        verify(userRepository, times(1)).save(any(User.class));
+    }
+
+    @Test
+    void testResetPassword_ShouldFailOnWrongOtp() {
+        String email = "student@lms.local";
+        String correctOtp = "123456";
+        String wrongOtp = "000000";
+
+        User user = new User();
+        user.setEmail(email);
+
+        when(userRepository.findByEmail(email)).thenReturn(Optional.of(user));
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get("otp:forgot:" + email)).thenReturn(correctOtp);
+        when(valueOperations.get("otp:forgot:wrong:" + email)).thenReturn(null);
+
+        assertThrows(BusinessRuleViolationException.class, () ->
+            authService.resetPassword(email, wrongOtp, "NewPassword123!")
+        );
+
+        // Verify wrong attempts counter was incremented
+        verify(valueOperations, times(1)).increment("otp:forgot:wrong:" + email);
+        // Verify password was NOT changed
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    void testResetPassword_ShouldInvalidateOtpAfter5WrongAttempts() {
+        String email = "student@lms.local";
+        String correctOtp = "123456";
+        String wrongOtp = "000000";
+
+        User user = new User();
+        user.setEmail(email);
+
+        when(userRepository.findByEmail(email)).thenReturn(Optional.of(user));
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get("otp:forgot:" + email)).thenReturn(correctOtp);
+        when(valueOperations.get("otp:forgot:wrong:" + email)).thenReturn("4"); // 4 wrong attempts already
+
+        assertThrows(BusinessRuleViolationException.class, () ->
+            authService.resetPassword(email, wrongOtp, "NewPassword123!")
+        );
+
+        // Verify OTP was deleted due to too many wrong attempts
+        verify(redisTemplate, times(1)).delete("otp:forgot:" + email);
+        verify(redisTemplate, times(1)).delete("otp:forgot:wrong:" + email);
+        // Verify password was NOT changed
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    void testResetPassword_ShouldThrowExceptionIfUserNotFound() {
+        String email = "nonexistent@lms.local";
+        String otp = "123456";
+        String newPassword = "NewPassword123!";
+
+        when(userRepository.findByEmail(email)).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class, () ->
+            authService.resetPassword(email, otp, newPassword)
+        );
+
+        // Verify OTP validation was never attempted
+        verify(redisTemplate, never()).opsForValue();
+    }
+
+    @Test
+    void testResetPassword_ShouldThrowExceptionIfOtpExpired() {
+        String email = "student@lms.local";
+        String otp = "123456";
+        String newPassword = "NewPassword123!";
+
+        User user = new User();
+        user.setEmail(email);
+
+        when(userRepository.findByEmail(email)).thenReturn(Optional.of(user));
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get("otp:forgot:" + email)).thenReturn(null); // OTP expired
+
+        assertThrows(BusinessRuleViolationException.class, () ->
+            authService.resetPassword(email, otp, newPassword)
+        );
+
+        // Verify password was NOT changed
+        verify(userRepository, never()).save(any(User.class));
     }
 }

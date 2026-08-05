@@ -35,6 +35,7 @@ public class AuthService {
     private final JwtTokenProvider jwtTokenProvider;
     private final OtpService otpService;
     private final StringRedisTemplate redisTemplate;
+    private final EmailService emailService;
 
     private static final String LOGIN_FAIL_PREFIX = "login_fail:";
     private static final String REFRESH_TOKEN_PREFIX = "refresh_token:";
@@ -186,6 +187,59 @@ public class AuthService {
 
         emailService.sendOtpEmail(email, otp);
         log.info("OTP đã được gửi đến email: {}", email);
+    }
+
+    /**
+     * UC04.2 - Verify OTP and reset password
+     * BR-AUTH-02: OTP max 5 wrong attempts, then invalidated
+     * BR-AUTH-01: Hash password with Bcrypt cost >= 10
+     * Auto-login user after successful reset (return JWT tokens)
+     */
+    @Transactional
+    public TokenRes resetPassword(String email, String otp, String newPassword) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User", email));
+
+        String redisKey = "otp:forgot:" + email;
+        String storedOtp = redisTemplate.opsForValue().get(redisKey);
+
+        if (storedOtp == null) {
+            throw new BusinessRuleViolationException("OTP đã hết hạn hoặc không tồn tại");
+        }
+
+        if (!storedOtp.equals(otp)) {
+            // Track wrong attempts
+            String wrongKey = "otp:forgot:wrong:" + email;
+            String wrongCountStr = redisTemplate.opsForValue().get(wrongKey);
+            Integer wrongCount = wrongCountStr != null ? Integer.parseInt(wrongCountStr) : 0;
+
+            if (wrongCount >= 4) {
+                // 5th wrong attempt - invalidate OTP
+                redisTemplate.delete(redisKey);
+                redisTemplate.delete(wrongKey);
+                throw new BusinessRuleViolationException("Sai OTP quá 5 lần. Vui lòng yêu cầu gửi lại.");
+            }
+
+            // Increment wrong attempt counter
+            redisTemplate.opsForValue().increment(wrongKey);
+            redisTemplate.expire(wrongKey, Duration.ofMinutes(5));
+            throw new BusinessRuleViolationException("OTP không chính xác");
+        }
+
+        // OTP correct, reset password
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        user.setAuthProvider("LOCAL");
+        userRepository.save(user);
+
+        // Cleanup Redis
+        redisTemplate.delete(redisKey);
+        redisTemplate.delete("otp:forgot:wrong:" + email);
+
+        // Auto-login user and return tokens
+        Authentication authentication = new UsernamePasswordAuthenticationToken(
+                new CustomUserDetails(user), null, new CustomUserDetails(user).getAuthorities());
+
+        return generateTokens(authentication);
     }
 
     /**

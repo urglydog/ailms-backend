@@ -54,4 +54,10 @@ public class AuthController {
         authService.forgotPassword(req.email());
         return new MessageRes("OTP đã được gửi đến email của bạn.");
     }
+
+    @PostMapping("/reset-password")
+    @ResponseStatus(HttpStatus.OK)
+    public TokenRes resetPassword(@Valid @RequestBody ResetPasswordReq req) {
+        return authService.resetPassword(req.email(), req.otp(), req.newPassword());
+    }
 }

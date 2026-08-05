@@ -47,4 +47,17 @@ public class AuthRequestDto {
             @Email(message = "Email không hợp lệ")
             String email
     ) {}
+
+    public record ResetPasswordReq(
+            @NotBlank(message = "Email không được để trống")
+            @Email(message = "Email không hợp lệ")
+            String email,
+
+            @NotBlank(message = "OTP không được để trống")
+            String otp,
+
+            @NotBlank(message = "Mật khẩu không được để trống")
+            @Size(min = 8, message = "Mật khẩu phải ≥ 8 ký tự")
+            String newPassword
+    ) {}
 }
