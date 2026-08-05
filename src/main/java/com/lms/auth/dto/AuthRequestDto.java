@@ -60,4 +60,13 @@ public class AuthRequestDto {
             @Size(min = 8, message = "Mật khẩu phải ≥ 8 ký tự")
             String newPassword
     ) {}
+
+    public record ChangePasswordReq(
+            @NotBlank(message = "Mật khẩu hiện tại không được để trống")
+            String currentPassword,
+
+            @NotBlank(message = "Mật khẩu mới không được để trống")
+            @Size(min = 8, message = "Mật khẩu phải ≥ 8 ký tự")
+            String newPassword
+    ) {}
 }
