@@ -41,4 +41,10 @@ public class AuthRequestDto {
             @NotBlank(message = "Refresh Token không được để trống")
             String refreshToken
     ) {}
+
+    public record ForgotPasswordReq(
+            @NotBlank(message = "Email không được để trống")
+            @Email(message = "Email không hợp lệ")
+            String email
+    ) {}
 }

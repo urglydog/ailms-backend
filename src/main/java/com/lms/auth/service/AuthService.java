@@ -159,4 +159,39 @@ public class AuthService {
         // Thu hồi refresh token hiện tại bằng cách xóa khỏi Redis
         redisTemplate.delete(REFRESH_TOKEN_PREFIX + refreshToken);
     }
+
+    /**
+     * UC04.1 - Gửi OTP để đặt lại mật khẩu
+     * BR-AUTH-02: OTP 5 phút hiệu lực, gửi lại <= 3 lần/email/giờ, lưu Redis
+     */
+    public void forgotPassword(String email) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User", email));
+
+        String otp = generateOtp();
+        String redisKey = "otp:forgot:" + email;
+        redisTemplate.opsForValue().set(redisKey, otp, Duration.ofMinutes(5));
+
+        // Track resend count: otp:forgot:resend:{email} with 1-hour TTL (max 3 resends)
+        String resendKey = "otp:forgot:resend:" + email;
+        String resendCountStr = redisTemplate.opsForValue().get(resendKey);
+        Integer resendCount = resendCountStr != null ? Integer.parseInt(resendCountStr) : 0;
+
+        if (resendCount >= 3) {
+            throw new BusinessRuleViolationException("Đã vượt quá số lần gửi OTP cho email này trong 1 giờ");
+        }
+
+        redisTemplate.opsForValue().increment(resendKey);
+        redisTemplate.expire(resendKey, Duration.ofHours(1));
+
+        emailService.sendOtpEmail(email, otp);
+        log.info("OTP đã được gửi đến email: {}", email);
+    }
+
+    /**
+     * Generate a random 6-digit OTP
+     */
+    private String generateOtp() {
+        return otpService.generateOtp();
+    }
 }

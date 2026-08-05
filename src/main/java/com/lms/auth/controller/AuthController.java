@@ -47,4 +47,11 @@ public class AuthController {
         authService.logout(req.refreshToken());
         return new MessageRes("Đăng xuất thành công.");
     }
+
+    @PostMapping("/forgot-password")
+    @ResponseStatus(HttpStatus.OK)
+    public MessageRes forgotPassword(@Valid @RequestBody ForgotPasswordReq req) {
+        authService.forgotPassword(req.email());
+        return new MessageRes("OTP đã được gửi đến email của bạn.");
+    }
 }
