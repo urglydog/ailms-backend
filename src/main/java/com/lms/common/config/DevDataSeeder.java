@@ -9,6 +9,7 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
+import org.springframework.core.annotation.Order;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 /**
@@ -34,7 +35,10 @@ public class DevDataSeeder {
     /** Mật khẩu chung cho mọi tài khoản mẫu — chỉ dùng khi phát triển. */
     private static final String DEV_PASSWORD = "Password123!";
 
+    /** @Order(1): phải chạy trước {@code DevCourseDataSeeder} (F2.2) — Course/Enrollment/CourseReview
+     * cần User đã tồn tại (FK NOT NULL). */
     @Bean
+    @Order(1)
     public ApplicationRunner seedDevUsers(UserRepository userRepository, PasswordEncoder passwordEncoder) {
         return args -> {
             if (userRepository.count() > 0) {
