@@ -2,6 +2,7 @@ package com.lms.catalog.controller;
 
 import com.lms.auth.repository.UserRepository;
 import com.lms.catalog.repository.CourseRepository;
+import com.lms.common.enums.CourseStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -27,8 +28,8 @@ public class DashboardController {
     public ResponseEntity<Map<String, Object>> getAdminDashboard() {
         long totalCourses = courseRepository.count();
         long totalUsers = userRepository.count();
-        // Giả sử có 4 khóa pending, ta mock số liệu cho những logic chưa implement
-        long pendingCourses = 4;
+        long pendingCourses = courseRepository.countByStatus(CourseStatus.PENDING);
+        // TODO: Chờ module Payment (Giai đoạn 3/9) để tính doanh thu thật
         long totalRevenue = 15400000;
 
         return ResponseEntity.ok(Map.of(
@@ -44,9 +45,9 @@ public class DashboardController {
     public ResponseEntity<Map<String, Object>> getInstructorDashboard(java.security.Principal principal) {
         // Lấy thông tin user hiện tại (giảng viên)
         User instructor = userRepository.findByEmail(principal.getName()).orElseThrow();
-        
-        // TODO: Chờ Giai đoạn 2 để có hàm courseRepository.countByInstructorId(instructor.getId())
-        long myCourses = 8;
+
+        long myCourses = courseRepository.countByInstructor_Email(instructor.getEmail());
+        // TODO: Chờ module Enrollment/Payment (Giai đoạn 3/9) để tính học viên/doanh thu thật
         long myStudents = 12450;
         double averageRating = 4.8;
         long revenue = 15400000;
