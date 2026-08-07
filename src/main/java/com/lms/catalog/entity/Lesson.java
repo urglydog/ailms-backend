@@ -23,11 +23,14 @@ public class Lesson extends BaseEntity {
     @Column(name = "title", nullable = false, length = 255)
     private String title;
 
-    /** UPLOAD hoac YOUTUBE. */
-    @Column(name = "video_source", nullable = false, length = 20)
+    /**
+     * UPLOAD hoac YOUTUBE. NULL cho tới khi nạp video ở Giai đoạn 4 — F2.1 chỉ tạo
+     * bài học với metadata (title), chưa xử lý video (UC33 tách khỏi UC34).
+     */
+    @Column(name = "video_source", length = 20)
     private String videoSource;
 
-    @Column(name = "video_url", nullable = false, length = 1000)
+    @Column(name = "video_url", length = 1000)
     private String videoUrl;
 
     /** Chỉ có giá trị khi videoSource = YOUTUBE. */
@@ -45,7 +48,7 @@ public class Lesson extends BaseEntity {
     @Column(name = "display_order", nullable = false)
     private Integer displayOrder = 0;
 
-    /** Tối đa 2 bài Preview mỗi khóa học (BR-ENROLL-02) — kiểm ở tầng service. */
+    /** Guest xem được video nhưng không dùng AI Tutor/Quiz/Flashcards. Không giới hạn số lượng. */
     @Column(name = "is_preview", nullable = false)
     private Boolean isPreview = false;
 

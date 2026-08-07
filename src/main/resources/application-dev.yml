@@ -6,9 +6,15 @@ spring:
   jpa:
     show-sql: true
   flyway:
-    # V2__seed_dev.sql chỉ chạy ở profile dev (xem locations bên dưới):
+    # V100__seed_dev_reference.sql chỉ chạy ở profile dev (xem locations bên dưới):
     # thêm thư mục dev vào sau thư mục migration chung.
     locations: classpath:db/migration,classpath:db/dev
+    # V100 (seed dev) cố tình đánh số cao để luôn chạy sau cùng — nghĩa là mọi migration
+    # schema thật (V2, V3, ...) thêm SAU KHI DB dev đã seed sẽ có version THẤP HƠN version
+    # đã áp dụng gần nhất. out-of-order cho phép Flyway vẫn chèn migration "đến muộn" đó
+    # thay vì chặn validate. Chỉ bật ở dev — môi trường thật luôn migrate từ DB rỗng nên
+    # không bao giờ gặp tình huống này.
+    out-of-order: true
   devtools:
     restart:
       enabled: true

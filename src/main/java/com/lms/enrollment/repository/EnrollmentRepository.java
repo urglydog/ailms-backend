@@ -12,4 +12,7 @@ import org.springframework.stereotype.Repository;
  */
 @Repository
 public interface EnrollmentRepository extends JpaRepository<Enrollment, Long> {
+
+    /** Dùng bởi CourseService (F2.1) để quyết định xoá cứng hay xoá mềm (BR-COURSE-03). */
+    boolean existsByCourseId(Long courseId);
 }

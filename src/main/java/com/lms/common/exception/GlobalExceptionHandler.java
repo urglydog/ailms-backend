@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -50,6 +51,15 @@ public class GlobalExceptionHandler {
                 "Du lieu gui len khong hop le", "VALIDATION_FAILED", request);
         problem.setProperty("fieldErrors", fieldErrors);
         return problem;
+    }
+
+    /**
+     * `@PreAuthorize` từ chối quyền (vd. đúng role nhưng sai ownership, hoặc thiếu role).
+     * Không bắt riêng thì rơi xuống lưới an toàn cuối cùng và trả nhầm 500.
+     */
+    @ExceptionHandler(AuthorizationDeniedException.class)
+    public ProblemDetail handleAuthorizationDenied(AuthorizationDeniedException ex, HttpServletRequest request) {
+        return build(HttpStatus.FORBIDDEN, "Ban khong co quyen thuc hien hanh dong nay", "ACCESS_DENIED", request);
     }
 
     /** Vượt dung lượng upload — BR-CHUNK-01 (video 2 GB), BR-UPLOAD-01 (tài liệu 50 MB). */
