@@ -109,6 +109,20 @@
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
 
+        <!-- ── Giai đoạn 4: Lưu trữ file lên Backblaze B2 (S3-compatible) ── -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <version>2.29.52</version>
+        </dependency>
+        <!-- Kiểm định dạng file thật bằng magic number (BR-UPLOAD-01) — chỉ tika-core,
+             không kéo tika-parsers (nặng, không cần trích nội dung file). -->
+        <dependency>
+            <groupId>org.apache.tika</groupId>
+            <artifactId>tika-core</artifactId>
+            <version>2.9.2</version>
+        </dependency>
+
         <!-- ── Dev: hot reload trong container ────────────── -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

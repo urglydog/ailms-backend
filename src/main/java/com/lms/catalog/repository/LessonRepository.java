@@ -16,5 +16,8 @@ public interface LessonRepository extends JpaRepository<Lesson, Long> {
 
     long countByChapter_CourseId(Long courseId);
 
+    /** BR-COURSE-01: chỉ bài học đã có video hợp lệ (status=READY, Giai đoạn 4) mới tính. */
+    long countByChapter_CourseIdAndStatus(Long courseId, String status);
+
     List<Lesson> findByChapterIdOrderByDisplayOrderAsc(Long chapterId);
 }

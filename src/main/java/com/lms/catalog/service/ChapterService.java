@@ -100,7 +100,9 @@ public class ChapterService {
                         lesson.getIsPreview(),
                         lesson.getStatus(),
                         lesson.getVideoSource(),
-                        lesson.getVideoUrl()
+                        lesson.getVideoUrl(),
+                        lesson.getYoutubeId(),
+                        lesson.getDurationSec()
                 ))
                 .toList();
         return new Res(chapter.getId(), chapter.getTitle(), chapter.getDisplayOrder(), lessons);

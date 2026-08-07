@@ -80,26 +80,30 @@ public class DevCourseDataSeeder {
             Category langCategory = category(categoryRepository, "ngoai-ngu-chuyen-nganh");
 
             // ── 5 khóa PUBLISHED — đủ chương/bài để test duyệt công khai + đánh giá ──
+            // Mỗi khóa gán 1 video YouTube công khai thật, đúng chủ đề (đã xác nhận tồn tại qua
+            // oEmbed) — durationSec vẫn dùng công thức giả lập ngắn cho gọn danh sách, không phải
+            // thời lượng thật của video gốc (seeder ghi thẳng vào DB, không qua luồng kiểm
+            // BR-CHUNK-01 của LessonService như khi Giảng viên tự nạp).
             Course course1 = createPublishedCourse(courseRepository, chapterRepository, lessonRepository,
                     instructor, webCategory, "Lập trình Web với React & Next.js",
                     "Xây dựng ứng dụng web hiện đại từ con số 0 với React 19 và Next.js 15 App Router.",
-                    "BEGINNER", new BigDecimal("299000"), 1);
+                    "BEGINNER", new BigDecimal("299000"), 1, "bMknfKXIFA8");
             Course course2 = createPublishedCourse(courseRepository, chapterRepository, lessonRepository,
                     instructor, dataCategory, "Phân tích dữ liệu với Python & Pandas",
                     "Làm chủ Pandas, NumPy để xử lý và trực quan hóa dữ liệu thực tế.",
-                    "INTERMEDIATE", BigDecimal.ZERO, 2);
+                    "INTERMEDIATE", BigDecimal.ZERO, 2, "gtjxAH8uaP0");
             Course course3 = createPublishedCourse(courseRepository, chapterRepository, lessonRepository,
                     instructor, aiCategory, "Nhập môn Trí tuệ nhân tạo",
                     "Tổng quan Machine Learning, Deep Learning và ứng dụng thực tế của AI.",
-                    "BEGINNER", new BigDecimal("499000"), 3);
+                    "BEGINNER", new BigDecimal("499000"), 3, "LBr4gLQ4FZw");
             Course course4 = createPublishedCourse(courseRepository, chapterRepository, lessonRepository,
                     instructor, uiuxCategory, "Thiết kế giao diện UI/UX cơ bản",
                     "Nguyên lý thiết kế, Figma và quy trình UX từ nghiên cứu người dùng đến prototype.",
-                    "BEGINNER", BigDecimal.ZERO, 4);
+                    "BEGINNER", BigDecimal.ZERO, 4, "c9Wg6Cb_YlU");
             Course course5 = createPublishedCourse(courseRepository, chapterRepository, lessonRepository,
                     instructor, langCategory, "Tiếng Anh giao tiếp cho IT",
                     "Từ vựng và phản xạ giao tiếp tiếng Anh chuyên ngành công nghệ thông tin.",
-                    "INTERMEDIATE", new BigDecimal("199000"), 5);
+                    "INTERMEDIATE", new BigDecimal("199000"), 5, "j68GnGwd2Qk");
 
             // ── 2 khóa chưa duyệt — để tự kiểm chứng KHÔNG hiện ở danh sách công khai ──
             createUnpublishedCourse(courseRepository, instructor, webCategory,
@@ -151,7 +155,7 @@ public class DevCourseDataSeeder {
     private Course createPublishedCourse(
             CourseRepository courseRepository, ChapterRepository chapterRepository, LessonRepository lessonRepository,
             User instructor, Category category, String title, String description,
-            String level, BigDecimal price, int coverSeed) {
+            String level, BigDecimal price, int coverSeed, String youtubeId) {
         Course course = new Course();
         course.setTitle(title);
         course.setSlug(SlugGenerator.slugify(title));
@@ -166,12 +170,12 @@ public class DevCourseDataSeeder {
         Course saved = courseRepository.save(course);
 
         Chapter chapter1 = createChapter(chapterRepository, saved, "Chương 1: Nhập môn", 0);
-        createLesson(lessonRepository, chapter1, "Giới thiệu tổng quan", 0, true);
-        createLesson(lessonRepository, chapter1, "Cài đặt môi trường", 1, false);
+        createLesson(lessonRepository, chapter1, "Giới thiệu tổng quan", 0, true, youtubeId);
+        createLesson(lessonRepository, chapter1, "Cài đặt môi trường", 1, false, youtubeId);
 
         Chapter chapter2 = createChapter(chapterRepository, saved, "Chương 2: Thực hành", 1);
-        createLesson(lessonRepository, chapter2, "Bài tập thực hành 1", 0, false);
-        createLesson(lessonRepository, chapter2, "Bài tập thực hành 2", 1, false);
+        createLesson(lessonRepository, chapter2, "Bài tập thực hành 1", 0, false, youtubeId);
+        createLesson(lessonRepository, chapter2, "Bài tập thực hành 2", 1, false, youtubeId);
 
         return saved;
     }
@@ -202,14 +206,18 @@ public class DevCourseDataSeeder {
     }
 
     private void createLesson(
-            LessonRepository lessonRepository, Chapter chapter, String title, int order, boolean isPreview) {
+            LessonRepository lessonRepository, Chapter chapter, String title, int order, boolean isPreview,
+            String youtubeId) {
         Lesson lesson = new Lesson();
         lesson.setTitle(title);
         lesson.setChapter(chapter);
         lesson.setDisplayOrder(order);
         lesson.setIsPreview(isPreview);
-        // status=READY để mô phỏng đã có video hợp lệ — nạp video thật là việc của Giai đoạn 4.
+        // Video YouTube công khai thật (Giai đoạn 4, UC34) — status=READY vì đã có video hợp lệ.
         lesson.setStatus("READY");
+        lesson.setVideoSource("YOUTUBE");
+        lesson.setVideoUrl("https://www.youtube.com/watch?v=" + youtubeId);
+        lesson.setYoutubeId(youtubeId);
         lesson.setDurationSec(300 + order * 120);
         lessonRepository.save(lesson);
     }
