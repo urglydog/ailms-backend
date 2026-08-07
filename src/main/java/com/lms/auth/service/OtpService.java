@@ -24,6 +24,13 @@ public class OtpService {
     private static final String OTP_ATTEMPT_PREFIX = "otp_attempt:";
     private static final String OTP_RESEND_RATE_PREFIX = "otp_rate:";
 
+    /**
+     * Generate a random 6-digit OTP
+     */
+    public String generateOtp() {
+        return String.format("%06d", secureRandom.nextInt(1000000));
+    }
+
     public void generateAndSendOtp(String email) {
         String rateKey = OTP_RESEND_RATE_PREFIX + email;
         
@@ -43,8 +50,8 @@ public class OtpService {
         }
 
         // Sinh OTP ngẫu nhiên 6 số
-        String otp = String.format("%06d", secureRandom.nextInt(1000000));
-        
+        String otp = generateOtp();
+
         // Lưu OTP vào Redis với TTL 5 phút (BR-AUTH-02)
         String otpKey = OTP_PREFIX + email;
         redisTemplate.opsForValue().set(otpKey, otp, Duration.ofMinutes(5));

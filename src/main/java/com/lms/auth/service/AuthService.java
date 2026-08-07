@@ -1,8 +1,10 @@
 package com.lms.auth.service;
 
+import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
 import com.lms.auth.dto.AuthRequestDto.*;
 import com.lms.auth.dto.AuthResponseDto.*;
 import com.lms.auth.entity.User;
+import com.lms.auth.provider.GoogleOAuthProvider;
 import com.lms.auth.repository.UserRepository;
 import com.lms.auth.security.CustomUserDetails;
 import com.lms.auth.security.JwtTokenProvider;
@@ -22,7 +24,10 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.IOException;
+import java.security.GeneralSecurityException;
 import java.time.Duration;
+import java.util.Optional;
 
 @Slf4j
 @Service
@@ -35,6 +40,8 @@ public class AuthService {
     private final JwtTokenProvider jwtTokenProvider;
     private final OtpService otpService;
     private final StringRedisTemplate redisTemplate;
+    private final EmailService emailService;
+    private final GoogleOAuthProvider googleOAuthProvider;
 
     private static final String LOGIN_FAIL_PREFIX = "login_fail:";
     private static final String REFRESH_TOKEN_PREFIX = "refresh_token:";
@@ -158,5 +165,143 @@ public class AuthService {
     public void logout(String refreshToken) {
         // Thu hồi refresh token hiện tại bằng cách xóa khỏi Redis
         redisTemplate.delete(REFRESH_TOKEN_PREFIX + refreshToken);
+    }
+
+    /**
+     * UC04.1 - Gửi OTP để đặt lại mật khẩu
+     * BR-AUTH-02: OTP 5 phút hiệu lực, gửi lại <= 3 lần/email/giờ, lưu Redis
+     */
+    public void forgotPassword(String email) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User", email));
+
+        String otp = generateOtp();
+        String redisKey = "otp:forgot:" + email;
+        redisTemplate.opsForValue().set(redisKey, otp, Duration.ofMinutes(5));
+
+        // Track resend count: otp:forgot:resend:{email} with 1-hour TTL (max 3 resends)
+        String resendKey = "otp:forgot:resend:" + email;
+        String resendCountStr = redisTemplate.opsForValue().get(resendKey);
+        Integer resendCount = resendCountStr != null ? Integer.parseInt(resendCountStr) : 0;
+
+        if (resendCount >= 3) {
+            throw new BusinessRuleViolationException("Đã vượt quá số lần gửi OTP cho email này trong 1 giờ");
+        }
+
+        redisTemplate.opsForValue().increment(resendKey);
+        redisTemplate.expire(resendKey, Duration.ofHours(1));
+
+        emailService.sendOtpEmail(email, otp);
+        log.info("OTP đã được gửi đến email: {}", email);
+    }
+
+    /**
+     * UC04.2 - Verify OTP and reset password
+     * BR-AUTH-02: OTP max 5 wrong attempts, then invalidated
+     * BR-AUTH-01: Hash password with Bcrypt cost >= 10
+     * Auto-login user after successful reset (return JWT tokens)
+     */
+    @Transactional
+    public TokenRes resetPassword(String email, String otp, String newPassword) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User", email));
+
+        String redisKey = "otp:forgot:" + email;
+        String storedOtp = redisTemplate.opsForValue().get(redisKey);
+
+        if (storedOtp == null) {
+            throw new BusinessRuleViolationException("OTP đã hết hạn hoặc không tồn tại");
+        }
+
+        if (!storedOtp.equals(otp)) {
+            // Track wrong attempts
+            String wrongKey = "otp:forgot:wrong:" + email;
+            String wrongCountStr = redisTemplate.opsForValue().get(wrongKey);
+            Integer wrongCount = wrongCountStr != null ? Integer.parseInt(wrongCountStr) : 0;
+
+            if (wrongCount >= 4) {
+                // 5th wrong attempt - invalidate OTP
+                redisTemplate.delete(redisKey);
+                redisTemplate.delete(wrongKey);
+                throw new BusinessRuleViolationException("Sai OTP quá 5 lần. Vui lòng yêu cầu gửi lại.");
+            }
+
+            // Increment wrong attempt counter
+            redisTemplate.opsForValue().increment(wrongKey);
+            redisTemplate.expire(wrongKey, Duration.ofMinutes(5));
+            throw new BusinessRuleViolationException("OTP không chính xác");
+        }
+
+        // OTP correct, reset password
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        user.setAuthProvider("LOCAL");
+        userRepository.save(user);
+
+        // Cleanup Redis
+        redisTemplate.delete(redisKey);
+        redisTemplate.delete("otp:forgot:wrong:" + email);
+
+        // Auto-login user and return tokens
+        Authentication authentication = new UsernamePasswordAuthenticationToken(
+                new CustomUserDetails(user), null, new CustomUserDetails(user).getAuthorities());
+
+        return generateTokens(authentication);
+    }
+
+    /**
+     * UC02 extend - Google OAuth2 Login
+     * BR-AUTH-01: Create/update user from Google OAuth2 token
+     * BR-AUTH-04: Sinh và lưu Refresh Token vào Redis
+     *
+     * @param idToken Google ID token from frontend
+     * @return TokenRes containing access and refresh tokens
+     * @throws GeneralSecurityException if token verification fails
+     * @throws IOException if token verification fails
+     */
+    @Transactional
+    public TokenRes loginWithGoogle(String idToken) throws GeneralSecurityException, IOException {
+        GoogleIdToken.Payload payload = googleOAuthProvider.verifyToken(idToken);
+
+        String email = payload.getEmail();
+        Optional<User> existingUser = userRepository.findByEmail(email);
+
+        User user;
+        if (existingUser.isPresent()) {
+            user = existingUser.get();
+            // Update profile fields from Google
+            if (payload.get("name") != null) {
+                user.setFullName((String) payload.get("name"));
+            }
+            if (payload.get("picture") != null) {
+                user.setAvatarUrl((String) payload.get("picture"));
+            }
+            log.info("Updated existing Google OAuth user: {}", email);
+        } else {
+            // Create new user from Google OAuth
+            user = new User();
+            user.setEmail(email);
+            user.setFullName((String) payload.get("name"));
+            user.setAvatarUrl((String) payload.get("picture"));
+            user.setAuthProvider("GOOGLE");
+            user.setRole(Role.STUDENT);
+            user.setIsActive(true);
+            user.setPasswordHash(null);  // No password for Google OAuth users (BR-AUTH-01)
+            log.info("Created new Google OAuth user: {}", email);
+        }
+
+        userRepository.save(user);
+
+        // Create authentication and generate tokens
+        Authentication authentication = new UsernamePasswordAuthenticationToken(
+                new CustomUserDetails(user), null, new CustomUserDetails(user).getAuthorities());
+
+        return generateTokens(authentication);
+    }
+
+    /**
+     * Generate a random 6-digit OTP
+     */
+    private String generateOtp() {
+        return otpService.generateOtp();
     }
 }

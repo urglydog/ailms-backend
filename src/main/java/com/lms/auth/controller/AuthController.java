@@ -5,9 +5,11 @@ import com.lms.auth.dto.AuthResponseDto.*;
 import com.lms.auth.service.AuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor
@@ -46,5 +48,25 @@ public class AuthController {
     public MessageRes logout(@Valid @RequestBody RefreshTokenReq req) {
         authService.logout(req.refreshToken());
         return new MessageRes("Đăng xuất thành công.");
+    }
+
+    @PostMapping("/forgot-password")
+    @ResponseStatus(HttpStatus.OK)
+    public MessageRes forgotPassword(@Valid @RequestBody ForgotPasswordReq req) {
+        authService.forgotPassword(req.email());
+        return new MessageRes("OTP đã được gửi đến email của bạn.");
+    }
+
+    @PostMapping("/reset-password")
+    @ResponseStatus(HttpStatus.OK)
+    public TokenRes resetPassword(@Valid @RequestBody ResetPasswordReq req) {
+        return authService.resetPassword(req.email(), req.otp(), req.newPassword());
+    }
+
+    @PostMapping("/oauth/google/callback")
+    @ResponseStatus(HttpStatus.OK)
+    public TokenRes loginWithGoogle(@Valid @RequestBody GoogleOAuthCallbackReq req) throws Exception {
+        log.info("Google OAuth login callback received");
+        return authService.loginWithGoogle(req.idToken());
     }
 }

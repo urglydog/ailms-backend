@@ -83,6 +83,11 @@ management:
       probes:
         enabled: true
 
+# ── Google OAuth2 Configuration ────────────────────────────────
+google:
+  oauth:
+    client-id: ${GOOGLE_OAUTH_CLIENT_ID:}
+
 # ── Cấu hình riêng của ứng dụng ─────────────────────────────────
 lms:
   jwt:
