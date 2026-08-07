@@ -22,11 +22,17 @@ public class UserDto {
     public record UpdateUserReq(
             @NotBlank(message = "Họ tên không được để trống")
             String fullName,
-            
+
             @NotNull(message = "Quyền (Role) không được để trống")
             Role role,
-            
+
             @NotNull(message = "Trạng thái không được để trống")
             Boolean isActive
+    ) {}
+
+    public record UpdateMyProfileReq(
+            String fullName,
+            String avatarUrl,
+            String preferredLanguage
     ) {}
 }

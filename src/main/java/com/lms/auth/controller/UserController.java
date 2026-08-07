@@ -1,5 +1,8 @@
 package com.lms.auth.controller;
 
+import com.lms.auth.dto.AuthRequestDto.ChangePasswordReq;
+import com.lms.auth.dto.AuthResponseDto.MessageRes;
+import com.lms.auth.dto.UserDto.UpdateMyProfileReq;
 import com.lms.auth.dto.UserDto.UpdateUserReq;
 import com.lms.auth.dto.UserDto.UserRes;
 import com.lms.auth.security.CustomUserDetails;
@@ -35,6 +38,30 @@ public class UserController {
     @GetMapping("/me")
     public ResponseEntity<UserRes> getMyProfile(java.security.Principal principal) {
         return ResponseEntity.ok(userService.getUserByEmail(principal.getName()));
+    }
+
+    /**
+     * UC05 - Đổi mật khẩu cho người dùng hiện tại.
+     * Yêu cầu xác thực mật khẩu hiện tại trước khi cho phép đổi.
+     */
+    @PutMapping("/me/password")
+    public ResponseEntity<MessageRes> changePassword(
+            java.security.Principal principal,
+            @Valid @RequestBody ChangePasswordReq req) {
+        userService.changePassword(principal.getName(), req.currentPassword(), req.newPassword());
+        return ResponseEntity.ok(new MessageRes("Đổi mật khẩu thành công"));
+    }
+
+    /**
+     * UC06 - Cập nhật thông tin cá nhân cho người dùng hiện tại.
+     * Cho phép cập nhật fullName, avatarUrl, preferredLanguage (tất cả tùy chọn).
+     */
+    @PutMapping("/me")
+    public ResponseEntity<UserRes> updateMyProfile(
+            java.security.Principal principal,
+            @Valid @RequestBody UpdateMyProfileReq req) {
+        UserRes result = userService.updateMyProfile(principal.getName(), req);
+        return ResponseEntity.ok(result);
     }
 
     /**
