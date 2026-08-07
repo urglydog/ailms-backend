@@ -206,12 +206,19 @@ public class CourseService {
         return upper;
     }
 
+    /**
+     * Slug bị cấm vì trùng path literal của chính controller này ({@code /courses/mine},
+     * {@code /courses/moderation}) — Spring ưu tiên path literal hơn {@code /courses/{slug}}
+     * (F2.2), nên một khóa học lỡ trùng slug này sẽ vĩnh viễn không truy cập được qua slug.
+     */
+    private static final Set<String> RESERVED_SLUGS = Set.of("mine", "moderation");
+
     /** Slug sinh 1 lần lúc tạo, không đổi lại khi sửa tiêu đề (giữ URL ổn định). */
     private String generateUniqueSlug(String title) {
         String base = SlugGenerator.slugify(title);
         String candidate = base;
         int suffix = 2;
-        while (courseRepository.existsBySlug(candidate)) {
+        while (courseRepository.existsBySlug(candidate) || RESERVED_SLUGS.contains(candidate)) {
             candidate = base + "-" + suffix++;
         }
         return candidate;
