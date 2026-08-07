@@ -18,16 +18,22 @@ import com.lms.common.exception.AccessDeniedDomainException;
 import com.lms.common.exception.BusinessRuleViolationException;
 import com.lms.common.exception.InvalidRequestException;
 import com.lms.common.exception.ResourceNotFoundException;
+import com.lms.common.storage.StorageService;
 import com.lms.enrollment.repository.EnrollmentRepository;
+import java.io.IOException;
+import java.io.InputStream;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.apache.tika.Tika;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
  * Vòng đời khóa học (UC31, UC36, UC42) — Giảng viên tạo/sửa/gửi duyệt, Admin duyệt/từ chối.
@@ -51,6 +57,8 @@ public class CourseService {
     private final LessonRepository lessonRepository;
     private final EnrollmentRepository enrollmentRepository;
     private final UserRepository userRepository;
+    private final StorageService storageService;
+    private final Tika tika = new Tika();
 
     @Transactional
     public DetailRes create(String instructorEmail, CreateReq req) {
@@ -186,6 +194,48 @@ public class CourseService {
 
     // ---- helpers ----
 
+    /**
+     * Ảnh bìa khóa học (mở rộng theo yêu cầu Giai đoạn 4 — dùng chung hạ tầng B2 vừa dựng cho
+     * UC34/UC35, thay ô nhập URL text tạm thời của F2.1). 5MB là ngưỡng thực dụng, không phải
+     * business rule chính thức trong tài liệu đặc tả.
+     */
+    @Transactional
+    public DetailRes uploadThumbnail(String instructorEmail, Long id, MultipartFile file) {
+        Course course = loadOwnedCourse(id, instructorEmail);
+
+        if (file.isEmpty()) {
+            throw new InvalidRequestException("File ảnh trống");
+        }
+        long maxBytes = 5L * 1024 * 1024;
+        if (file.getSize() > maxBytes) {
+            throw new BusinessRuleViolationException("Ảnh bìa vượt quá 5MB");
+        }
+
+        String detectedMime;
+        try (InputStream sniff = file.getInputStream()) {
+            detectedMime = tika.detect(sniff);
+        } catch (IOException e) {
+            throw new InvalidRequestException("Không đọc được file ảnh: " + e.getMessage());
+        }
+        String extension = switch (detectedMime) {
+            case "image/jpeg" -> "jpg";
+            case "image/png" -> "png";
+            case "image/webp" -> "webp";
+            default -> throw new InvalidRequestException("Chỉ chấp nhận ảnh JPEG/PNG/WEBP");
+        };
+
+        String key = "thumbnails/" + id + "/" + UUID.randomUUID() + "." + extension;
+        String url;
+        try (InputStream in = file.getInputStream()) {
+            url = storageService.upload(key, in, file.getSize(), detectedMime);
+        } catch (IOException e) {
+            throw new InvalidRequestException("Không tải được ảnh lên kho lưu trữ: " + e.getMessage());
+        }
+
+        course.setThumbnailUrl(url);
+        return mapToDetailRes(courseRepository.save(course));
+    }
+
     private Course loadOwnedCourse(Long id, String instructorEmail) {
         Course course = courseRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Course", id));
@@ -240,12 +290,11 @@ public class CourseService {
         if (chapterCount < MIN_CHAPTERS_TO_SUBMIT) {
             missing.add("Cần ít nhất " + MIN_CHAPTERS_TO_SUBMIT + " chương");
         }
-        // NOTE: đáng lẽ phải yêu cầu status=READY (đã có video hợp lệ), nhưng F2.1 chưa xử lý
-        // video (đó là Giai đoạn 4 — UC34) nên Lesson không có cách nào đạt READY qua UI hiện tại.
-        // Tạm thời chỉ đếm số lượng bài học; SIẾT LẠI thành điều kiện READY khi Giai đoạn 4 hoàn thành.
-        long lessonCount = lessonRepository.countByChapter_CourseId(course.getId());
-        if (lessonCount < MIN_LESSONS_TO_SUBMIT) {
-            missing.add("Cần ít nhất " + MIN_LESSONS_TO_SUBMIT + " bài học (hiện có " + lessonCount + ")");
+        // Giai đoạn 4: bài học chỉ tính hợp lệ khi đã có video (status=READY, UC34).
+        long readyLessonCount = lessonRepository.countByChapter_CourseIdAndStatus(course.getId(), "READY");
+        if (readyLessonCount < MIN_LESSONS_TO_SUBMIT) {
+            missing.add("Cần ít nhất " + MIN_LESSONS_TO_SUBMIT
+                    + " bài học đã có video sẵn sàng (hiện có " + readyLessonCount + ")");
         }
         return missing;
     }
@@ -281,7 +330,9 @@ public class CourseService {
                                         lesson.getIsPreview(),
                                         lesson.getStatus(),
                                         lesson.getVideoSource(),
-                                        lesson.getVideoUrl()
+                                        lesson.getVideoUrl(),
+                                        lesson.getYoutubeId(),
+                                        lesson.getDurationSec()
                                 ))
                                 .toList()
                 ))

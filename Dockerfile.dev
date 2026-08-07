@@ -9,8 +9,12 @@ FROM maven:3.9-eclipse-temurin-17
 WORKDIR /app
 
 # curl cho healthcheck của docker-compose
+# ffmpeg (ffprobe) để lấy durationSec + kiểm MP4 hợp lệ khi nạp video (BR-CHUNK-01, Giai đoạn 4)
+# python3-pip để cài yt-dlp — xác nhận link YouTube còn công khai + lấy durationSec, cùng công cụ
+# dự án đã chọn cho YouTube ở ai-worker (nhất quán, không cần thêm API key)
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl \
+    && apt-get install -y --no-install-recommends curl ffmpeg python3-pip \
+    && pip3 install --no-cache-dir --break-system-packages yt-dlp \
     && rm -rf /var/lib/apt/lists/*
 
 # Tải dependency trước, tách khỏi source để cache layer:
