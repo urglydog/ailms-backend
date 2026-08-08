@@ -3,10 +3,12 @@ package com.lms.catalog.service;
 import com.lms.catalog.dto.CoursePublicDto.*;
 import com.lms.catalog.entity.Chapter;
 import com.lms.catalog.entity.Course;
+import com.lms.catalog.entity.Lesson;
 import com.lms.catalog.repository.ChapterRepository;
 import com.lms.catalog.repository.CourseRepository;
 import com.lms.catalog.repository.LessonRepository;
 import com.lms.common.enums.CourseStatus;
+import com.lms.common.exception.AccessDeniedDomainException;
 import com.lms.common.exception.ResourceNotFoundException;
 import com.lms.enrollment.repository.CourseReviewRepository;
 import java.util.Comparator;
@@ -95,6 +97,37 @@ public class CoursePublicService {
         Course course = courseRepository.findBySlugAndStatus(slug, CourseStatus.PUBLISHED)
                 .orElseThrow(() -> new ResourceNotFoundException("Course", slug));
         return mapToDetailRes(course);
+    }
+
+    /**
+     * UC11 — Học thử Preview. Guest/Student chưa sở hữu khóa học chỉ xem được bài đánh dấu
+     * {@code isPreview} (BR-ENROLL-02). Chưa có luồng ghi danh thật (Giai đoạn 3, xem
+     * {@code CoursePublicService#getBySlug} — {@code enrolled} luôn trả {@code false}) nên tạm
+     * thời CHỈ mở nhánh Preview; khi có ghi danh thật, bổ sung nhánh "đã sở hữu khóa học" ở đây.
+     */
+    @Transactional(readOnly = true)
+    public PlayerRes getLessonForPlayback(Long lessonId) {
+        Lesson lesson = lessonRepository.findById(lessonId)
+                .orElseThrow(() -> new ResourceNotFoundException("Lesson", lessonId));
+        Course course = lesson.getChapter().getCourse();
+        if (course.getStatus() != CourseStatus.PUBLISHED) {
+            throw new ResourceNotFoundException("Lesson", lessonId);
+        }
+        if (!Boolean.TRUE.equals(lesson.getIsPreview())) {
+            throw new AccessDeniedDomainException(
+                    "Bài học này yêu cầu sở hữu khóa học. Chỉ bài học Học thử (Preview) mới xem được khi chưa đăng ký.");
+        }
+        return new PlayerRes(
+                lesson.getId(),
+                lesson.getTitle(),
+                course.getId(),
+                course.getTitle(),
+                course.getSlug(),
+                lesson.getVideoSource(),
+                lesson.getVideoUrl(),
+                lesson.getYoutubeId(),
+                lesson.getDurationSec()
+        );
     }
 
     private SummaryRes mapToSummaryRes(Course course) {

@@ -41,4 +41,10 @@ public class CoursePublicController {
     public ResponseEntity<DetailRes> getBySlug(@PathVariable String slug) {
         return ResponseEntity.ok(coursePublicService.getBySlug(slug));
     }
+
+    /** UC11 — Học thử Preview: phát video của bài học đánh dấu Preview, không cần đăng nhập. */
+    @GetMapping("/lessons/{lessonId}/player")
+    public ResponseEntity<PlayerRes> getLessonPlayer(@PathVariable Long lessonId) {
+        return ResponseEntity.ok(coursePublicService.getLessonForPlayback(lessonId));
+    }
 }

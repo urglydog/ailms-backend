@@ -35,4 +35,11 @@ public class LessonDocumentController {
         lessonDocumentService.delete(principal.getName(), documentId);
         return ResponseEntity.noContent().build();
     }
+
+    /** BR-COURSE-06 — Admin xem tài liệu đính kèm để kiểm duyệt (ghi đè @PreAuthorize lớp cha). */
+    @GetMapping("/api/v1/courses/moderation/lessons/{lessonId}/documents")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<List<Res>> listForModeration(@PathVariable Long lessonId) {
+        return ResponseEntity.ok(lessonDocumentService.listForModeration(lessonId));
+    }
 }

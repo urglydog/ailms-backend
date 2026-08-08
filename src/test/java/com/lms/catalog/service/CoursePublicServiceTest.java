@@ -1,12 +1,16 @@
 package com.lms.catalog.service;
 
 import com.lms.catalog.dto.CoursePublicDto.DetailRes;
+import com.lms.catalog.dto.CoursePublicDto.PlayerRes;
 import com.lms.catalog.entity.Category;
+import com.lms.catalog.entity.Chapter;
 import com.lms.catalog.entity.Course;
+import com.lms.catalog.entity.Lesson;
 import com.lms.catalog.repository.ChapterRepository;
 import com.lms.catalog.repository.CourseRepository;
 import com.lms.catalog.repository.LessonRepository;
 import com.lms.common.enums.CourseStatus;
+import com.lms.common.exception.AccessDeniedDomainException;
 import com.lms.common.exception.ResourceNotFoundException;
 import com.lms.enrollment.repository.CourseReviewRepository;
 import java.math.BigDecimal;
@@ -169,5 +173,68 @@ class CoursePublicServiceTest {
         var result = coursePublicService.search("react", null, null, null, "relevance", PageRequest.of(0, 10));
 
         assertThat(result.getContent()).extracting("id").containsExactly(2L, 1L);
+    }
+
+    /** UC11 — Học thử Preview (BR-ENROLL-02): Guest/Student chưa sở hữu chỉ xem được bài Preview. */
+    @Test
+    void getLessonForPlayback_returnsVideoData_whenLessonIsPreviewAndCoursePublished() {
+        Lesson lesson = previewLessonOf(CourseStatus.PUBLISHED);
+        when(lessonRepository.findById(30L)).thenReturn(Optional.of(lesson));
+
+        PlayerRes result = coursePublicService.getLessonForPlayback(30L);
+
+        assertThat(result.videoSource()).isEqualTo("YOUTUBE");
+        assertThat(result.videoUrl()).isEqualTo("https://www.youtube.com/watch?v=abc12345678");
+        assertThat(result.courseSlug()).isEqualTo("khoa-hoc-test");
+    }
+
+    @Test
+    void getLessonForPlayback_throwsAccessDenied_whenLessonIsNotPreview() {
+        Lesson lesson = previewLessonOf(CourseStatus.PUBLISHED);
+        lesson.setIsPreview(false);
+        when(lessonRepository.findById(30L)).thenReturn(Optional.of(lesson));
+
+        assertThatThrownBy(() -> coursePublicService.getLessonForPlayback(30L))
+                .isInstanceOf(AccessDeniedDomainException.class);
+    }
+
+    @Test
+    void getLessonForPlayback_throwsNotFound_whenCourseNotPublished() {
+        Lesson lesson = previewLessonOf(CourseStatus.PENDING);
+        when(lessonRepository.findById(30L)).thenReturn(Optional.of(lesson));
+
+        assertThatThrownBy(() -> coursePublicService.getLessonForPlayback(30L))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void getLessonForPlayback_throwsNotFound_whenLessonMissing() {
+        when(lessonRepository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> coursePublicService.getLessonForPlayback(999L))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    private Lesson previewLessonOf(CourseStatus courseStatus) {
+        Course course = new Course();
+        course.setId(5L);
+        course.setTitle("Khoa hoc test");
+        course.setSlug("khoa-hoc-test");
+        course.setStatus(courseStatus);
+
+        Chapter chapter = new Chapter();
+        chapter.setId(20L);
+        chapter.setCourse(course);
+
+        Lesson lesson = new Lesson();
+        lesson.setId(30L);
+        lesson.setTitle("Bai hoc thu");
+        lesson.setChapter(chapter);
+        lesson.setIsPreview(true);
+        lesson.setVideoSource("YOUTUBE");
+        lesson.setVideoUrl("https://www.youtube.com/watch?v=abc12345678");
+        lesson.setYoutubeId("abc12345678");
+        lesson.setDurationSec(300);
+        return lesson;
     }
 }

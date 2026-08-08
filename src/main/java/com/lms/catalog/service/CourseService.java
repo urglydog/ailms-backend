@@ -58,6 +58,7 @@ public class CourseService {
     private final EnrollmentRepository enrollmentRepository;
     private final UserRepository userRepository;
     private final StorageService storageService;
+    private final LessonService lessonService;
     private final Tika tika = new Tika();
 
     @Transactional
@@ -141,6 +142,11 @@ public class CourseService {
         return mapToDetailRes(courseRepository.save(course));
     }
 
+    /**
+     * Không có {@code ON DELETE CASCADE} ở tầng DB nên xoá cứng phải tự dọn chương → bài học
+     * (kèm video/tài liệu trên B2 qua {@link LessonService#deleteCascade}) → ảnh bìa trên B2 →
+     * cuối cùng mới xoá bản ghi khóa học, nếu không sẽ vỡ ràng buộc khoá ngoại.
+     */
     @Transactional
     public void delete(String instructorEmail, Long id) {
         Course course = loadOwnedCourse(id, instructorEmail);
@@ -149,6 +155,15 @@ public class CourseService {
                 && !enrollmentRepository.existsByCourseId(id);
 
         if (canHardDelete) {
+            List<Chapter> chapters = chapterRepository.findByCourseIdOrderByDisplayOrderAsc(id);
+            for (Chapter chapter : chapters) {
+                lessonRepository.findByChapterIdOrderByDisplayOrderAsc(chapter.getId())
+                        .forEach(lessonService::deleteCascade);
+            }
+            chapterRepository.deleteAll(chapters);
+            if (course.getThumbnailUrl() != null) {
+                storageService.delete(StorageService.extractKeyFromUrl(course.getThumbnailUrl()));
+            }
             courseRepository.delete(course);
         } else {
             course.setStatus(CourseStatus.ARCHIVED);
