@@ -28,6 +28,7 @@ public class ChapterService {
     private final ChapterRepository chapterRepository;
     private final CourseRepository courseRepository;
     private final LessonRepository lessonRepository;
+    private final LessonService lessonService;
 
     @Transactional
     public Res create(String instructorEmail, Long courseId, CreateReq req) {
@@ -48,9 +49,15 @@ public class ChapterService {
         return mapToRes(chapterRepository.save(chapter));
     }
 
+    /**
+     * Không có {@code ON DELETE CASCADE} ở tầng DB (composition có chủ đích) nên phải tự xoá
+     * bài học bên trong TRƯỚC (kèm dọn video/tài liệu trên B2 qua {@link LessonService#deleteCascade}),
+     * nếu không sẽ vỡ ràng buộc khoá ngoại {@code fk_lessons_chapter_id}.
+     */
     @Transactional
     public void delete(String instructorEmail, Long chapterId) {
         Chapter chapter = loadOwnedChapter(chapterId, instructorEmail);
+        lessonRepository.findByChapterIdOrderByDisplayOrderAsc(chapterId).forEach(lessonService::deleteCascade);
         chapterRepository.delete(chapter);
     }
 
@@ -100,7 +107,9 @@ public class ChapterService {
                         lesson.getIsPreview(),
                         lesson.getStatus(),
                         lesson.getVideoSource(),
-                        lesson.getVideoUrl()
+                        lesson.getVideoUrl(),
+                        lesson.getYoutubeId(),
+                        lesson.getDurationSec()
                 ))
                 .toList();
         return new Res(chapter.getId(), chapter.getTitle(), chapter.getDisplayOrder(), lessons);

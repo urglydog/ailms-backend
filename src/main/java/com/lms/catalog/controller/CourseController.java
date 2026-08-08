@@ -10,9 +10,11 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
  * Vòng đời khóa học phía Giảng viên (UC31, UC36) và Admin (UC42) — F2.1.
@@ -54,6 +56,14 @@ public class CourseController {
     public ResponseEntity<DetailRes> update(
             Principal principal, @PathVariable Long id, @Valid @RequestBody UpdateReq req) {
         return ResponseEntity.ok(courseService.update(principal.getName(), id, req));
+    }
+
+    /** Giai đoạn 4 — upload ảnh bìa thật lên B2, thay ô nhập URL text tạm thời của F2.1. */
+    @PostMapping(value = "/mine/{id}/thumbnail", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasRole('INSTRUCTOR')")
+    public ResponseEntity<DetailRes> uploadThumbnail(
+            Principal principal, @PathVariable Long id, @RequestPart("file") MultipartFile file) {
+        return ResponseEntity.ok(courseService.uploadThumbnail(principal.getName(), id, file));
     }
 
     @PostMapping("/mine/{id}/submit")

@@ -4,7 +4,9 @@ import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
 import com.lms.catalog.dto.CourseDto.*;
 import com.lms.catalog.entity.Category;
+import com.lms.catalog.entity.Chapter;
 import com.lms.catalog.entity.Course;
+import com.lms.catalog.entity.Lesson;
 import com.lms.catalog.repository.CategoryRepository;
 import com.lms.catalog.repository.ChapterRepository;
 import com.lms.catalog.repository.CourseRepository;
@@ -12,6 +14,8 @@ import com.lms.catalog.repository.LessonRepository;
 import com.lms.common.enums.CourseStatus;
 import com.lms.common.exception.AccessDeniedDomainException;
 import com.lms.common.exception.BusinessRuleViolationException;
+import com.lms.common.exception.InvalidRequestException;
+import com.lms.common.storage.StorageService;
 import com.lms.enrollment.repository.EnrollmentRepository;
 import java.math.BigDecimal;
 import java.util.List;
@@ -22,11 +26,13 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.mock.web.MockMultipartFile;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -48,6 +54,8 @@ class CourseServiceTest {
     @Mock private LessonRepository lessonRepository;
     @Mock private EnrollmentRepository enrollmentRepository;
     @Mock private UserRepository userRepository;
+    @Mock private StorageService storageService;
+    @Mock private LessonService lessonService;
 
     @InjectMocks
     private CourseService courseService;
@@ -83,7 +91,19 @@ class CourseServiceTest {
     @Test
     void submitForReview_blocksWhenMissingChaptersAndLessons() {
         when(chapterRepository.countByCourseId(10L)).thenReturn(0L);
-        lenient().when(lessonRepository.countByChapter_CourseId(10L)).thenReturn(0L);
+        lenient().when(lessonRepository.countByChapter_CourseIdAndStatus(10L, "READY")).thenReturn(0L);
+
+        assertThatThrownBy(() -> courseService.submitForReview(OWNER_EMAIL, 10L))
+                .isInstanceOf(BusinessRuleViolationException.class);
+
+        verify(courseRepository, never()).save(any());
+    }
+
+    @Test
+    void submitForReview_blocksWhenLessonsExistButNoneAreReady() {
+        // Đủ số lượng bài học nhưng toàn DRAFT (chưa nạp video) — vẫn phải chặn (Giai đoạn 4, UC34).
+        when(chapterRepository.countByCourseId(10L)).thenReturn(1L);
+        when(lessonRepository.countByChapter_CourseIdAndStatus(10L, "READY")).thenReturn(0L);
 
         assertThatThrownBy(() -> courseService.submitForReview(OWNER_EMAIL, 10L))
                 .isInstanceOf(BusinessRuleViolationException.class);
@@ -94,7 +114,7 @@ class CourseServiceTest {
     @Test
     void submitForReview_fromDraft_movesToPendingWithoutTouchingResubmitCount() {
         when(chapterRepository.countByCourseId(10L)).thenReturn(1L);
-        when(lessonRepository.countByChapter_CourseId(10L)).thenReturn(3L);
+        when(lessonRepository.countByChapter_CourseIdAndStatus(10L, "READY")).thenReturn(3L);
 
         DetailRes result = courseService.submitForReview(OWNER_EMAIL, 10L);
 
@@ -107,7 +127,7 @@ class CourseServiceTest {
         course.setStatus(CourseStatus.REJECTED);
         course.setResubmitCount(3);
         when(chapterRepository.countByCourseId(10L)).thenReturn(1L);
-        when(lessonRepository.countByChapter_CourseId(10L)).thenReturn(3L);
+        when(lessonRepository.countByChapter_CourseIdAndStatus(10L, "READY")).thenReturn(3L);
 
         DetailRes result = courseService.submitForReview(OWNER_EMAIL, 10L);
 
@@ -120,7 +140,7 @@ class CourseServiceTest {
         course.setStatus(CourseStatus.REJECTED);
         course.setResubmitCount(5);
         when(chapterRepository.countByCourseId(10L)).thenReturn(1L);
-        when(lessonRepository.countByChapter_CourseId(10L)).thenReturn(3L);
+        when(lessonRepository.countByChapter_CourseIdAndStatus(10L, "READY")).thenReturn(3L);
 
         assertThatThrownBy(() -> courseService.submitForReview(OWNER_EMAIL, 10L))
                 .isInstanceOf(BusinessRuleViolationException.class)
@@ -138,6 +158,27 @@ class CourseServiceTest {
     }
 
     @Test
+    void uploadThumbnail_validJpegSucceeds() {
+        byte[] jpegMagicBytes = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0, 0x00, 0x10};
+        MockMultipartFile file = new MockMultipartFile("file", "bia.jpg", "image/jpeg", jpegMagicBytes);
+        when(storageService.upload(anyString(), any(), anyLong(), eq("image/jpeg")))
+                .thenReturn("https://cdn.example.com/thumbnails/10/x.jpg");
+
+        DetailRes result = courseService.uploadThumbnail(OWNER_EMAIL, 10L, file);
+
+        assertThat(result.thumbnailUrl()).isEqualTo("https://cdn.example.com/thumbnails/10/x.jpg");
+    }
+
+    @Test
+    void uploadThumbnail_rejectsFileWhoseRealContentIsNotAnImage() {
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "bia.jpg", "image/jpeg", "%PDF-1.4 gia mao anh".getBytes());
+
+        assertThatThrownBy(() -> courseService.uploadThumbnail(OWNER_EMAIL, 10L, file))
+                .isInstanceOf(InvalidRequestException.class);
+    }
+
+    @Test
     void getMineDetail_throwsWhenCallerIsNotOwner() {
         assertThatThrownBy(() -> courseService.getMineDetail("khac@lms.local", 10L))
                 .isInstanceOf(AccessDeniedDomainException.class);
@@ -151,6 +192,29 @@ class CourseServiceTest {
 
         verify(courseRepository).delete(course);
         verify(courseRepository, never()).save(any());
+    }
+
+    /**
+     * Không có {@code ON DELETE CASCADE} ở tầng DB — xoá cứng phải tự dọn chương/bài học
+     * (kèm B2 qua {@link LessonService#deleteCascade}) và ảnh bìa trên B2 TRƯỚC khi xoá khóa học,
+     * nếu không sẽ vỡ ràng buộc khoá ngoại {@code fk_chapters_course_id}.
+     */
+    @Test
+    void delete_cascadesChaptersLessonsAndThumbnailBeforeHardDelete() {
+        when(enrollmentRepository.existsByCourseId(10L)).thenReturn(false);
+        Chapter chapter = new Chapter();
+        chapter.setId(50L);
+        when(chapterRepository.findByCourseIdOrderByDisplayOrderAsc(10L)).thenReturn(List.of(chapter));
+        Lesson lesson = new Lesson();
+        lesson.setId(60L);
+        when(lessonRepository.findByChapterIdOrderByDisplayOrderAsc(50L)).thenReturn(List.of(lesson));
+
+        courseService.delete(OWNER_EMAIL, 10L);
+
+        verify(lessonService).deleteCascade(lesson);
+        verify(chapterRepository).deleteAll(List.of(chapter));
+        verify(storageService).delete("thumb.png");
+        verify(courseRepository).delete(course);
     }
 
     @Test

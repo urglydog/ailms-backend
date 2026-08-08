@@ -26,6 +26,12 @@ public class LessonDto {
             List<Long> orderedIds
     ) {}
 
+    /** F4.1 (UC34) — dán link YouTube công khai thay cho upload MP4 trực tiếp. */
+    public record SetYoutubeReq(
+            @NotBlank(message = "URL YouTube không được để trống")
+            String url
+    ) {}
+
     public record Res(
             Long id,
             String title,
@@ -33,6 +39,8 @@ public class LessonDto {
             Boolean isPreview,
             String status,
             String videoSource,
-            String videoUrl
+            String videoUrl,
+            String youtubeId,
+            Integer durationSec
     ) {}
 }

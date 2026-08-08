@@ -5,9 +5,11 @@ import com.lms.catalog.service.LessonService;
 import jakarta.validation.Valid;
 import java.security.Principal;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequiredArgsConstructor
@@ -36,5 +38,25 @@ public class LessonController {
     public ResponseEntity<Void> reorder(Principal principal, @PathVariable Long chapterId, @Valid @RequestBody ReorderReq req) {
         lessonService.reorder(principal.getName(), chapterId, req);
         return ResponseEntity.noContent().build();
+    }
+
+    /** F4.1 (UC34) — nạp MP4 trực tiếp. Giới hạn kích thước tổng thể do {@code spring.servlet.multipart} (2GB). */
+    @PostMapping(value = "/api/v1/lessons/{id}/video/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<Res> uploadVideo(
+            Principal principal, @PathVariable Long id, @RequestPart("file") MultipartFile file) {
+        return ResponseEntity.ok(lessonService.uploadVideo(principal.getName(), id, file));
+    }
+
+    /** F4.1 (UC34) — dán link YouTube công khai thay cho upload MP4. */
+    @PostMapping("/api/v1/lessons/{id}/video/youtube")
+    public ResponseEntity<Res> setYoutubeVideo(
+            Principal principal, @PathVariable Long id, @Valid @RequestBody SetYoutubeReq req) {
+        return ResponseEntity.ok(lessonService.setYoutubeVideo(principal.getName(), id, req));
+    }
+
+    /** F4.1 (UC34) — xoá video hiện tại (MP4 hoặc YouTube) để nạp video khác. */
+    @DeleteMapping("/api/v1/lessons/{id}/video")
+    public ResponseEntity<Res> deleteVideo(Principal principal, @PathVariable Long id) {
+        return ResponseEntity.ok(lessonService.deleteVideo(principal.getName(), id));
     }
 }
