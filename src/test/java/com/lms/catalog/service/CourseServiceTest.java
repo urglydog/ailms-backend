@@ -4,7 +4,9 @@ import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
 import com.lms.catalog.dto.CourseDto.*;
 import com.lms.catalog.entity.Category;
+import com.lms.catalog.entity.Chapter;
 import com.lms.catalog.entity.Course;
+import com.lms.catalog.entity.Lesson;
 import com.lms.catalog.repository.CategoryRepository;
 import com.lms.catalog.repository.ChapterRepository;
 import com.lms.catalog.repository.CourseRepository;
@@ -53,6 +55,7 @@ class CourseServiceTest {
     @Mock private EnrollmentRepository enrollmentRepository;
     @Mock private UserRepository userRepository;
     @Mock private StorageService storageService;
+    @Mock private LessonService lessonService;
 
     @InjectMocks
     private CourseService courseService;
@@ -189,6 +192,29 @@ class CourseServiceTest {
 
         verify(courseRepository).delete(course);
         verify(courseRepository, never()).save(any());
+    }
+
+    /**
+     * Không có {@code ON DELETE CASCADE} ở tầng DB — xoá cứng phải tự dọn chương/bài học
+     * (kèm B2 qua {@link LessonService#deleteCascade}) và ảnh bìa trên B2 TRƯỚC khi xoá khóa học,
+     * nếu không sẽ vỡ ràng buộc khoá ngoại {@code fk_chapters_course_id}.
+     */
+    @Test
+    void delete_cascadesChaptersLessonsAndThumbnailBeforeHardDelete() {
+        when(enrollmentRepository.existsByCourseId(10L)).thenReturn(false);
+        Chapter chapter = new Chapter();
+        chapter.setId(50L);
+        when(chapterRepository.findByCourseIdOrderByDisplayOrderAsc(10L)).thenReturn(List.of(chapter));
+        Lesson lesson = new Lesson();
+        lesson.setId(60L);
+        when(lessonRepository.findByChapterIdOrderByDisplayOrderAsc(50L)).thenReturn(List.of(lesson));
+
+        courseService.delete(OWNER_EMAIL, 10L);
+
+        verify(lessonService).deleteCascade(lesson);
+        verify(chapterRepository).deleteAll(List.of(chapter));
+        verify(storageService).delete("thumb.png");
+        verify(courseRepository).delete(course);
     }
 
     @Test

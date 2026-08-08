@@ -10,6 +10,7 @@ import com.lms.catalog.repository.LessonDocumentRepository;
 import com.lms.common.exception.AccessDeniedDomainException;
 import com.lms.common.exception.BusinessRuleViolationException;
 import com.lms.common.exception.InvalidRequestException;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -128,6 +129,32 @@ class LessonDocumentServiceTest {
         when(lessonDocumentRepository.findById(99L)).thenReturn(Optional.of(document));
 
         assertThatThrownBy(() -> lessonDocumentService.delete("khac@lms.local", 99L))
+                .isInstanceOf(AccessDeniedDomainException.class);
+    }
+
+    @Test
+    void listForModeration_returnsDocumentsWhenLessonUnlockedForModeration() {
+        LessonDocument doc = new LessonDocument();
+        doc.setId(1L);
+        doc.setFileName("a.pdf");
+        doc.setFileUrl("https://cdn.example.com/documents/30/a.pdf");
+        doc.setFileType("pdf");
+        doc.setFileSize(100L);
+        when(lessonService.loadLessonForModeration(30L)).thenReturn(lesson);
+        when(lessonDocumentRepository.findByLesson_IdOrderByIdAsc(30L)).thenReturn(List.of(doc));
+
+        List<Res> result = lessonDocumentService.listForModeration(30L);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).fileName()).isEqualTo("a.pdf");
+    }
+
+    @Test
+    void listForModeration_propagatesAccessDeniedWhenCourseNotPending() {
+        when(lessonService.loadLessonForModeration(30L))
+                .thenThrow(new AccessDeniedDomainException("Chỉ được xem nội dung bài học của khóa học đang chờ duyệt"));
+
+        assertThatThrownBy(() -> lessonDocumentService.listForModeration(30L))
                 .isInstanceOf(AccessDeniedDomainException.class);
     }
 

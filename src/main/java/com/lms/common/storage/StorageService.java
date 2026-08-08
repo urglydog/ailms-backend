@@ -17,4 +17,14 @@ public interface StorageService {
 
     /** Best-effort — lỗi khi xoá không nên chặn thao tác nghiệp vụ chính (ví dụ xoá bản ghi DB). */
     void delete(String key);
+
+    /**
+     * Trích object key từ URL công khai do {@link #upload} trả về (dạng
+     * {@code https://{bucket}.{endpoint}/{key}}) — dùng khi cần xoá lại object chỉ từ URL đã lưu
+     * trong DB (video/tài liệu/ảnh bìa), không cần lưu key riêng.
+     */
+    static String extractKeyFromUrl(String url) {
+        int hostEnd = url.indexOf('/', "https://".length());
+        return hostEnd >= 0 ? url.substring(hostEnd + 1) : url;
+    }
 }

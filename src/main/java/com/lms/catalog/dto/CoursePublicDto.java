@@ -58,4 +58,17 @@ public class CoursePublicDto {
             Boolean isPreview,
             Integer durationSec
     ) {}
+
+    /** UC11 — dữ liệu phát video cho bài học Preview (Guest/Student chưa sở hữu khóa học). */
+    public record PlayerRes(
+            Long lessonId,
+            String lessonTitle,
+            Long courseId,
+            String courseTitle,
+            String courseSlug,
+            String videoSource,
+            String videoUrl,
+            String youtubeId,
+            Integer durationSec
+    ) {}
 }

@@ -3,12 +3,15 @@ package com.lms.catalog.service;
 import com.lms.catalog.dto.LessonDto.*;
 import com.lms.catalog.entity.Chapter;
 import com.lms.catalog.entity.Lesson;
+import com.lms.catalog.entity.LessonDocument;
 import com.lms.catalog.repository.ChapterRepository;
+import com.lms.catalog.repository.LessonDocumentRepository;
 import com.lms.catalog.repository.LessonRepository;
 import com.lms.common.exception.AccessDeniedDomainException;
 import com.lms.common.exception.BusinessRuleViolationException;
 import com.lms.common.exception.InvalidRequestException;
 import com.lms.common.exception.ResourceNotFoundException;
+import com.lms.common.enums.CourseStatus;
 import com.lms.common.media.FfprobeService;
 import com.lms.common.media.YoutubeMetadataService;
 import com.lms.common.storage.StorageService;
@@ -40,6 +43,7 @@ public class LessonService {
 
     private final LessonRepository lessonRepository;
     private final ChapterRepository chapterRepository;
+    private final LessonDocumentRepository lessonDocumentRepository;
     private final StorageService storageService;
     private final FfprobeService ffprobeService;
     private final YoutubeMetadataService youtubeMetadataService;
@@ -69,6 +73,24 @@ public class LessonService {
     @Transactional
     public void delete(String instructorEmail, Long lessonId) {
         Lesson lesson = loadOwnedLesson(lessonId, instructorEmail);
+        deleteCascade(lesson);
+    }
+
+    /**
+     * Xoá bài học VÀ toàn bộ dữ liệu phụ thuộc trên B2 (video + tài liệu đính kèm) trước khi xoá
+     * bản ghi — bảng không có {@code ON DELETE CASCADE} ở tầng DB (composition có chủ đích, xem
+     * migration) nên phải tự dọn theo thứ tự con trước cha. Package-private: cũng được
+     * {@link ChapterService} và {@link CourseService} gọi lại khi xoá cả chương/khóa học, tránh
+     * nhân đôi logic dọn B2 ở 3 nơi.
+     */
+    void deleteCascade(Lesson lesson) {
+        List<LessonDocument> documents = lessonDocumentRepository.findByLesson_IdOrderByIdAsc(lesson.getId());
+        documents.forEach(doc -> storageService.delete(StorageService.extractKeyFromUrl(doc.getFileUrl())));
+        lessonDocumentRepository.deleteAll(documents);
+
+        if ("UPLOAD".equals(lesson.getVideoSource()) && lesson.getVideoUrl() != null) {
+            storageService.delete(StorageService.extractKeyFromUrl(lesson.getVideoUrl()));
+        }
         lessonRepository.delete(lesson);
     }
 
@@ -94,6 +116,7 @@ public class LessonService {
     @Transactional
     public Res uploadVideo(String instructorEmail, Long lessonId, MultipartFile file) {
         Lesson lesson = loadOwnedLesson(lessonId, instructorEmail);
+        requireNoExistingVideo(lesson);
 
         if (file.isEmpty()) {
             throw new InvalidRequestException("File video trống");
@@ -148,6 +171,7 @@ public class LessonService {
     @Transactional
     public Res setYoutubeVideo(String instructorEmail, Long lessonId, SetYoutubeReq req) {
         Lesson lesson = loadOwnedLesson(lessonId, instructorEmail);
+        requireNoExistingVideo(lesson);
 
         String videoId = youtubeMetadataService.extractVideoId(req.url());
         int durationSec = youtubeMetadataService.fetchDurationSec(videoId);
@@ -162,6 +186,37 @@ public class LessonService {
         lesson.setDurationSec(durationSec);
         lesson.setStatus("READY");
         return mapToRes(lessonRepository.save(lesson));
+    }
+
+    /**
+     * F4.1 (UC34) — xoá video hiện tại (MP4 hoặc YouTube) để nạp video khác. Bắt buộc phải gọi
+     * trước khi đổi nguồn (BR-CHUNK-01 chỉ cho 1 video/bài — {@link #requireNoExistingVideo}
+     * chặn upload/dán link mới khi đã có video).
+     */
+    @Transactional
+    public Res deleteVideo(String instructorEmail, Long lessonId) {
+        Lesson lesson = loadOwnedLesson(lessonId, instructorEmail);
+        if (lesson.getVideoSource() == null) {
+            throw new InvalidRequestException("Bài học chưa có video để xoá");
+        }
+        if ("UPLOAD".equals(lesson.getVideoSource()) && lesson.getVideoUrl() != null) {
+            storageService.delete(StorageService.extractKeyFromUrl(lesson.getVideoUrl()));
+        }
+        lesson.setVideoSource(null);
+        lesson.setVideoUrl(null);
+        lesson.setYoutubeId(null);
+        lesson.setDurationSec(0);
+        lesson.setStatus("DRAFT");
+        return mapToRes(lessonRepository.save(lesson));
+    }
+
+    /** Mỗi bài học chỉ 1 video tại một thời điểm — phải xoá video cũ trước khi đổi nguồn khác. */
+    private void requireNoExistingVideo(Lesson lesson) {
+        if (lesson.getVideoSource() != null) {
+            String sourceLabel = "YOUTUBE".equals(lesson.getVideoSource()) ? "link YouTube" : "MP4 tải lên";
+            throw new BusinessRuleViolationException(
+                    "Bài học đã có video (" + sourceLabel + ") — xoá video hiện tại trước khi nạp video mới");
+        }
     }
 
     private Chapter loadOwnedChapter(Long chapterId, String instructorEmail) {
@@ -179,6 +234,22 @@ public class LessonService {
                 .orElseThrow(() -> new ResourceNotFoundException("Lesson", lessonId));
         if (!lesson.getChapter().getCourse().getInstructor().getEmail().equals(instructorEmail)) {
             throw new AccessDeniedDomainException("Bạn không có quyền thao tác trên bài học này");
+        }
+        return lesson;
+    }
+
+    /**
+     * BR-COURSE-06 — phục vụ kiểm duyệt: Admin xem trực tiếp video/tài liệu của MỌI bài học
+     * (kể cả không Preview) trong lúc khóa học đang {@code PENDING}, không bị giới hạn bởi điều
+     * kiện sở hữu ở BR-ENROLL-02 (BR đó chỉ áp dụng cho Học viên/Guest). Ngoài lúc chờ duyệt,
+     * Admin không có quyền xem nội dung bài học qua đường này.
+     */
+    Lesson loadLessonForModeration(Long lessonId) {
+        Lesson lesson = lessonRepository.findById(lessonId)
+                .orElseThrow(() -> new ResourceNotFoundException("Lesson", lessonId));
+        if (lesson.getChapter().getCourse().getStatus() != CourseStatus.PENDING) {
+            throw new AccessDeniedDomainException(
+                    "Chỉ được xem nội dung bài học của khóa học đang chờ duyệt (BR-COURSE-06)");
         }
         return lesson;
     }

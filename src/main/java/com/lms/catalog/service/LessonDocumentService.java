@@ -58,6 +58,15 @@ public class LessonDocumentService {
                 .toList();
     }
 
+    /** BR-COURSE-06 — Admin xem tài liệu đính kèm để kiểm duyệt (khóa đang PENDING), không cần sở hữu. */
+    @Transactional(readOnly = true)
+    public List<Res> listForModeration(Long lessonId) {
+        lessonService.loadLessonForModeration(lessonId);
+        return lessonDocumentRepository.findByLesson_IdOrderByIdAsc(lessonId).stream()
+                .map(this::mapToRes)
+                .toList();
+    }
+
     @Transactional
     public Res upload(String instructorEmail, Long lessonId, MultipartFile file) {
         Lesson lesson = lessonService.loadOwnedLesson(lessonId, instructorEmail);
@@ -115,12 +124,7 @@ public class LessonDocumentService {
             throw new AccessDeniedDomainException("Bạn không có quyền thao tác trên tài liệu này");
         }
         lessonDocumentRepository.delete(document);
-        storageService.delete(extractKeyFromUrl(document.getFileUrl()));
-    }
-
-    private static String extractKeyFromUrl(String url) {
-        int marker = url.indexOf("documents/");
-        return marker >= 0 ? url.substring(marker) : url;
+        storageService.delete(StorageService.extractKeyFromUrl(document.getFileUrl()));
     }
 
     private Res mapToRes(LessonDocument document) {

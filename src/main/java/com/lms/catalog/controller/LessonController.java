@@ -53,4 +53,10 @@ public class LessonController {
             Principal principal, @PathVariable Long id, @Valid @RequestBody SetYoutubeReq req) {
         return ResponseEntity.ok(lessonService.setYoutubeVideo(principal.getName(), id, req));
     }
+
+    /** F4.1 (UC34) — xoá video hiện tại (MP4 hoặc YouTube) để nạp video khác. */
+    @DeleteMapping("/api/v1/lessons/{id}/video")
+    public ResponseEntity<Res> deleteVideo(Principal principal, @PathVariable Long id) {
+        return ResponseEntity.ok(lessonService.deleteVideo(principal.getName(), id));
+    }
 }
