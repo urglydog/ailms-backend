@@ -131,6 +131,8 @@ services:
       ZALOPAY_KEY2: ${ZALOPAY_KEY2:-}
       VNPAY_TMN_CODE: ${VNPAY_TMN_CODE:-}
       VNPAY_HASH_SECRET: ${VNPAY_HASH_SECRET:-}
+      # Google OAuth
+      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
       # Token nội bộ để AI Worker gọi callback về đây
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-dev-internal-token}
     volumes:
