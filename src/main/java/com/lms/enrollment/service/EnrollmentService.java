@@ -6,8 +6,14 @@ import com.lms.catalog.entity.Course;
 import com.lms.common.exception.ResourceNotFoundException;
 import com.lms.enrollment.dto.EnrollmentDto.Res;
 import com.lms.enrollment.entity.Enrollment;
+import com.lms.catalog.repository.CourseRepository;
+import com.lms.common.enums.CourseStatus;
+import com.lms.common.exception.BusinessRuleViolationException;
 import com.lms.enrollment.repository.CourseReviewRepository;
 import com.lms.enrollment.repository.EnrollmentRepository;
+import com.lms.payment.entity.Payment;
+import java.time.LocalDateTime;
+import java.math.BigDecimal;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -25,6 +31,7 @@ public class EnrollmentService {
     private final EnrollmentRepository enrollmentRepository;
     private final UserRepository userRepository;
     private final CourseReviewRepository courseReviewRepository;
+    private final CourseRepository courseRepository;
 
     @Transactional(readOnly = true)
     public List<Res> getMyEnrollments(String email) {
@@ -48,5 +55,48 @@ public class EnrollmentService {
                 course.getPrice(),
                 alreadyReviewed
         );
+    }
+
+    @Transactional
+    public void enrollFreeCourse(String email, Long courseId) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User", email));
+        Course course = courseRepository.findById(courseId)
+                .orElseThrow(() -> new ResourceNotFoundException("Course", courseId));
+
+        if (course.getStatus() != CourseStatus.PUBLISHED) {
+            throw new BusinessRuleViolationException("BR-ENROLL-01: Chỉ có thể ghi danh khóa học đã xuất bản.");
+        }
+        if (!Boolean.TRUE.equals(course.getIsFree())) {
+            throw new BusinessRuleViolationException("BR-ENROLL-01: Khóa học không miễn phí. Yêu cầu thanh toán.");
+        }
+        if (enrollmentRepository.existsByUser_IdAndCourse_Id(user.getId(), course.getId())) {
+            throw new BusinessRuleViolationException("BR-ENROLL-01: Bạn đã sở hữu khóa học này.");
+        }
+
+        Enrollment enrollment = new Enrollment();
+        enrollment.setUser(user);
+        enrollment.setCourse(course);
+        enrollment.setEnrolledAt(LocalDateTime.now());
+        enrollment.setProgressPct(BigDecimal.ZERO);
+        enrollmentRepository.save(enrollment);
+    }
+
+    /**
+     * Dùng cho luồng thanh toán thành công (F3.2 gọi sang).
+     * @param payment Giao dịch đã được xác nhận PAID.
+     */
+    @Transactional
+    public void createFromPayment(Payment payment) {
+        if (enrollmentRepository.existsByUser_IdAndCourse_Id(payment.getUser().getId(), payment.getCourse().getId())) {
+            return;
+        }
+
+        Enrollment enrollment = new Enrollment();
+        enrollment.setUser(payment.getUser());
+        enrollment.setCourse(payment.getCourse());
+        enrollment.setEnrolledAt(LocalDateTime.now());
+        enrollment.setProgressPct(BigDecimal.ZERO);
+        enrollmentRepository.save(enrollment);
     }
 }

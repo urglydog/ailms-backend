@@ -59,9 +59,14 @@ public class Payment extends BaseEntity {
     @Column(name = "gateway_txn_no", length = 100)
     private String gatewayTxnNo;
 
-    /** Chỉ có giá trị khi status = PAID. */
     @Column(name = "paid_at")
     private LocalDateTime paidAt;
+
+    @Column(name = "billing_name", length = 100)
+    private String billingName;
+
+    @Column(name = "billing_phone", length = 20)
+    private String billingPhone;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id", nullable = false)
