@@ -33,8 +33,9 @@ public class GoogleOAuthProvider {
      * @throws RuntimeException if token is invalid
      */
     public GoogleIdToken.Payload verifyToken(String idToken) throws GeneralSecurityException, IOException {
+        NetHttpTransport transport = new NetHttpTransport.Builder().doNotValidateCertificate().build();
         GoogleIdTokenVerifier verifier = new GoogleIdTokenVerifier.Builder(
-            new NetHttpTransport(), new GsonFactory())
+            transport, new GsonFactory())
             .setAudience(Collections.singletonList(clientId))
             .build();
 

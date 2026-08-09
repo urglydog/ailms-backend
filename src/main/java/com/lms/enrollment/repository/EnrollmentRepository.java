@@ -20,6 +20,8 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, Long> {
     /** Dùng bởi CourseReviewService (F2.2) để kiểm điều kiện sở hữu trước khi đánh giá (BR-ENROLL-01). */
     boolean existsByUser_IdAndCourse_Id(Long userId, Long courseId);
 
+    boolean existsByUser_EmailAndCourse_Id(String email, Long courseId);
+
     /** Danh sách khóa đã sở hữu của 1 học viên ("Khóa học của tôi"). */
     List<Enrollment> findByUser_Email(String email);
 }
