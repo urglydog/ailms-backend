@@ -2,6 +2,7 @@ package com.lms.enrollment.repository;
 
 import com.lms.enrollment.entity.Enrollment;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -24,4 +25,7 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, Long> {
 
     /** Danh sách khóa đã sở hữu của 1 học viên ("Khóa học của tôi"). */
     List<Enrollment> findByUser_Email(String email);
+
+    /** UC21 — nạp entity để cập nhật `progressPct`/`completedAt` sau khi ghi nhận tiến độ 1 bài. */
+    Optional<Enrollment> findByUser_IdAndCourse_Id(Long userId, Long courseId);
 }

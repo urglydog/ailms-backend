@@ -53,7 +53,11 @@ public class EnrollmentService {
                 course.getCategory().getName(),
                 course.getIsFree(),
                 course.getPrice(),
-                alreadyReviewed
+                alreadyReviewed,
+                enrollment.getProgressPct(),
+                enrollment.getCompletedAt(),
+                // BR-PROGRESS-04: Quiz thật làm ở Giai đoạn 7 — để null an toàn ở đây.
+                null
         );
     }
 
