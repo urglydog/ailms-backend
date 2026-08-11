@@ -1,13 +1,17 @@
 package com.lms.common.service;
 
+import com.lms.auth.entity.User;
+import com.lms.auth.repository.UserRepository;
 import com.lms.common.dto.NotificationDto.NotificationRes;
 import com.lms.notification.entity.Notification;
 import com.lms.notification.repository.NotificationRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 
 import java.time.LocalDateTime;
 import java.time.Duration;
@@ -16,6 +20,9 @@ import java.util.Collections;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -27,6 +34,10 @@ class NotificationServiceTest {
 
     @Mock
     private NotificationRepository notificationRepository;
+    @Mock
+    private UserRepository userRepository;
+    @Mock
+    private SimpMessagingTemplate messagingTemplate;
 
     @InjectMocks
     private NotificationService notificationService;
@@ -99,5 +110,33 @@ class NotificationServiceTest {
         assertEquals("Your course has been approved", res.content());
         assertEquals("/courses/5", res.linkUrl());
         assertEquals(true, res.isRead());
+    }
+
+    // ── notify() — BR-NOTIFY-01 ──────────────────────────────────────
+
+    @Test
+    void notify_savesNotificationAndBroadcastsOverWebSocket() {
+        Long userId = 7L;
+        User user = new User();
+        user.setId(userId);
+        when(userRepository.getReferenceById(userId)).thenReturn(user);
+        when(notificationRepository.save(any(Notification.class))).thenAnswer(inv -> {
+            Notification n = inv.getArgument(0);
+            n.setId(50L);
+            n.setCreatedAt(LocalDateTime.now());
+            return n;
+        });
+
+        notificationService.notify(userId, "DUBBING_COMPLETED", "Lồng tiếng hoàn tất",
+                "Bản lồng tiếng en-US đã sẵn sàng.", "/learn/21");
+
+        ArgumentCaptor<Notification> captor = ArgumentCaptor.forClass(Notification.class);
+        verify(notificationRepository).save(captor.capture());
+        Notification saved = captor.getValue();
+        assertEquals("DUBBING_COMPLETED", saved.getType());
+        assertEquals(user, saved.getUser());
+        assertEquals("/learn/21", saved.getLinkUrl());
+
+        verify(messagingTemplate).convertAndSend(eq("/topic/notifications/" + userId), any(NotificationRes.class));
     }
 }
