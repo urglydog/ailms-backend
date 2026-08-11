@@ -2,6 +2,7 @@ package com.lms.dubbing.entity;
 
 import com.lms.common.entity.BaseEntity;
 import com.lms.catalog.entity.Lesson;
+import com.lms.auth.entity.User;
 import com.lms.common.enums.JobStatus;
 import java.time.LocalDateTime;
 import jakarta.persistence.*;
@@ -73,6 +74,14 @@ public class AiJob extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "lesson_id", nullable = false)
     private Lesson lesson;
+
+    /**
+     * Nguoi da bam kich hoat (BR-NOTIFY-01: bao DUBBING_COMPLETED/FAILED dung nguoi).
+     * Nullable vi job cu truoc F5.3 khong co du lieu nay.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "requested_by_user_id")
+    private User requestedBy;
 
     /** Tien do hien thi cho UC20. */
     public int progressPercent() {
