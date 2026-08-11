@@ -134,6 +134,7 @@ ai:
     # URL nội bộ Docker — FE KHÔNG gọi trực tiếp; Backend proxy vào đây (BR-DISCOVERY-01)
     base-url: ${INTERNAL_BE_AI_URL:http://ai-api:8000}
 
+<<<<<<< Updated upstream
   # Giai đoạn 5 — trước đây khối này bị lồng nhầm dưới `payment:` do lỗi thụt dòng, chưa có
   # code nào đọc nên sửa không ảnh hưởng gì đang chạy. Đổi đơn vị phút → giây để khớp tên biến
   # môi trường DUB_LOCK_TTL_SECONDS (doc/SETUP_GIAIDOAN5.md).
@@ -144,6 +145,8 @@ ai:
     login-fail-prefix: "login_fail:"    # BR-AUTH-03
     discovery-rate-prefix: "discovery_rate:" # BR-DISCOVERY-01
   dub-lock-ttl-seconds: ${DUB_LOCK_TTL_SECONDS:1800}   # BR-DUB-05 (30 phút)
+=======
+>>>>>>> Stashed changes
 
 payment:
   vnpay:
