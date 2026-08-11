@@ -134,6 +134,16 @@ ai:
     # URL nội bộ Docker — FE KHÔNG gọi trực tiếp; Backend proxy vào đây (BR-DISCOVERY-01)
     base-url: ${INTERNAL_BE_AI_URL:http://ai-api:8000}
 
+  # Giai đoạn 5 — trước đây khối này bị lồng nhầm dưới `payment:` do lỗi thụt dòng, chưa có
+  # code nào đọc nên sửa không ảnh hưởng gì đang chạy. Đổi đơn vị phút → giây để khớp tên biến
+  # môi trường DUB_LOCK_TTL_SECONDS (doc/SETUP_GIAIDOAN5.md).
+  redis-keys:
+    dubbing-queue: "lms:dubbing:jobs"
+    dubbing-progress: "lms:dubbing:progress"
+    dub-lock-prefix: "lock:dub:"        # lock:dub:{lessonId}:{lang} — BR-DUB-05
+    login-fail-prefix: "login_fail:"    # BR-AUTH-03
+    discovery-rate-prefix: "discovery_rate:" # BR-DISCOVERY-01
+  dub-lock-ttl-seconds: ${DUB_LOCK_TTL_SECONDS:1800}   # BR-DUB-05 (30 phút)
 
 payment:
   vnpay:
@@ -149,14 +159,6 @@ payment:
     appId: ${ZALOPAY_APP_ID:}
     key1: ${ZALOPAY_KEY1:}
     key2: ${ZALOPAY_KEY2:}
-
-  redis-keys:
-    dubbing-queue: "lms:dubbing:jobs"
-    dubbing-progress: "lms:dubbing:progress"
-    dub-lock-prefix: "lock:dub:"        # lock:dub:{lessonId}:{lang} — BR-DUB-05, TTL 30 phút
-    login-fail-prefix: "login_fail:"    # BR-AUTH-03
-    discovery-rate-prefix: "discovery_rate:" # BR-DISCOVERY-01
-  dub-lock-ttl-minutes: 30              # BR-DUB-05
 
 logging:
   level:
