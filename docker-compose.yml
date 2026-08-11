@@ -175,6 +175,7 @@ services:
       GROQ_ASR_MODEL: ${GROQ_ASR_MODEL:-whisper-large-v3-turbo}
       # LLM: tên model đọc từ env, KHÔNG hardcode (BR-DUB-02)
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_API_KEYS: ${GEMINI_API_KEYS:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.0-flash}
       # TTS
       EDGE_TTS_REGION: ${EDGE_TTS_REGION:-}
@@ -234,7 +235,7 @@ services:
     build:
       context: ../fe
       dockerfile: Dockerfile.dev
-    container_name: lms_frontend
+    container_name: lms_frontend_dev
     restart: unless-stopped
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
