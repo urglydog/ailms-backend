@@ -20,7 +20,7 @@ RUN apt-get update \
 # Tải dependency trước, tách khỏi source để cache layer:
 # sửa code Java sẽ không phải tải lại toàn bộ dependency.
 COPY pom.xml .
-RUN mvn -B dependency:go-offline
+RUN mvn -B dependency:go-offline -T 1C
 
 COPY src ./src
 
