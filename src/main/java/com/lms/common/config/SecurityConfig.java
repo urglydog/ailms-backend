@@ -96,7 +96,7 @@ public class SecurityConfig {
     public SecurityFilterChain internalFilterChain(HttpSecurity http) throws Exception {
         http
                 .securityMatcher("/api/internal/**")
-                .csrf(csrf -> csrf.disable())
+                .csrf(csrf -> csrf.ignoringRequestMatchers("/api/internal/**"))
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
                 .addFilterBefore(internalApiTokenFilter, UsernamePasswordAuthenticationFilter.class);
@@ -108,7 +108,7 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
                 // API stateless dùng JWT nên không cần CSRF token
-                .csrf(csrf -> csrf.disable())
+                .csrf(csrf -> csrf.ignoringRequestMatchers("/api/**", "/ws/**", "/actuator/**"))
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
