@@ -129,6 +129,11 @@ lms:
     # Token AI Worker dùng khi gọi callback về đây
     api-token: ${INTERNAL_API_TOKEN:dev-internal-token}
 
+ai:
+  worker:
+    # URL nội bộ Docker — FE KHÔNG gọi trực tiếp; Backend proxy vào đây (BR-DISCOVERY-01)
+    base-url: ${INTERNAL_BE_AI_URL:http://ai-api:8000}
+
   # Giai đoạn 5 — trước đây khối này bị lồng nhầm dưới `payment:` do lỗi thụt dòng, chưa có
   # code nào đọc nên sửa không ảnh hưởng gì đang chạy. Đổi đơn vị phút → giây để khớp tên biến
   # môi trường DUB_LOCK_TTL_SECONDS (doc/SETUP_GIAIDOAN5.md).

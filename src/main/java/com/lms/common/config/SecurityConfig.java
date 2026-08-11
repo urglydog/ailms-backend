@@ -58,14 +58,16 @@ public class SecurityConfig {
             "/api/v1/oauth2/**",        // UC02 Google OAuth2
             "/api/v1/payments/callback/**", // UC14 IPN từ cổng thanh toán (xác thực bằng HMAC, không phải JWT)
             "/api/v1/payments/ipn-mock",
+            // UC49 Course Discovery — stateless, cho phép Guest gọi (quota theo IP, kiểm trong controller)
+            "/api/v1/discovery/chat",
             "/ws/**"                    // handshake WebSocket, token kiểm ở tầng STOMP
     };
 
-    /** Endpoint public chỉ cho phép đọc: UC09 tìm kiếm, UC10 chi tiết, UC11 preview, UC49 chat. */
+    /** Endpoint public chỉ cho phép đọc: UC09 tìm kiếm, UC10 chi tiết, UC11 preview. */
     private static final String[] PUBLIC_GET_ENDPOINTS = {
             "/api/v1/courses/**",
-            "/api/v1/categories/**",
-            "/api/v1/discovery/**"
+            "/api/v1/categories/**"
+            // /api/v1/discovery/** đã chuyển sang PUBLIC_ENDPOINTS vì discovery/chat là POST, không phải GET
     };
 
     /**
@@ -94,7 +96,7 @@ public class SecurityConfig {
     public SecurityFilterChain internalFilterChain(HttpSecurity http) throws Exception {
         http
                 .securityMatcher("/api/internal/**")
-                .csrf(csrf -> csrf.disable())
+                .csrf(csrf -> csrf.ignoringRequestMatchers("/api/internal/**"))
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
                 .addFilterBefore(internalApiTokenFilter, UsernamePasswordAuthenticationFilter.class);
@@ -106,7 +108,7 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
                 // API stateless dùng JWT nên không cần CSRF token
-                .csrf(csrf -> csrf.disable())
+                .csrf(csrf -> csrf.ignoringRequestMatchers("/api/**", "/ws/**", "/actuator/**"))
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
