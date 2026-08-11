@@ -176,7 +176,8 @@ services:
       # LLM: tên model đọc từ env, KHÔNG hardcode (BR-DUB-02)
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_API_KEYS: ${GEMINI_API_KEYS:-}
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.0-flash}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash}
+      GEMINI_MODELS: ${GEMINI_MODELS:-gemini-3.5-flash,gemini-3.5-flash-lite,gemini-2.5-flash}
       # TTS
       EDGE_TTS_REGION: ${EDGE_TTS_REGION:-}
       # RAG cho Socratic Tutor (BR-TUTOR-03)
@@ -246,6 +247,8 @@ services:
       # localhost trong container là chính container frontend, không phải backend.
       INTERNAL_API_URL: http://backend:8080
       NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-http://localhost:8080}
+      NEXT_PUBLIC_AI_WORKER_URL: http://localhost:${AI_API_PORT:-8002}
+      NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-}
       WATCHPACK_POLLING: "true"   # hot-reload qua bind mount trên Windows/WSL2
     volumes:
       - ../fe:/app

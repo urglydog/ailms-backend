@@ -54,14 +54,16 @@ public class SecurityConfig {
             "/api/v1/oauth2/**",        // UC02 Google OAuth2
             "/api/v1/payments/callback/**", // UC14 IPN từ cổng thanh toán (xác thực bằng HMAC, không phải JWT)
             "/api/v1/payments/ipn-mock",
+            // UC49 Course Discovery — stateless, cho phép Guest gọi (quota theo IP, kiểm trong controller)
+            "/api/v1/discovery/chat",
             "/ws/**"                    // handshake WebSocket, token kiểm ở tầng STOMP
     };
 
-    /** Endpoint public chỉ cho phép đọc: UC09 tìm kiếm, UC10 chi tiết, UC11 preview, UC49 chat. */
+    /** Endpoint public chỉ cho phép đọc: UC09 tìm kiếm, UC10 chi tiết, UC11 preview. */
     private static final String[] PUBLIC_GET_ENDPOINTS = {
             "/api/v1/courses/**",
-            "/api/v1/categories/**",
-            "/api/v1/discovery/**"
+            "/api/v1/categories/**"
+            // /api/v1/discovery/** đã chuyển sang PUBLIC_ENDPOINTS vì discovery/chat là POST, không phải GET
     };
 
     @Bean

@@ -129,6 +129,12 @@ lms:
     # Token AI Worker dùng khi gọi callback về đây
     api-token: ${INTERNAL_API_TOKEN:dev-internal-token}
 
+ai:
+  worker:
+    # URL nội bộ Docker — FE KHÔNG gọi trực tiếp; Backend proxy vào đây (BR-DISCOVERY-01)
+    base-url: ${INTERNAL_BE_AI_URL:http://ai-api:8000}
+
+
 payment:
   vnpay:
     tmnCode: ${VNPAY_TMN_CODE:}

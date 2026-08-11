@@ -40,6 +40,33 @@ public class DashboardController {
         ));
     }
 
+    @GetMapping("/admin/system")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, Object>> getSystemMetrics() {
+        Runtime runtime = Runtime.getRuntime();
+        long maxMemory = runtime.maxMemory();
+        long allocatedMemory = runtime.totalMemory();
+        long freeMemory = runtime.freeMemory();
+        long usedMemory = allocatedMemory - freeMemory;
+
+        java.io.File root = new java.io.File("/");
+        long totalSpace = root.getTotalSpace();
+        long freeSpace = root.getUsableSpace();
+        long usedSpace = totalSpace - freeSpace;
+
+        return ResponseEntity.ok(Map.of(
+                "ram", Map.of(
+                        "used", usedMemory,
+                        "total", maxMemory
+                ),
+                "disk", Map.of(
+                        "used", usedSpace,
+                        "total", totalSpace
+                ),
+                "uptime", java.lang.management.ManagementFactory.getRuntimeMXBean().getUptime()
+        ));
+    }
+
     @GetMapping("/instructor")
     @PreAuthorize("hasRole('INSTRUCTOR')")
     public ResponseEntity<Map<String, Object>> getInstructorDashboard(java.security.Principal principal) {
