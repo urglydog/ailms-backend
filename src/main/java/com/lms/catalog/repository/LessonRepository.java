@@ -2,6 +2,7 @@ package com.lms.catalog.repository;
 
 import com.lms.catalog.entity.Lesson;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -20,4 +21,7 @@ public interface LessonRepository extends JpaRepository<Lesson, Long> {
     long countByChapter_CourseIdAndStatus(Long courseId, String status);
 
     List<Lesson> findByChapterIdOrderByDisplayOrderAsc(Long chapterId);
+
+    /** "Học ngay" (my-courses) — bài học đầu tiên của khoá theo đúng thứ tự chương rồi bài. */
+    Optional<Lesson> findFirstByChapter_CourseIdOrderByChapter_DisplayOrderAscDisplayOrderAsc(Long courseId);
 }

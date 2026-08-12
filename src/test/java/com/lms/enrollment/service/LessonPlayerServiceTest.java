@@ -5,6 +5,7 @@ import com.lms.auth.repository.UserRepository;
 import com.lms.catalog.entity.Chapter;
 import com.lms.catalog.entity.Course;
 import com.lms.catalog.entity.Lesson;
+import com.lms.catalog.repository.ChapterRepository;
 import com.lms.catalog.repository.LessonRepository;
 import com.lms.common.enums.TrackStatus;
 import com.lms.common.exception.AccessDeniedDomainException;
@@ -16,6 +17,7 @@ import com.lms.dubbing.repository.AudioTrackRepository;
 import com.lms.dubbing.repository.VoiceMappingRepository;
 import com.lms.enrollment.dto.LessonPlayerDto.Res;
 import com.lms.enrollment.entity.LessonProgress;
+import com.lms.enrollment.repository.EnrollmentRepository;
 import com.lms.enrollment.repository.LessonProgressRepository;
 import com.lms.enrollment.security.EnrollmentSecurity;
 import java.util.List;
@@ -40,12 +42,14 @@ class LessonPlayerServiceTest {
     private static final String EMAIL = "student1@lms.local";
 
     @Mock private LessonRepository lessonRepository;
+    @Mock private ChapterRepository chapterRepository;
     @Mock private UserRepository userRepository;
     @Mock private EnrollmentSecurity enrollmentSecurity;
     @Mock private VoiceMappingRepository voiceMappingRepository;
     @Mock private AudioTrackRepository audioTrackRepository;
     @Mock private AudioChunkRepository audioChunkRepository;
     @Mock private LessonProgressRepository lessonProgressRepository;
+    @Mock private EnrollmentRepository enrollmentRepository;
 
     private LessonPlayerService service;
 
@@ -55,8 +59,9 @@ class LessonPlayerServiceTest {
     @BeforeEach
     void setUp() {
         service = new LessonPlayerService(
-                lessonRepository, userRepository, enrollmentSecurity,
-                voiceMappingRepository, audioTrackRepository, audioChunkRepository, lessonProgressRepository);
+                lessonRepository, chapterRepository, userRepository, enrollmentSecurity,
+                voiceMappingRepository, audioTrackRepository, audioChunkRepository, lessonProgressRepository,
+                enrollmentRepository);
 
         Course course = new Course();
         course.setId(10L);
@@ -169,6 +174,77 @@ class LessonPlayerServiceTest {
         assertThat(lang.track().status()).isEqualTo("PARTIAL");
         assertThat(lang.track().chunks()).hasSize(1);
         assertThat(lang.track().chunks().get(0).chunkIndex()).isEqualTo(0);
+    }
+
+    @Test
+    void daSoHuuKhoaHoc_traVeEnrolledTrue_duBaiHocDangLaPreview() {
+        // BR-ENROLL-02/03: học viên ĐÃ sở hữu khóa học vẫn xem được bài preview — `enrolled`
+        // phải phản ánh đúng việc sở hữu khóa, KHÔNG được suy ra ngược từ `lesson.isPreview`
+        // (bug từng gặp: FE khoá nhầm Ghi chú/Học liệu AI của học viên đã mua chỉ vì bài họ đang
+        // xem tình cờ là bài preview).
+        lesson.setIsPreview(true);
+        when(enrollmentSecurity.canAccessLesson(EMAIL, 21L, true)).thenReturn(true);
+        when(enrollmentRepository.existsByUser_EmailAndCourse_Id(EMAIL, 10L)).thenReturn(true);
+
+        Res res = service.getLessonForPlayback(EMAIL, 21L);
+
+        assertThat(res.isPreview()).isTrue();
+        assertThat(res.enrolled()).isTrue();
+    }
+
+    @Test
+    void khachXemBaiPreview_chuaSoHuu_traVeEnrolledFalse() {
+        lesson.setIsPreview(true);
+        when(enrollmentSecurity.canAccessLesson(EMAIL, 21L, true)).thenReturn(true);
+        when(enrollmentRepository.existsByUser_EmailAndCourse_Id(EMAIL, 10L)).thenReturn(false);
+
+        Res res = service.getLessonForPlayback(EMAIL, 21L);
+
+        assertThat(res.isPreview()).isTrue();
+        assertThat(res.enrolled()).isFalse();
+    }
+
+    @Test
+    void traVeDanhSachChuongBai_theoThuTu_khongCoChapterThiRong() {
+        when(enrollmentSecurity.canAccessLesson(EMAIL, 21L, true)).thenReturn(true);
+
+        Res res = service.getLessonForPlayback(EMAIL, 21L);
+
+        assertThat(res.chapters()).isEmpty();
+    }
+
+    @Test
+    void danhSachChuongBai_danhDauDungBaiDaHoanThanh() {
+        when(enrollmentSecurity.canAccessLesson(EMAIL, 21L, true)).thenReturn(true);
+
+        Chapter chapter = new Chapter();
+        chapter.setId(100L);
+        chapter.setTitle("Chuong 1");
+        chapter.setDisplayOrder(0);
+        when(chapterRepository.findByCourseIdOrderByDisplayOrderAsc(10L)).thenReturn(List.of(chapter));
+
+        Lesson lesson2 = new Lesson();
+        lesson2.setId(22L);
+        lesson2.setTitle("Bai 2");
+        lesson2.setDisplayOrder(1);
+        lesson2.setDurationSec(600);
+        lesson2.setIsPreview(false);
+        when(lessonRepository.findByChapterIdOrderByDisplayOrderAsc(100L)).thenReturn(List.of(lesson, lesson2));
+
+        LessonProgress completedProgress = new LessonProgress();
+        completedProgress.setIsCompleted(true);
+        when(lessonProgressRepository.findByUser_IdAndLesson_Id(1L, 21L)).thenReturn(Optional.of(completedProgress));
+        when(lessonProgressRepository.findByUser_IdAndLesson_Id(1L, 22L)).thenReturn(Optional.empty());
+
+        Res res = service.getLessonForPlayback(EMAIL, 21L);
+
+        assertThat(res.chapters()).hasSize(1);
+        var lessons = res.chapters().get(0).lessons();
+        assertThat(lessons).hasSize(2);
+        assertThat(lessons.get(0).lessonId()).isEqualTo(21L);
+        assertThat(lessons.get(0).isCompleted()).isTrue();
+        assertThat(lessons.get(1).lessonId()).isEqualTo(22L);
+        assertThat(lessons.get(1).isCompleted()).isFalse();
     }
 
     @Test

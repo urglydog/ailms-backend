@@ -3,6 +3,7 @@ package com.lms.enrollment.service;
 import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
 import com.lms.catalog.entity.Course;
+import com.lms.catalog.repository.LessonRepository;
 import com.lms.common.exception.ResourceNotFoundException;
 import com.lms.enrollment.dto.EnrollmentDto.Res;
 import com.lms.enrollment.entity.Enrollment;
@@ -32,6 +33,7 @@ public class EnrollmentService {
     private final UserRepository userRepository;
     private final CourseReviewRepository courseReviewRepository;
     private final CourseRepository courseRepository;
+    private final LessonRepository lessonRepository;
 
     @Transactional(readOnly = true)
     public List<Res> getMyEnrollments(String email) {
@@ -45,6 +47,12 @@ public class EnrollmentService {
     private Res mapToRes(User user, Enrollment enrollment) {
         Course course = enrollment.getCourse();
         boolean alreadyReviewed = courseReviewRepository.existsByUser_IdAndCourse_Id(user.getId(), course.getId());
+        // "Học ngay" phải vào thẳng bài học, không phải trang chi tiết khoá — bấm vào bài đầu
+        // tiên theo đúng thứ tự chương/bài (BR-COURSE-01 đảm bảo khoá đã publish có ≥1 bài).
+        Long firstLessonId = lessonRepository
+                .findFirstByChapter_CourseIdOrderByChapter_DisplayOrderAscDisplayOrderAsc(course.getId())
+                .map(lesson -> lesson.getId())
+                .orElse(null);
         return new Res(
                 course.getId(),
                 course.getTitle(),
@@ -57,7 +65,8 @@ public class EnrollmentService {
                 enrollment.getProgressPct(),
                 enrollment.getCompletedAt(),
                 // BR-PROGRESS-04: Quiz thật làm ở Giai đoạn 7 — để null an toàn ở đây.
-                null
+                null,
+                firstLessonId
         );
     }
 

@@ -162,10 +162,13 @@ public class InternalDubbingService {
 
     private void completeJob(AiJob job, FinishReq req) {
         job.setStatus(JobStatus.COMPLETED);
-        AudioTrack track = audioTrackRepository
-                .findByLesson_IdAndLanguage(job.getLesson().getId(), job.getTargetLanguage())
-                .orElseThrow(() -> new BusinessRuleViolationException(
-                        "Khong tim thay AudioTrack de hoan tat — chua co chunk nao duoc luu"));
+        // Bình thường AudioTrack đã được `saveAudioChunk` tạo sẵn (PARTIAL) từ chunk COMPLETED
+        // đầu tiên (BR-CHUNK-03). ai-worker chỉ gọi outcome=COMPLETED khi ÍT NHẤT MỘT chunk
+        // lồng tiếng thật thành công — nếu MỌI chunk đều rơi vào nhánh giữ audio gốc
+        // (BR-CHUNK-04, ví dụ Edge-TTS lỗi toàn bộ), ai-worker tự báo outcome=FAILED thay vì
+        // COMPLETED (xem `dubbing_service.py::run_dubbing_pipeline`, nhánh `fallback_count ==
+        // len(chunks)`) để tránh báo thành công giả khi thực chất chưa dịch được câu nào.
+        AudioTrack track = findOrCreateAudioTrack(job);
         track.setFinalUrl(req.finalUrl());
         track.setDurationSec(req.durationSec());
         track.setFileSize(req.fileSize());
@@ -255,6 +258,21 @@ public class InternalDubbingService {
 
     /** BR-CHUNK-03: chunk đầu tiên xong là AudioTrack đã ở trạng thái PARTIAL, học viên vào học được. */
     private void saveAudioChunk(AiJob job, Integer chunkIndex, Integer startSec, Integer endSec, String fileUrl) {
+        AudioTrack track = findOrCreateAudioTrack(job);
+
+        AudioChunk chunk = audioChunkRepository.findByAudioTrack_IdAndChunkIndex(track.getId(), chunkIndex)
+                .orElseGet(AudioChunk::new);
+        chunk.setAudioTrack(track);
+        chunk.setChunkIndex(chunkIndex);
+        chunk.setStartSec(startSec);
+        chunk.setEndSec(endSec);
+        chunk.setFileUrl(fileUrl);
+        audioChunkRepository.save(chunk);
+    }
+
+    /** Tạo AudioTrack (PARTIAL) nếu (bài học, ngôn ngữ) chưa từng có — dùng chung cho cả nhánh
+     * lưu chunk (BR-CHUNK-03) lẫn nhánh hoàn tất job (khi mọi chunk đều fallback audio gốc). */
+    private AudioTrack findOrCreateAudioTrack(AiJob job) {
         Lesson lesson = job.getLesson();
         AudioTrack track = audioTrackRepository.findByLesson_IdAndLanguage(lesson.getId(), job.getTargetLanguage())
                 .orElseGet(() -> {
@@ -274,15 +292,7 @@ public class InternalDubbingService {
                     return t;
                 });
         audioTrackRepository.save(track);
-
-        AudioChunk chunk = audioChunkRepository.findByAudioTrack_IdAndChunkIndex(track.getId(), chunkIndex)
-                .orElseGet(AudioChunk::new);
-        chunk.setAudioTrack(track);
-        chunk.setChunkIndex(chunkIndex);
-        chunk.setStartSec(startSec);
-        chunk.setEndSec(endSec);
-        chunk.setFileUrl(fileUrl);
-        audioChunkRepository.save(chunk);
+        return track;
     }
 
     /** BR-DUB-07 — ưu tiên giọng mặc định của ngôn ngữ, không có thì lấy giọng active đầu tiên. */

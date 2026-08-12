@@ -1,7 +1,9 @@
 package com.lms.enrollment.service;
 
+import com.lms.catalog.entity.Chapter;
 import com.lms.catalog.entity.Course;
 import com.lms.catalog.entity.Lesson;
+import com.lms.catalog.repository.ChapterRepository;
 import com.lms.catalog.repository.LessonRepository;
 import com.lms.common.exception.AccessDeniedDomainException;
 import com.lms.common.exception.ResourceNotFoundException;
@@ -13,8 +15,11 @@ import com.lms.dubbing.repository.AudioTrackRepository;
 import com.lms.dubbing.repository.VoiceMappingRepository;
 import com.lms.enrollment.dto.LessonPlayerDto.AudioChunkRes;
 import com.lms.enrollment.dto.LessonPlayerDto.AudioTrackRes;
+import com.lms.enrollment.dto.LessonPlayerDto.ChapterNavRes;
 import com.lms.enrollment.dto.LessonPlayerDto.LanguageRes;
+import com.lms.enrollment.dto.LessonPlayerDto.LessonNavRes;
 import com.lms.enrollment.dto.LessonPlayerDto.Res;
+import com.lms.enrollment.repository.EnrollmentRepository;
 import com.lms.enrollment.repository.LessonProgressRepository;
 import com.lms.enrollment.security.EnrollmentSecurity;
 import java.util.List;
@@ -34,12 +39,14 @@ import org.springframework.transaction.annotation.Transactional;
 public class LessonPlayerService {
 
     private final LessonRepository lessonRepository;
+    private final ChapterRepository chapterRepository;
     private final com.lms.auth.repository.UserRepository userRepository;
     private final EnrollmentSecurity enrollmentSecurity;
     private final VoiceMappingRepository voiceMappingRepository;
     private final AudioTrackRepository audioTrackRepository;
     private final AudioChunkRepository audioChunkRepository;
     private final LessonProgressRepository lessonProgressRepository;
+    private final EnrollmentRepository enrollmentRepository;
 
     @Transactional(readOnly = true)
     public Res getLessonForPlayback(String email, Long lessonId) {
@@ -65,6 +72,15 @@ public class LessonPlayerService {
                 .map(code -> toLanguageRes(code, lessonId))
                 .toList();
 
+        List<ChapterNavRes> chapters = chapterRepository.findByCourseIdOrderByDisplayOrderAsc(course.getId()).stream()
+                .map(chapter -> toChapterNavRes(chapter, userId))
+                .toList();
+
+        // BR-ENROLL-02/03: sở hữu khóa học là điều kiện mở khoá Ghi chú/Học liệu AI/Socratic
+        // Tutor — KHÔNG phải `lesson.isPreview` (một bài preview vẫn xem được bởi học viên đã
+        // sở hữu đầy đủ khóa học, không có nghĩa nội dung nâng cao bị khoá với họ).
+        boolean enrolled = enrollmentRepository.existsByUser_EmailAndCourse_Id(email, course.getId());
+
         return new Res(
                 lesson.getId(),
                 lesson.getTitle(),
@@ -77,8 +93,32 @@ public class LessonPlayerService {
                 lesson.getDurationSec(),
                 lesson.getSourceLanguage(),
                 lesson.getIsPreview(),
+                enrolled,
                 lastPositionSec,
-                languages
+                languages,
+                chapters
+        );
+    }
+
+    /** UC21/22 — sidebar "Trong khoá học này": điều hướng + đánh dấu bài đã hoàn thành. */
+    private ChapterNavRes toChapterNavRes(Chapter chapter, Long userId) {
+        List<LessonNavRes> lessons = lessonRepository.findByChapterIdOrderByDisplayOrderAsc(chapter.getId()).stream()
+                .map(lesson -> toLessonNavRes(lesson, userId))
+                .toList();
+        return new ChapterNavRes(chapter.getId(), chapter.getTitle(), chapter.getDisplayOrder(), lessons);
+    }
+
+    private LessonNavRes toLessonNavRes(Lesson lesson, Long userId) {
+        boolean isCompleted = lessonProgressRepository.findByUser_IdAndLesson_Id(userId, lesson.getId())
+                .map(p -> p.getIsCompleted())
+                .orElse(false);
+        return new LessonNavRes(
+                lesson.getId(),
+                lesson.getTitle(),
+                lesson.getDisplayOrder(),
+                lesson.getDurationSec(),
+                lesson.getIsPreview(),
+                isCompleted
         );
     }
 

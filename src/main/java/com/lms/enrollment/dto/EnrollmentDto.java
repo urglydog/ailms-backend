@@ -20,6 +20,8 @@ public class EnrollmentDto {
             /** Chỉ có giá trị khi progressPct đạt 100 (một chiều). */
             LocalDateTime completedAt,
             /** BR-PROGRESS-04 — MAX điểm Quiz mọi bộ. Luôn null ở Giai đoạn 6, Quiz thật làm ở Giai đoạn 7. */
-            Integer quizScore
+            Integer quizScore,
+            /** "Học ngay" — bài học đầu tiên của khoá; null nếu khoá chưa có bài học nào. */
+            Long firstLessonId
     ) {}
 }
