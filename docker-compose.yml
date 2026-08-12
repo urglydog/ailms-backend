@@ -174,34 +174,12 @@ services:
       # mọi thay đổi dữ liệu phải gọi callback về backend.
       INTERNAL_BE_URL: http://backend:8080
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-dev-internal-token}
-      # STT: Groq mặc định (§5.1.1 — không phụ thuộc GPU).
-      # Đổi thành whisperx_local khi cần đo đối chứng cho Chương 6.
-      ASR_BACKEND: ${ASR_BACKEND:-groq}
-      GROQ_API_KEY: ${GROQ_API_KEY:-}
-      GROQ_ASR_MODEL: ${GROQ_ASR_MODEL:-whisper-large-v3-turbo}
-      # LLM: tên model đọc từ env, KHÔNG hardcode (BR-DUB-02)
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      GEMINI_API_KEYS: ${GEMINI_API_KEYS:-}
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash}
-      GEMINI_MODELS: ${GEMINI_MODELS:-gemini-3.5-flash,gemini-3.5-flash-lite,gemini-2.5-flash}
-      # TTS
-      EDGE_TTS_REGION: ${EDGE_TTS_REGION:-}
-      # RAG cho Socratic Tutor (BR-TUTOR-03)
-      SUPABASE_VECTOR_URL: ${SUPABASE_VECTOR_URL:-}
-      SUPABASE_VECTOR_KEY: ${SUPABASE_VECTOR_KEY:-}
-      # Cloud storage
-      B2_BUCKET_NAME: ${B2_BUCKET_NAME:-}
-      B2_KEY_ID: ${B2_KEY_ID:-}
-      B2_APPLICATION_KEY: ${B2_APPLICATION_KEY:-}
-      # Tham số pipeline (BR-CHUNK-02, BR-CHUNK-04)
-      CHUNK_MINUTES: ${CHUNK_MINUTES:-10}
-      MAX_RETRY: ${MAX_RETRY:-3}
-      # Vòng đời dữ liệu trung gian và giới hạn rate
-      GEMINI_RATE_LIMIT_RPM: ${GEMINI_RATE_LIMIT_RPM:-12}
-      INTERMEDIATE_FILE_TTL_HOURS: ${INTERMEDIATE_FILE_TTL_HOURS:-24}
-      MAX_RESUMMARIZE_ATTEMPTS: ${MAX_RESUMMARIZE_ATTEMPTS:-2}
-      # Cloud storage (ai-worker cần B2_ENDPOINT để build S3 client)
-      B2_ENDPOINT: ${B2_ENDPOINT:-}
+      # CHỈ 3 biến thực sự dùng chung với `be` mới liệt kê ở đây. Mọi biến riêng của
+      # ai-worker (ASR/LLM/TTS/tham số pipeline/B2/Supabase) đã đọc qua `env_file:` ở
+      # trên rồi — liệt kê lại bằng ${VAR:-...} là BUG: giá trị đó nội suy từ `.env`
+      # GỐC (`project/be/.env`), không phải `project/ai-worker/.env`, nên sẽ ĐÈ giá
+      # trị thật bằng chuỗi rỗng/giá trị mặc định (đã từng vá lỗi này 1 lần, bị tái
+      # lập lại — xem GEMINI_API_KEY từng bị rỗng dù `.env` của ai-worker có key thật).
     volumes:
       - ../ai-worker:/app
       - ai_tmp_storage:/tmp/lms-processing   # file trung gian, xoá ≤24h (BR-STORAGE-01)

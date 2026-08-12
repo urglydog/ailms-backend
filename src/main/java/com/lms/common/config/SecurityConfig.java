@@ -14,12 +14,15 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import com.lms.auth.security.JwtAuthenticationFilter;
 import com.lms.auth.security.CustomUserDetailsService;
+import com.lms.common.security.InternalApiTokenFilter;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.core.annotation.Order;
 import lombok.RequiredArgsConstructor;
 /**
  * Cấu hình bảo mật — <b>khung sườn của Giai đoạn 0</b>.
@@ -40,6 +43,7 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final CustomUserDetailsService customUserDetailsService;
+    private final InternalApiTokenFilter internalApiTokenFilter;
 
     /**
      * Danh sách endpoint public — khớp mục "Nhóm endpoint public" trong
@@ -66,11 +70,45 @@ public class SecurityConfig {
             // /api/v1/discovery/** đã chuyển sang PUBLIC_ENDPOINTS vì discovery/chat là POST, không phải GET
     };
 
+    /**
+     * {@link InternalApiTokenFilter} là {@code @Component} nên Spring Boot TỰ ĐỘNG đăng
+     * ký nó như 1 servlet filter toàn cục (mọi request, kể cả {@code /actuator/health})
+     * — {@link #internalFilterChain} bên dưới CHỈ gắn nó vào 1 chain riêng, không phải
+     * đăng ký duy nhất. Phải tắt đăng ký tự động này, nếu không mọi request đều bị chặn
+     * vì thiếu {@code X-Internal-Token} (đã xảy ra thật: {@code JwtAuthenticationFilter}
+     * bị double-register tương tự nhưng vô hại vì nó không tự chặn request nào).
+     */
     @Bean
+    public FilterRegistrationBean<InternalApiTokenFilter> disableAutoRegistration(InternalApiTokenFilter filter) {
+        FilterRegistrationBean<InternalApiTokenFilter> registration = new FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
+    }
+
+    /**
+     * Chuỗi RIÊNG cho {@code /api/internal/**} — AI Worker gọi callback (F5.2) bằng
+     * secret {@code X-Internal-Token}, không phải JWT nên phải tách khỏi
+     * {@link #filterChain} chứ không thêm vào {@code PUBLIC_ENDPOINTS} (public thật sự
+     * sẽ không có bước xác thực nào — sai hoàn toàn với mục đích của nhóm endpoint này).
+     */
+    @Bean
+    @Order(1)
+    public SecurityFilterChain internalFilterChain(HttpSecurity http) throws Exception {
+        http
+                .securityMatcher("/api/internal/**")
+                .csrf(csrf -> csrf.ignoringRequestMatchers("/api/internal/**"))
+                .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
+                .addFilterBefore(internalApiTokenFilter, UsernamePasswordAuthenticationFilter.class);
+        return http.build();
+    }
+
+    @Bean
+    @Order(2)
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
                 // API stateless dùng JWT nên không cần CSRF token
-                .csrf(csrf -> csrf.disable())
+                .csrf(csrf -> csrf.ignoringRequestMatchers("/api/**", "/ws/**", "/actuator/**"))
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
