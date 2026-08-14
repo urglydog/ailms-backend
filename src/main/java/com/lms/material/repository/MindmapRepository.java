@@ -12,4 +12,5 @@ import org.springframework.stereotype.Repository;
  */
 @Repository
 public interface MindmapRepository extends JpaRepository<Mindmap, Long> {
+    java.util.Optional<Mindmap> findByMaterialGeneration_Id(Long generationId);
 }
