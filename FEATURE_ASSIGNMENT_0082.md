@@ -348,6 +348,29 @@ Việc chung không thuộc riêng ai — phân theo năng lực lúc đó:
 
 ---
 
+## Giai đoạn 11 — Các tính năng Nâng cao (Tương lai / Tùy chọn)
+
+**Đây là các tính năng mở rộng ít phụ thuộc vào Key AI API, có thể được triển khai sau khi hoàn tất các chức năng cốt lõi. (Đảm nhận: Thiện)**
+
+### F11.1 — Tương tác Realtime (Live Q&A & Shared Notes)
+- **Mô tả:** Triển khai Live Q&A hoặc Shared Notes theo mốc thời gian video.
+- **Cơ sở vật chất:** Backend dùng `spring-boot-starter-websocket` và `spring-boot-starter-data-redis` (Redis Pub/Sub). Frontend dùng `@stomp/stompjs` và `sockjs-client`.
+- **Ranh giới:** Code mới hoàn toàn nằm ở Controller/Service riêng biệt (VD: `WebSocketChatController`), không đụng chạm đến logic cũ.
+
+### F11.2 — Advanced Learning Analytics (Video Heatmap)
+- **Mô tả:** Ghi nhận sự kiện (Play, Pause, Seek) của học viên, lưu qua REST/WebSocket vào Redis Streams, batch insert vào MySQL bằng `@Scheduled` job hoặc Consumer Group. Vẽ Heatmap phân tích.
+- **Đánh giá:** Giải quyết bài toán nghẽn cổ chai khi lưu lượng ghi log lớn, chứng minh năng lực xử lý Big Data và xử lý bất đồng bộ. Phối hợp tốt với thống kê ở Giai đoạn 9.
+
+### F11.3 — Thi trực tuyến chống gian lận
+- **Mô tả:** Chống gian lận bằng nhận diện khuôn mặt (face-api.js ở Frontend) và chống chuyển tab (Page Visibility API).
+- **Đánh giá:** Xử lý 100% Client-side. Bắn log vi phạm qua WebSocket. Rất ấn tượng khi demo (Showcase). Sẽ thiết kế một "Exam Room" UI riêng biệt cho phần Quiz (Giai đoạn 7).
+
+### F11.4 — Trình phát Offline
+- **Mô tả:** Dùng Service Worker + IndexedDB để lưu trữ tiến độ học, câu hỏi trắc nghiệm (Text/JSON).
+- **Hạn chế:** Không lưu trữ nguyên video độ phân giải cao do dễ vượt Quota Exceeded của trình duyệt (đặc biệt Safari/iOS). Chỉ hỗ trợ offline cho tài liệu và bài tập.
+
+---
+
 ## Tổng hợp — số tính năng mỗi giai đoạn
 
 | GĐ | Tên | Số tính năng | Ghi chú |
