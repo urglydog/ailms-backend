@@ -66,7 +66,8 @@ public class SecurityConfig {
     /** Endpoint public chỉ cho phép đọc: UC09 tìm kiếm, UC10 chi tiết, UC11 preview. */
     private static final String[] PUBLIC_GET_ENDPOINTS = {
             "/api/v1/courses/**",
-            "/api/v1/categories/**"
+            "/api/v1/categories/**",
+            "/api/v1/lessons/**"
             // /api/v1/discovery/** đã chuyển sang PUBLIC_ENDPOINTS vì discovery/chat là POST, không phải GET
     };
 

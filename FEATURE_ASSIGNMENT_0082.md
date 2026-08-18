@@ -390,3 +390,27 @@ phần AI Worker (F5.2, F7.1) trước.
 **Team 3 người:** vừa khít hầu hết giai đoạn, dư người ở GĐ2/3/4/6/8/9 thì lấy dư sức đó bắt đầu sớm
 tính năng của giai đoạn kế — miễn không phá quy tắc *"giai đoạn sau phụ thuộc entity giai đoạn trước"*
 ở đầu `DEVELOPMENT_PLAN.md`.
+
+---
+
+## 📌 Ghi chú Cải tiến & Nhiệm vụ cho phiên làm việc tiếp theo (Next Session)
+
+Dưới đây là danh sách 4 hạng mục cần ưu tiên cải thiện dựa trên phản hồi thực tế khi thử nghiệm:
+
+1. **F11.1 - Community Chat (Tương tác hỏi đáp):**
+   - **Tình trạng:** Đã phân tách chat theo từng bài học (Lesson-specific) thành công.
+   - **Cần cải thiện:** Bổ sung tính năng tương tác trực tiếp giữa các thành viên (Threaded replies / Trả lời bình luận, hoặc Tag tên) để sinh viên có thể thảo luận sâu hơn về một câu hỏi cụ thể trong khóa học.
+
+2. **F11.3 - Giám sát thi cử (Anti-Cheat Exam Room):**
+   - **Tình trạng:** Nhận diện khuôn mặt (face-api.js), phát hiện chuyển tab, rời khung hình và di chuột sang màn hình khác đều đã hoạt động.
+   - **Cần cải thiện:** 
+     - *Giảm False-Positive:* Lỗi di chuột ra vùng trống mép màn hình (không click sang app khác) đang bị tính là vi phạm oan. Cần tinh chỉnh lại tọa độ `mouseleave` hoặc kết hợp thêm điều kiện để tránh quá nhạy.
+     - *Ngắt luồng đếm lỗi:* Khi vi phạm liên tục (ví dụ để chuột ngoài màn hình quá lâu), hệ thống đếm lỗi liên tục (4, 5, 6...) mà không kịp điều hướng đóng bài thi. Cần có cờ (flag) `isSubmitting` để lập tức block (ngắt) vòng lặp đếm lỗi và dừng camera ngay khi số lỗi vượt quá 3.
+
+3. **F7.1 - AI Sinh học liệu (Creator Agent):**
+   - **Tình trạng:** Giao diện (UI) tạo học liệu và hiển thị đã được dựng xong.
+   - **Cần cải thiện:** Cần tiến hành chạy thử nghiệm (test) thực tế kết nối với script Python phía Backend/Celery để đảm bảo luồng sinh Mindmap/Flashcard/Quiz hoạt động trơn tru từ đầu đến cuối.
+
+4. **F8.2 - AI Course Discovery:**
+   - **Tình trạng:** Đã có giao diện khung chat và trả về thẻ khóa học.
+   - **Cần cải thiện:** Hiện tại hệ thống phân tích ngôn ngữ tự nhiên (NLP) vẫn còn quá máy móc, thực chất chỉ bóc tách từ khóa rồi filter, dẫn đến kết quả không khác gì một thanh công cụ Search thông thường. Cần tích hợp logic LLM sâu hơn (Function Calling cải tiến) để AI thực sự hiểu ngữ nghĩa yêu cầu (ví dụ: "Tôi muốn học làm web nhưng không biết bắt đầu từ đâu").
