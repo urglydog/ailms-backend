@@ -1,5 +1,6 @@
 package com.lms.enrollment.dto;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 /** UC16/17 — dữ liệu phát bài học cho học viên ĐÃ đăng nhập (khác UC11 preview ẩn danh). */
@@ -28,7 +29,21 @@ public class LessonPlayerDto {
             Integer lastPositionSec,
             List<LanguageRes> languages,
             /** UC21/22 — điều hướng + tiến độ từng bài trong khoá (sidebar "Trong khoá học này"). */
-            List<ChapterNavRes> chapters
+            List<ChapterNavRes> chapters,
+            /**
+             * Phụ đề ngôn ngữ GỐC — chỉ có khi bài học đã qua ít nhất 1 lần lồng tiếng (Transcript
+             * gốc chỉ được tạo ở lần dịch đầu tiên). Rỗng nếu bài chưa từng lồng tiếng.
+             */
+            List<SubtitleSegmentRes> originalSubtitles
+    ) {}
+
+    /** Một câu phụ đề kèm mốc thời gian chính xác tới mili-giây (khác {@code AudioChunkRes} chia
+     *  chunk 10 phút tròn số — phụ đề cần đồng bộ đúng nhịp đọc từng câu). */
+    public record SubtitleSegmentRes(
+            Integer seq,
+            BigDecimal startSec,
+            BigDecimal endSec,
+            String text
     ) {}
 
     public record ChapterNavRes(
@@ -53,7 +68,9 @@ public class LessonPlayerDto {
             String code,
             String label,
             boolean available,
-            AudioTrackRes track
+            AudioTrackRes track,
+            /** Phụ đề đã dịch sang ngôn ngữ này — rỗng nếu ngôn ngữ này chưa lồng tiếng xong. */
+            List<SubtitleSegmentRes> subtitles
     ) {}
 
     public record AudioTrackRes(
