@@ -9,9 +9,12 @@ import com.lms.common.exception.AccessDeniedDomainException;
 import com.lms.common.exception.ResourceNotFoundException;
 import com.lms.dubbing.entity.AudioChunk;
 import com.lms.dubbing.entity.AudioTrack;
+import com.lms.dubbing.entity.Transcript;
 import com.lms.dubbing.entity.VoiceMapping;
 import com.lms.dubbing.repository.AudioChunkRepository;
 import com.lms.dubbing.repository.AudioTrackRepository;
+import com.lms.dubbing.repository.TranscriptRepository;
+import com.lms.dubbing.repository.TranscriptSegmentRepository;
 import com.lms.dubbing.repository.VoiceMappingRepository;
 import com.lms.enrollment.dto.LessonPlayerDto.AudioChunkRes;
 import com.lms.enrollment.dto.LessonPlayerDto.AudioTrackRes;
@@ -19,6 +22,7 @@ import com.lms.enrollment.dto.LessonPlayerDto.ChapterNavRes;
 import com.lms.enrollment.dto.LessonPlayerDto.LanguageRes;
 import com.lms.enrollment.dto.LessonPlayerDto.LessonNavRes;
 import com.lms.enrollment.dto.LessonPlayerDto.Res;
+import com.lms.enrollment.dto.LessonPlayerDto.SubtitleSegmentRes;
 import com.lms.enrollment.repository.EnrollmentRepository;
 import com.lms.enrollment.repository.LessonProgressRepository;
 import com.lms.enrollment.security.EnrollmentSecurity;
@@ -47,6 +51,8 @@ public class LessonPlayerService {
     private final AudioChunkRepository audioChunkRepository;
     private final LessonProgressRepository lessonProgressRepository;
     private final EnrollmentRepository enrollmentRepository;
+    private final TranscriptRepository transcriptRepository;
+    private final TranscriptSegmentRepository transcriptSegmentRepository;
 
     @Transactional(readOnly = true)
     public Res getLessonForPlayback(String email, Long lessonId) {
@@ -96,8 +102,22 @@ public class LessonPlayerService {
                 enrolled,
                 lastPositionSec,
                 languages,
-                chapters
+                chapters,
+                loadSubtitles(transcriptRepository.findByLesson_IdAndIsSourceTrue(lessonId))
         );
+    }
+
+    /**
+     * Phụ đề gốc/dịch không có gì để hiện khi bài học chưa từng qua pipeline lồng tiếng
+     * (Transcript gốc chỉ tạo ở lần dịch đầu tiên) hoặc ngôn ngữ đó chưa lồng tiếng xong —
+     * cả 2 trường hợp trả danh sách rỗng, KHÔNG lỗi.
+     */
+    private List<SubtitleSegmentRes> loadSubtitles(Optional<Transcript> transcriptOpt) {
+        return transcriptOpt
+                .map(t -> transcriptSegmentRepository.findByTranscript_IdOrderBySeqAsc(t.getId()).stream()
+                        .map(s -> new SubtitleSegmentRes(s.getSeq(), s.getStartSec(), s.getEndSec(), s.getText()))
+                        .toList())
+                .orElse(List.of());
     }
 
     /** UC21/22 — sidebar "Trong khoá học này": điều hướng + đánh dấu bài đã hoàn thành. */
@@ -126,7 +146,9 @@ public class LessonPlayerService {
         Optional<AudioTrack> trackOpt = audioTrackRepository.findByLesson_IdAndLanguage(lessonId, languageCode);
         boolean available = trackOpt.filter(this::isPlayable).isPresent();
         AudioTrackRes trackRes = trackOpt.map(this::toAudioTrackRes).orElse(null);
-        return new LanguageRes(languageCode, displayLabel(languageCode), available, trackRes);
+        List<SubtitleSegmentRes> subtitles =
+                loadSubtitles(transcriptRepository.findByLesson_IdAndLanguage(lessonId, languageCode));
+        return new LanguageRes(languageCode, displayLabel(languageCode), available, trackRes, subtitles);
     }
 
     /** Học viên chỉ chọn được ngôn ngữ đã có ít nhất 1 phần nghe được (BR-CHUNK-05). */

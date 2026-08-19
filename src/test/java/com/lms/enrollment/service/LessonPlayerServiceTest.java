@@ -11,15 +11,20 @@ import com.lms.common.enums.TrackStatus;
 import com.lms.common.exception.AccessDeniedDomainException;
 import com.lms.dubbing.entity.AudioChunk;
 import com.lms.dubbing.entity.AudioTrack;
+import com.lms.dubbing.entity.Transcript;
+import com.lms.dubbing.entity.TranscriptSegment;
 import com.lms.dubbing.entity.VoiceMapping;
 import com.lms.dubbing.repository.AudioChunkRepository;
 import com.lms.dubbing.repository.AudioTrackRepository;
+import com.lms.dubbing.repository.TranscriptRepository;
+import com.lms.dubbing.repository.TranscriptSegmentRepository;
 import com.lms.dubbing.repository.VoiceMappingRepository;
 import com.lms.enrollment.dto.LessonPlayerDto.Res;
 import com.lms.enrollment.entity.LessonProgress;
 import com.lms.enrollment.repository.EnrollmentRepository;
 import com.lms.enrollment.repository.LessonProgressRepository;
 import com.lms.enrollment.security.EnrollmentSecurity;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -50,6 +55,8 @@ class LessonPlayerServiceTest {
     @Mock private AudioChunkRepository audioChunkRepository;
     @Mock private LessonProgressRepository lessonProgressRepository;
     @Mock private EnrollmentRepository enrollmentRepository;
+    @Mock private TranscriptRepository transcriptRepository;
+    @Mock private TranscriptSegmentRepository transcriptSegmentRepository;
 
     private LessonPlayerService service;
 
@@ -61,7 +68,7 @@ class LessonPlayerServiceTest {
         service = new LessonPlayerService(
                 lessonRepository, chapterRepository, userRepository, enrollmentSecurity,
                 voiceMappingRepository, audioTrackRepository, audioChunkRepository, lessonProgressRepository,
-                enrollmentRepository);
+                enrollmentRepository, transcriptRepository, transcriptSegmentRepository);
 
         Course course = new Course();
         course.setId(10L);
@@ -262,6 +269,55 @@ class LessonPlayerServiceTest {
         Res res = service.getLessonForPlayback(EMAIL, 21L);
 
         assertThat(res.languages().get(0).available()).isFalse();
+    }
+
+    @Test
+    void chuaTungLongTieng_originalSubtitlesVaSubtitlesTungNgonNguDeuRong() {
+        when(enrollmentSecurity.canAccessLesson(EMAIL, 21L, true)).thenReturn(true);
+        VoiceMapping vi = voiceMapping("vi");
+        when(voiceMappingRepository.findByIsActiveTrue()).thenReturn(List.of(vi));
+        when(transcriptRepository.findByLesson_IdAndIsSourceTrue(21L)).thenReturn(Optional.empty());
+        when(transcriptRepository.findByLesson_IdAndLanguage(21L, "vi")).thenReturn(Optional.empty());
+
+        Res res = service.getLessonForPlayback(EMAIL, 21L);
+
+        assertThat(res.originalSubtitles()).isEmpty();
+        assertThat(res.languages().get(0).subtitles()).isEmpty();
+    }
+
+    @Test
+    void daLongTieng_traVeDungPhuDeGocVaPhuDeDaDich() {
+        when(enrollmentSecurity.canAccessLesson(EMAIL, 21L, true)).thenReturn(true);
+        VoiceMapping vi = voiceMapping("vi");
+        when(voiceMappingRepository.findByIsActiveTrue()).thenReturn(List.of(vi));
+
+        Transcript source = new Transcript();
+        source.setId(1L);
+        when(transcriptRepository.findByLesson_IdAndIsSourceTrue(21L)).thenReturn(Optional.of(source));
+        when(transcriptSegmentRepository.findByTranscript_IdOrderBySeqAsc(1L))
+                .thenReturn(List.of(segment(1, "0.0", "3.5", "Hello everyone")));
+
+        Transcript target = new Transcript();
+        target.setId(2L);
+        when(transcriptRepository.findByLesson_IdAndLanguage(21L, "vi")).thenReturn(Optional.of(target));
+        when(transcriptSegmentRepository.findByTranscript_IdOrderBySeqAsc(2L))
+                .thenReturn(List.of(segment(1, "0.0", "3.5", "Chào mọi người")));
+
+        Res res = service.getLessonForPlayback(EMAIL, 21L);
+
+        assertThat(res.originalSubtitles()).hasSize(1);
+        assertThat(res.originalSubtitles().get(0).text()).isEqualTo("Hello everyone");
+        assertThat(res.languages().get(0).subtitles()).hasSize(1);
+        assertThat(res.languages().get(0).subtitles().get(0).text()).isEqualTo("Chào mọi người");
+    }
+
+    private TranscriptSegment segment(int seq, String start, String end, String text) {
+        TranscriptSegment s = new TranscriptSegment();
+        s.setSeq(seq);
+        s.setStartSec(new BigDecimal(start));
+        s.setEndSec(new BigDecimal(end));
+        s.setText(text);
+        return s;
     }
 
     private VoiceMapping voiceMapping(String language) {
