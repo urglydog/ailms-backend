@@ -19,7 +19,7 @@ public class WebSocketChatController {
     public ChatMessageDto handleChatMessage(@DestinationVariable Long lessonId, ChatMessageDto message) {
         try {
             Long userId = Long.parseLong(message.id());
-            chatService.saveMessage(lessonId, userId, message.senderName(), message.content());
+            chatService.saveMessage(lessonId, userId, message.senderName(), message.content(), message.parentId());
         } catch (Exception e) {
             // Ignore exception for demo if user is invalid, but still broadcast
         }

@@ -20,6 +20,10 @@ public class LessonChat {
     private String id;
 
     @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_id")
+    private LessonChat parent;
+
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "lesson_id", nullable = false)
     private Lesson lesson;
 
