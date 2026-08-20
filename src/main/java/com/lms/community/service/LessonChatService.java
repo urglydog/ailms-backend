@@ -28,13 +28,14 @@ public class LessonChatService {
                         chat.getUser().getId().toString(),
                         chat.getUserName(),
                         chat.getContent(),
-                        chat.getCreatedAt().toString()
+                        chat.getCreatedAt().toString(),
+                        chat.getParent() != null ? chat.getParent().getId() : null
                 ))
                 .toList();
     }
 
     @Transactional
-    public void saveMessage(Long lessonId, Long userId, String userName, String content) {
+    public void saveMessage(Long lessonId, Long userId, String userName, String content, String parentId) {
         Lesson lesson = lessonRepository.getReferenceById(lessonId);
         User user = userRepository.getReferenceById(userId);
 
@@ -43,6 +44,11 @@ public class LessonChatService {
         chat.setUser(user);
         chat.setUserName(userName);
         chat.setContent(content);
+
+        if (parentId != null && !parentId.isBlank()) {
+            LessonChat parent = chatRepository.findById(parentId).orElse(null);
+            chat.setParent(parent);
+        }
 
         chatRepository.save(chat);
     }
