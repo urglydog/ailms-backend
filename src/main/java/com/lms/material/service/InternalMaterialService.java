@@ -100,7 +100,7 @@ public class InternalMaterialService {
             } else if (generation.getMaterialType() == MaterialType.FLASHCARD && req.flashcards() != null) {
                 FlashcardDeck deck = new FlashcardDeck();
                 deck.setMaterialGeneration(generation);
-                deck.setTitle("Flashcard cho: " + generation.getCourse().getTitle());
+                deck.setCardCount(req.flashcards().size());
                 deck = flashcardDeckRepository.save(deck);
                 
                 for (FlashcardDto dto : req.flashcards()) {
@@ -113,8 +113,7 @@ public class InternalMaterialService {
             } else if (generation.getMaterialType() == MaterialType.QUIZ && req.quizzes() != null) {
                 Quiz quiz = new Quiz();
                 quiz.setMaterialGeneration(generation);
-                quiz.setTitle("Quiz cho: " + generation.getCourse().getTitle());
-                quiz.setPassingScore(80);
+                quiz.setQuestionCount(req.quizzes().size());
                 quiz = quizRepository.save(quiz);
                 
                 int order = 1;
@@ -125,13 +124,11 @@ public class InternalMaterialService {
                     q.setDisplayOrder(order++);
                     q = quizQuestionRepository.save(q);
                     
-                    int optOrder = 1;
                     if (dto.options() != null) {
                         for (String optText : dto.options()) {
                             QuizOption opt = new QuizOption();
                             opt.setQuizQuestion(q);
                             opt.setContent(optText);
-                            opt.setDisplayOrder(optOrder++);
                             opt.setIsCorrect(optText.equals(dto.correct_answer()));
                             quizOptionRepository.save(opt);
                         }
