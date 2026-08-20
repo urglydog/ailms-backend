@@ -9,10 +9,22 @@ import com.lms.dubbing.repository.TranscriptSegmentRepository;
 import com.lms.material.dto.InternalMaterialDto.FinishReq;
 import com.lms.material.dto.InternalMaterialDto.GenerationContextRes;
 import com.lms.material.dto.InternalMaterialDto.TranscriptSegmentDto;
+import com.lms.material.dto.InternalMaterialDto.FlashcardDto;
+import com.lms.material.dto.InternalMaterialDto.QuizDto;
+import com.lms.material.entity.Flashcard;
+import com.lms.material.entity.FlashcardDeck;
 import com.lms.material.entity.MaterialGeneration;
 import com.lms.material.entity.Mindmap;
+import com.lms.material.entity.Quiz;
+import com.lms.material.entity.QuizOption;
+import com.lms.material.entity.QuizQuestion;
+import com.lms.material.repository.FlashcardDeckRepository;
+import com.lms.material.repository.FlashcardRepository;
 import com.lms.material.repository.MaterialGenerationRepository;
 import com.lms.material.repository.MindmapRepository;
+import com.lms.material.repository.QuizOptionRepository;
+import com.lms.material.repository.QuizQuestionRepository;
+import com.lms.material.repository.QuizRepository;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -25,6 +37,11 @@ public class InternalMaterialService {
     private final MaterialGenerationRepository materialGenerationRepository;
     private final TranscriptSegmentRepository transcriptSegmentRepository;
     private final MindmapRepository mindmapRepository;
+    private final FlashcardDeckRepository flashcardDeckRepository;
+    private final FlashcardRepository flashcardRepository;
+    private final QuizRepository quizRepository;
+    private final QuizQuestionRepository quizQuestionRepository;
+    private final QuizOptionRepository quizOptionRepository;
 
     @Transactional(readOnly = true)
     public GenerationContextRes getContext(Long generationId) {
@@ -80,8 +97,47 @@ public class InternalMaterialService {
                 mindmap.setNodeCount(nodes);
                 
                 mindmapRepository.save(mindmap);
+            } else if (generation.getMaterialType() == MaterialType.FLASHCARD && req.flashcards() != null) {
+                FlashcardDeck deck = new FlashcardDeck();
+                deck.setMaterialGeneration(generation);
+                deck.setTitle("Flashcard cho: " + generation.getCourse().getTitle());
+                deck = flashcardDeckRepository.save(deck);
+                
+                for (FlashcardDto dto : req.flashcards()) {
+                    Flashcard fc = new Flashcard();
+                    fc.setFlashcardDeck(deck);
+                    fc.setFrontText(dto.front_text());
+                    fc.setBackText(dto.back_text());
+                    flashcardRepository.save(fc);
+                }
+            } else if (generation.getMaterialType() == MaterialType.QUIZ && req.quizzes() != null) {
+                Quiz quiz = new Quiz();
+                quiz.setMaterialGeneration(generation);
+                quiz.setTitle("Quiz cho: " + generation.getCourse().getTitle());
+                quiz.setPassingScore(80);
+                quiz = quizRepository.save(quiz);
+                
+                int order = 1;
+                for (QuizDto dto : req.quizzes()) {
+                    QuizQuestion q = new QuizQuestion();
+                    q.setQuiz(quiz);
+                    q.setContent(dto.content());
+                    q.setDisplayOrder(order++);
+                    q = quizQuestionRepository.save(q);
+                    
+                    int optOrder = 1;
+                    if (dto.options() != null) {
+                        for (String optText : dto.options()) {
+                            QuizOption opt = new QuizOption();
+                            opt.setQuizQuestion(q);
+                            opt.setContent(optText);
+                            opt.setDisplayOrder(optOrder++);
+                            opt.setIsCorrect(optText.equals(dto.correct_answer()));
+                            quizOptionRepository.save(opt);
+                        }
+                    }
+                }
             }
-            // Add Flashcard and Quiz handling in subsequent steps
         } else {
             generation.setStatus(GenStatus.FAILED);
             generation.setErrorMessage(req.errorMessage());

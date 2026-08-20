@@ -28,6 +28,19 @@ public class InternalMaterialDto {
     public record FinishReq(
             String outcome,
             String errorMessage,
-            String mermaidCode
+            String mermaidCode,
+            List<FlashcardDto> flashcards,
+            List<QuizDto> quizzes
+    ) {}
+
+    public record FlashcardDto(
+            String front_text,
+            String back_text
+    ) {}
+
+    public record QuizDto(
+            String content,
+            List<String> options,
+            String correct_answer
     ) {}
 }
