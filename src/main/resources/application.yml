@@ -161,6 +161,12 @@ payment:
     appId: ${ZALOPAY_APP_ID:}
     key1: ${ZALOPAY_KEY1:}
     key2: ${ZALOPAY_KEY2:}
+  payos:
+    clientId: ${PAYOS_CLIENT_ID:}
+    apiKey: ${PAYOS_API_KEY:}
+    checksumKey: ${PAYOS_CHECKSUM_KEY:}
+    returnUrl: ${PAYOS_RETURN_URL:http://localhost:3000/payments/callback}
+    cancelUrl: ${PAYOS_CANCEL_URL:http://localhost:3000/payments/callback}
 
 logging:
   level:

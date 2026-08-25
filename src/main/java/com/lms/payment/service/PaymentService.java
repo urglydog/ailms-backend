@@ -26,6 +26,14 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import vn.payos.PayOS;
+import vn.payos.model.v2.paymentRequests.CreatePaymentLinkRequest;
+import vn.payos.model.v2.paymentRequests.PaymentLinkItem;
+import vn.payos.model.v2.paymentRequests.CreatePaymentLinkResponse;
+import java.util.List;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Slf4j
 @Service
@@ -37,6 +45,7 @@ public class PaymentService {
     private final CourseRepository courseRepository;
     private final EnrollmentRepository enrollmentRepository;
     private final EnrollmentService enrollmentService;
+    private final PayOS payOS;
 
     @Value("${payment.vnpay.tmnCode:}")
     private String vnpTmnCode;
@@ -49,6 +58,12 @@ public class PaymentService {
 
     @Value("${payment.vnpay.returnUrl:}")
     private String vnpReturnUrl;
+
+    @Value("${payment.payos.returnUrl:http://localhost:3000/payments/callback}")
+    private String payosReturnUrl;
+
+    @Value("${payment.payos.cancelUrl:http://localhost:3000/payments/callback}")
+    private String payosCancelUrl;
 
     @Transactional
     public PaymentDto.PaymentUrlRes createPayment(String email, PaymentDto.CreateReq req) {
@@ -83,6 +98,39 @@ public class PaymentService {
         payment.setBillingPhone(req.billingPhone());
         
         paymentRepository.save(payment);
+
+        if ("PAYOS".equalsIgnoreCase(req.paymentMethod())) {
+            try {
+                // Generate unique orderCode (number) for PayOS
+                long orderCode = System.currentTimeMillis() % 1000000000L;
+                payment.setTxnRef(String.valueOf(orderCode));
+                paymentRepository.save(payment);
+
+                PaymentLinkItem item = PaymentLinkItem.builder()
+                        .name("Khóa học: " + course.getTitle())
+                        .price(amount.longValue())
+                        .quantity(1)
+                        .build();
+
+                String returnUrl = payosReturnUrl + "?status=success&orderCode=" + orderCode;
+                String cancelUrl = payosCancelUrl + "?status=cancel&orderCode=" + orderCode;
+
+                CreatePaymentLinkRequest paymentData = CreatePaymentLinkRequest.builder()
+                        .orderCode(orderCode)
+                        .amount(amount.longValue())
+                        .description("Thanh toan don " + orderCode)
+                        .returnUrl(returnUrl)
+                        .cancelUrl(cancelUrl)
+                        .items(List.of(item))
+                        .build();
+
+                CreatePaymentLinkResponse data = payOS.paymentRequests().create(paymentData);
+                return new PaymentDto.PaymentUrlRes(data.getCheckoutUrl());
+            } catch (Exception e) {
+                log.error("PayOS error", e);
+                throw new BusinessRuleViolationException("Lỗi khởi tạo thanh toán PayOS");
+            }
+        }
 
         if ("VNPAY".equalsIgnoreCase(req.paymentMethod())) {
             String vnp_Version = "2.1.0";
