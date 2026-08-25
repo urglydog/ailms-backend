@@ -84,7 +84,15 @@ public class MaterialGenerationService {
 
         MaterialGeneration saved = materialGenerationRepository.save(generation);
 
-        redisTemplate.opsForList().leftPush(queueKey, toJson(saved));
+        String jsonPayload = toJson(saved);
+        org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                new org.springframework.transaction.support.TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        redisTemplate.opsForList().leftPush(queueKey, jsonPayload);
+                    }
+                }
+        );
 
         return toDto(saved);
     }
