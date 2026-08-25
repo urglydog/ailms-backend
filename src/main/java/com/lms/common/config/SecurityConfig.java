@@ -58,6 +58,7 @@ public class SecurityConfig {
             "/api/v1/auth/**",          // UC01 đăng ký, UC02 đăng nhập, UC04 quên mật khẩu
             "/api/v1/oauth2/**",        // UC02 Google OAuth2
             "/api/v1/payments/callback/**", // UC14 IPN từ cổng thanh toán (xác thực bằng HMAC, không phải JWT)
+            "/api/v1/payments/payos/webhook",
             "/api/v1/payments/ipn-mock",
             // UC49 Course Discovery — stateless, cho phép Guest gọi (quota theo IP, kiểm trong controller)
             "/api/v1/discovery/chat",
