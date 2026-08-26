@@ -1,6 +1,7 @@
 package com.lms.material.repository;
 
 import com.lms.material.entity.Quiz;
+import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -12,4 +13,5 @@ import org.springframework.stereotype.Repository;
  */
 @Repository
 public interface QuizRepository extends JpaRepository<Quiz, Long> {
+    Optional<Quiz> findByMaterialGeneration_Id(Long id);
 }
