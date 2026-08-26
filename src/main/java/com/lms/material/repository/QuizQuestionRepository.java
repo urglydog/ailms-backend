@@ -1,6 +1,7 @@
 package com.lms.material.repository;
 
 import com.lms.material.entity.QuizQuestion;
+import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -12,4 +13,5 @@ import org.springframework.stereotype.Repository;
  */
 @Repository
 public interface QuizQuestionRepository extends JpaRepository<QuizQuestion, Long> {
+    List<QuizQuestion> findByQuiz_IdOrderByDisplayOrderAsc(Long id);
 }

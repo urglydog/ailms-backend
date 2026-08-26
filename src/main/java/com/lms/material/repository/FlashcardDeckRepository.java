@@ -1,6 +1,7 @@
 package com.lms.material.repository;
 
 import com.lms.material.entity.FlashcardDeck;
+import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -12,4 +13,5 @@ import org.springframework.stereotype.Repository;
  */
 @Repository
 public interface FlashcardDeckRepository extends JpaRepository<FlashcardDeck, Long> {
+    Optional<FlashcardDeck> findByMaterialGeneration_Id(Long id);
 }
