@@ -87,6 +87,7 @@ public class MaterialGeneration extends BaseEntity {
 
     /** BR-MAT-01: luon false voi nguoi khac - moi bo thuoc dung 1 hoc vien. */
     public boolean isReusableBy(User other) {
-        return user != null && user.equals(other);
+        if (user == null || other == null) return false;
+        return user.getId() != null && user.getId().equals(other.getId());
     }
 }
