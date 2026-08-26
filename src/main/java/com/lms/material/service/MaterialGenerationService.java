@@ -38,6 +38,11 @@ public class MaterialGenerationService {
     private final EnrollmentRepository enrollmentRepository;
     private final MaterialGenerationRepository materialGenerationRepository;
     private final com.lms.material.repository.MindmapRepository mindmapRepository;
+    private final com.lms.material.repository.FlashcardDeckRepository flashcardDeckRepository;
+    private final com.lms.material.repository.FlashcardRepository flashcardRepository;
+    private final com.lms.material.repository.QuizRepository quizRepository;
+    private final com.lms.material.repository.QuizQuestionRepository quizQuestionRepository;
+    private final com.lms.material.repository.QuizOptionRepository quizOptionRepository;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
 
@@ -108,10 +113,45 @@ public class MaterialGenerationService {
         }
         
         String mermaidCode = null;
+        java.util.List<com.lms.material.dto.MaterialDetailRes.FlashcardDto> flashcards = null;
+        java.util.List<com.lms.material.dto.MaterialDetailRes.QuizQuestionDto> quizQuestions = null;
+        
         if (generation.getMaterialType() == com.lms.common.enums.MaterialType.MINDMAP) {
             mermaidCode = mindmapRepository.findByMaterialGeneration_Id(generation.getId())
                     .map(com.lms.material.entity.Mindmap::getMermaidCode)
                     .orElse(null);
+        } else if (generation.getMaterialType() == com.lms.common.enums.MaterialType.FLASHCARD) {
+            java.util.Optional<com.lms.material.entity.FlashcardDeck> deck = flashcardDeckRepository.findByMaterialGeneration_Id(generation.getId());
+            if (deck.isPresent()) {
+                flashcards = flashcardRepository.findByFlashcardDeck_Id(deck.get().getId())
+                        .stream()
+                        .map(f -> com.lms.material.dto.MaterialDetailRes.FlashcardDto.builder()
+                                .id(f.getId())
+                                .frontText(f.getFrontText())
+                                .backText(f.getBackText())
+                                .build())
+                        .toList();
+            }
+        } else if (generation.getMaterialType() == com.lms.common.enums.MaterialType.QUIZ) {
+            java.util.Optional<com.lms.material.entity.Quiz> quiz = quizRepository.findByMaterialGeneration_Id(generation.getId());
+            if (quiz.isPresent()) {
+                quizQuestions = quizQuestionRepository.findByQuiz_IdOrderByDisplayOrderAsc(quiz.get().getId())
+                        .stream()
+                        .map(q -> com.lms.material.dto.MaterialDetailRes.QuizQuestionDto.builder()
+                                .id(q.getId())
+                                .content(q.getContent())
+                                .displayOrder(q.getDisplayOrder())
+                                .options(quizOptionRepository.findByQuizQuestion_Id(q.getId())
+                                        .stream()
+                                        .map(o -> com.lms.material.dto.MaterialDetailRes.QuizOptionDto.builder()
+                                                .id(o.getId())
+                                                .content(o.getContent())
+                                                .isCorrect(o.getIsCorrect())
+                                                .build())
+                                        .toList())
+                                .build())
+                        .toList();
+            }
         }
         
         return com.lms.material.dto.MaterialDetailRes.builder()
@@ -123,6 +163,8 @@ public class MaterialGenerationService {
                 .status(generation.getStatus())
                 .createdAt(generation.getCreatedAt())
                 .mermaidCode(mermaidCode)
+                .flashcards(flashcards)
+                .quizQuestions(quizQuestions)
                 .build();
     }
 
