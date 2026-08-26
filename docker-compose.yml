@@ -89,7 +89,7 @@ services:
     container_name: lms_backend
     restart: unless-stopped
     ports:
-      - "127.0.0.1:${BACKEND_PORT:-8080}:8080"
+      - "${BACKEND_PORT:-8080}:8080"
     environment:
       LMS_CORS_ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
@@ -165,7 +165,7 @@ services:
     restart: unless-stopped
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     ports:
-      - "127.0.0.1:${AI_API_PORT:-8000}:8000"
+      - "${AI_API_PORT:-8000}:8000"
     # Biến riêng của ai-worker (ASR/LLM/TTS/tham số pipeline/B2/Supabase) đọc từ
     # project/ai-worker/.env — tách khỏi be/.env (Giai đoạn 5) để dễ quản lý theo service.
     env_file:
