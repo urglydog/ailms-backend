@@ -31,8 +31,6 @@ services:
       # App dùng user riêng, không dùng root (nguyên tắc least-privilege)
       MYSQL_USER: ${MYSQL_USER:-lms_user}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-lms_pass}
-    ports:
-      - "${MYSQL_PORT:-3306}:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
@@ -47,8 +45,6 @@ services:
     container_name: lms_redis
     restart: unless-stopped
     command: redis-server --appendonly yes
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     # Healthcheck để backend/worker chờ đúng thời điểm Redis sẵn sàng

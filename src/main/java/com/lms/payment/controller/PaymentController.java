@@ -63,6 +63,10 @@ public class PaymentController {
             paymentService.processIpn(txnRef, gatewayTxnNo, true);
             
             return ResponseEntity.ok(java.util.Map.of("success", true));
+        } catch (com.lms.common.exception.ResourceNotFoundException e) {
+            log.warn("Webhook test từ PayOS hoặc giao dịch không tồn tại: {}", e.getMessage());
+            // Trả về 200 OK để PayOS lưu được Webhook URL (bỏ qua lỗi không tìm thấy đơn hàng test)
+            return ResponseEntity.ok(java.util.Map.of("success", true, "message", "Test webhook OK"));
         } catch (Exception e) {
             log.error("Lỗi xác thực hoặc xử lý PayOS Webhook", e);
             return ResponseEntity.badRequest().body(java.util.Map.of(
