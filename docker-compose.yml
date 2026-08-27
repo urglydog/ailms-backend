@@ -197,7 +197,7 @@ services:
       dockerfile: Dockerfile
     container_name: lms_ai_worker
     restart: unless-stopped
-    command: celery -A app.celery_app worker --loglevel=info --concurrency=2
+    command: celery -A app.celery_app worker --loglevel=info --concurrency=8
     env_file:
       - ../ai-worker/.env
     environment: *ai_env
