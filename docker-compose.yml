@@ -260,6 +260,21 @@ services:
       backend:
         condition: service_started
 
+  # ── Service 4: Reverse Proxy (Caddy) ──────────────────────────
+  # Tự động cấp chứng chỉ HTTPS (SSL) cho nip.io để giải quyết lỗi 
+  # Vercel 500 và lỗi Mixed Content trên trình duyệt.
+  caddy:
+    image: caddy:2-alpine
+    container_name: lms_caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    command: caddy reverse-proxy --from 46.224.175.90.nip.io --to backend:8080
+    depends_on:
+      backend:
+        condition: service_started
+
 volumes:
   mysql_data:
   redis_data:
