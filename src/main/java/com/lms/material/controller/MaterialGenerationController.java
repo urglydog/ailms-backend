@@ -39,7 +39,7 @@ public class MaterialGenerationController {
         return ResponseEntity.ok(materialGenerationService.getGenerations(principal.getName(), courseId));
     }
 
-    @GetMapping("/{id}")
+    @GetMapping("/{id:\\d+}")
     public ResponseEntity<com.lms.material.dto.MaterialDetailRes> getDetail(
             Principal principal,
             @PathVariable Long id) {
