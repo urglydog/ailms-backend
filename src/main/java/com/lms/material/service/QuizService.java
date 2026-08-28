@@ -81,7 +81,7 @@ public class QuizService {
             
             List<QuizOption> options = quizOptionRepository.findByQuizQuestion_Id(q.getId());
             List<QuizAttemptDto.OptionDto> optionDtos = options.stream()
-                    .map(o -> new QuizAttemptDto.OptionDto(o.getId(), o.getContent(), o.getDisplayOrder()))
+                    .map(o -> new QuizAttemptDto.OptionDto(o.getId(), o.getContent()))
                     .collect(Collectors.toList());
                     
             questionDtos.add(new QuizAttemptDto.QuestionDto(q.getId(), q.getContent(), q.getDisplayOrder(), optionDtos));
