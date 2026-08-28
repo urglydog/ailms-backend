@@ -44,6 +44,8 @@ public class MaterialGenerationService {
     private final com.lms.material.repository.QuizRepository quizRepository;
     private final com.lms.material.repository.QuizQuestionRepository quizQuestionRepository;
     private final com.lms.material.repository.QuizOptionRepository quizOptionRepository;
+    private final com.lms.catalog.repository.ChapterRepository chapterRepository;
+    private final com.lms.catalog.repository.LessonRepository lessonRepository;
     private final AudioTrackRepository audioTrackRepository;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
@@ -246,11 +248,29 @@ public class MaterialGenerationService {
         return audioTrackRepository.findAvailableLanguagesByCourse(courseId);
     }
 
-    public java.util.List<com.lms.catalog.dto.ChapterDto> getCourseChapters(Long courseId) {
-        Course course = courseRepository.findById(courseId)
-                .orElseThrow(() -> new ResourceNotFoundException("Course", courseId));
-        return course.getChapters().stream()
-                .map(com.lms.catalog.mapper.ChapterMapper.INSTANCE::toDto)
+    public java.util.List<com.lms.catalog.dto.ChapterDto.Res> getCourseChapters(Long courseId) {
+        if (!courseRepository.existsById(courseId)) {
+            throw new ResourceNotFoundException("Course", courseId);
+        }
+        return chapterRepository.findByCourseIdOrderByDisplayOrderAsc(courseId).stream()
+                .map(chapter -> new com.lms.catalog.dto.ChapterDto.Res(
+                        chapter.getId(),
+                        chapter.getTitle(),
+                        chapter.getDisplayOrder(),
+                        lessonRepository.findByChapterIdOrderByDisplayOrderAsc(chapter.getId()).stream()
+                                .map(lesson -> new com.lms.catalog.dto.LessonDto.Res(
+                                        lesson.getId(),
+                                        lesson.getTitle(),
+                                        lesson.getDisplayOrder(),
+                                        lesson.getIsPreview(),
+                                        lesson.getStatus(),
+                                        lesson.getVideoSource(),
+                                        lesson.getVideoUrl(),
+                                        lesson.getYoutubeId(),
+                                        lesson.getDurationSec()
+                                ))
+                                .toList()
+                ))
                 .toList();
     }
 }
