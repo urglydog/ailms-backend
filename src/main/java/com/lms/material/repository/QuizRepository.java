@@ -14,4 +14,5 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface QuizRepository extends JpaRepository<Quiz, Long> {
     Optional<Quiz> findByMaterialGeneration_Id(Long id);
+    Optional<Quiz> findFirstByMaterialGeneration_Course_IdAndIsOfficialTrueOrderByCreatedAtDesc(Long courseId);
 }

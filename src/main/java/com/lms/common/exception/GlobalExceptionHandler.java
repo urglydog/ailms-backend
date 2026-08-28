@@ -13,6 +13,7 @@ import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 /**
@@ -67,6 +68,12 @@ public class GlobalExceptionHandler {
     public ProblemDetail handleUploadTooLarge(MaxUploadSizeExceededException ex, HttpServletRequest request) {
         return build(HttpStatus.PAYLOAD_TOO_LARGE,
                 "File vuot qua dung luong cho phep", "FILE_TOO_LARGE", request);
+    }
+
+    /** Path Variable type mismatch (e.g. string passed to Long id) */
+    @ExceptionHandler({MethodArgumentTypeMismatchException.class, org.springframework.beans.TypeMismatchException.class})
+    public ProblemDetail handleTypeMismatch(Exception ex, HttpServletRequest request) {
+        return build(HttpStatus.BAD_REQUEST, "Sai kieu du lieu tham so", "TYPE_MISMATCH", request);
     }
 
     /**

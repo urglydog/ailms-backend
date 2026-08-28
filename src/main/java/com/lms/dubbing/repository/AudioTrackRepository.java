@@ -17,6 +17,6 @@ public interface AudioTrackRepository extends JpaRepository<AudioTrack, Long> {
     /** UC47 — chan xoa 1 VoiceMapping dang duoc AudioTrack nao do tham chieu (FK). */
     boolean existsByVoiceMapping_Id(Long voiceMappingId);
 
-    @org.springframework.data.jpa.repository.Query("SELECT DISTINCT a.language FROM AudioTrack a JOIN a.lesson l JOIN l.chapter c WHERE c.course.id = :courseId AND a.status = 'COMPLETED'")
+    @org.springframework.data.jpa.repository.Query("SELECT DISTINCT a.language FROM AudioTrack a JOIN a.lesson l JOIN l.chapter c WHERE c.course.id = :courseId AND a.status = com.lms.common.enums.TrackStatus.COMPLETED")
     java.util.List<String> findAvailableLanguagesByCourse(@org.springframework.data.repository.query.Param("courseId") Long courseId);
 }
