@@ -9,8 +9,7 @@ public class QuizAttemptDto {
 
     public record OptionDto(
             Long id,
-            String content,
-            Integer displayOrder
+            String content
     ) {}
 
     public record QuestionDto(
