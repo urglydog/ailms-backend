@@ -20,6 +20,9 @@ public class Quiz extends BaseEntity {
     @Column(name = "question_count", nullable = false)
     private Integer questionCount = 0;
 
+    @Column(name = "is_official", nullable = false)
+    private Boolean isOfficial = false;
+
     @OneToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "material_generation_id", nullable = false, unique = true)
     private MaterialGeneration materialGeneration;
