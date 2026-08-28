@@ -45,4 +45,14 @@ public class MaterialGenerationController {
             @PathVariable Long id) {
         return ResponseEntity.ok(materialGenerationService.getDetail(principal.getName(), id));
     }
+
+    @GetMapping("/available-languages")
+    public ResponseEntity<List<String>> getAvailableLanguages(@RequestParam Long courseId) {
+        return ResponseEntity.ok(materialGenerationService.getAvailableLanguages(courseId));
+    }
+
+    @GetMapping("/course-chapters")
+    public ResponseEntity<List<com.lms.catalog.dto.ChapterDto.Res>> getCourseChapters(@RequestParam Long courseId) {
+        return ResponseEntity.ok(materialGenerationService.getCourseChapters(courseId));
+    }
 }
