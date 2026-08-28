@@ -48,6 +48,10 @@ public class MaterialGeneration extends BaseEntity {
     @Column(name = "scope_ref_id")
     private Long scopeRefId;
 
+    /** Danh sach cac id bai hoc tuy chon khi scopeType = CUSTOM_LESSONS. (chuoi phan cach boi dau phay) */
+    @Column(name = "custom_lesson_ids", columnDefinition = "TEXT")
+    private String customLessonIds;
+
     /** Chi co gia tri khi materialType thuoc {QUIZ, FLASHCARD} (BR-MAT-05). */
     @Enumerated(EnumType.STRING)
     @Column(name = "quantity_level", length = 20)

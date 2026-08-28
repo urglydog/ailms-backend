@@ -15,6 +15,7 @@ public record MaterialGenerationReq(
         @NotBlank(message = "language không được để trống") String language,
         @NotNull(message = "scopeType không được để trống") ScopeType scopeType,
         Long scopeRefId,
+        java.util.List<Long> customLessonIds,
         QuantityLevel quantityLevel,
         DifficultyLevel difficultyLevel
 ) {

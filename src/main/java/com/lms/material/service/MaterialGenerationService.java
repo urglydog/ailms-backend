@@ -15,6 +15,7 @@ import com.lms.material.dto.MaterialGenerationReq;
 import com.lms.material.dto.MaterialGenerationRes;
 import com.lms.material.entity.MaterialGeneration;
 import com.lms.material.repository.MaterialGenerationRepository;
+import com.lms.dubbing.repository.AudioTrackRepository;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
@@ -43,6 +44,7 @@ public class MaterialGenerationService {
     private final com.lms.material.repository.QuizRepository quizRepository;
     private final com.lms.material.repository.QuizQuestionRepository quizQuestionRepository;
     private final com.lms.material.repository.QuizOptionRepository quizOptionRepository;
+    private final AudioTrackRepository audioTrackRepository;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
 
@@ -71,6 +73,12 @@ public class MaterialGenerationService {
             throw new BusinessRuleViolationException("Đã đạt giới hạn sinh học liệu cho khóa học này (tối đa 10 bộ) - BR-MAT-07");
         }
 
+        // Validate Language: chỉ cho phép ngôn ngữ đã có transcript
+        java.util.List<String> availableLangs = audioTrackRepository.findAvailableLanguagesByCourse(course.getId());
+        if (!availableLangs.contains(req.language())) {
+            throw new BusinessRuleViolationException("Khóa học chưa hỗ trợ sinh học liệu bằng ngôn ngữ này. Vui lòng lồng tiếng trước.");
+        }
+
         int nextVersion = materialGenerationRepository.findTopByUser_IdAndCourse_IdOrderByVersionNoDesc(user.getId(), course.getId())
                 .map(mg -> mg.getVersionNo() + 1)
                 .orElse(1);
@@ -82,6 +90,13 @@ public class MaterialGenerationService {
         generation.setLanguage(req.language());
         generation.setScopeType(req.scopeType());
         generation.setScopeRefId(req.scopeRefId());
+        if (req.scopeType() == com.lms.common.enums.ScopeType.CUSTOM_LESSONS && req.customLessonIds() != null && !req.customLessonIds().isEmpty()) {
+            try {
+                generation.setCustomLessonIds(objectMapper.writeValueAsString(req.customLessonIds()));
+            } catch (JsonProcessingException e) {
+                throw new IllegalStateException("Không serialize được customLessonIds", e);
+            }
+        }
         generation.setQuantityLevel(req.quantityLevel());
         generation.setDifficultyLevel(req.difficultyLevel());
         generation.setVersionNo(nextVersion);
@@ -184,6 +199,15 @@ public class MaterialGenerationService {
         payload.put("generationId", generation.getId());
         payload.put("courseId", generation.getCourse().getId());
         payload.put("materialType", generation.getMaterialType().name());
+        
+        if (generation.getScopeType() == com.lms.common.enums.ScopeType.CUSTOM_LESSONS && generation.getCustomLessonIds() != null) {
+            try {
+                payload.put("customLessonIds", objectMapper.readValue(generation.getCustomLessonIds(), java.util.List.class));
+            } catch (JsonProcessingException e) {
+                // ignore
+            }
+        }
+        
         try {
             return objectMapper.writeValueAsString(payload);
         } catch (JsonProcessingException e) {
@@ -216,5 +240,17 @@ public class MaterialGenerationService {
                 .createdAt(generation.getCreatedAt())
                 .updatedAt(generation.getUpdatedAt())
                 .build();
+    }
+
+    public java.util.List<String> getAvailableLanguages(Long courseId) {
+        return audioTrackRepository.findAvailableLanguagesByCourse(courseId);
+    }
+
+    public java.util.List<com.lms.catalog.dto.ChapterDto> getCourseChapters(Long courseId) {
+        Course course = courseRepository.findById(courseId)
+                .orElseThrow(() -> new ResourceNotFoundException("Course", courseId));
+        return course.getChapters().stream()
+                .map(com.lms.catalog.mapper.ChapterMapper.INSTANCE::toDto)
+                .toList();
     }
 }
