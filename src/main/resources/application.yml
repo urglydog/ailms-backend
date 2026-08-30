@@ -118,6 +118,8 @@ lms:
     instructor-earning-percent: 70           # BR-PAY-05
     notification-retention-days: 90          # BR-NOTIFY-01
     instructor-request-cooldown-days: 7      # BR-ROLE-04
+    max-tutor-attachments-per-turn: 3        # UC30 mở rộng
+    max-tutor-attachment-size-mb: 8          # UC30 mở rộng
 
   storage:
     b2-bucket-name: ${B2_BUCKET_NAME:}

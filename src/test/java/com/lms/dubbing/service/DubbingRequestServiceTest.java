@@ -7,6 +7,7 @@ import com.lms.catalog.entity.Chapter;
 import com.lms.catalog.entity.Course;
 import com.lms.catalog.entity.Lesson;
 import com.lms.catalog.repository.LessonRepository;
+import com.lms.common.config.AiWorkerConfig;
 import com.lms.common.enums.JobStatus;
 import com.lms.common.enums.Role;
 import com.lms.common.enums.TrackStatus;
@@ -34,12 +35,18 @@ import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.ListOperations;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.ResponseEntity;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestTemplate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -64,6 +71,8 @@ class DubbingRequestServiceTest {
     @Mock private StringRedisTemplate redisTemplate;
     @Mock private ListOperations<String, String> listOperations;
     @Spy private ObjectMapper objectMapper = new ObjectMapper();
+    @Mock private RestTemplate restTemplate;
+    @Mock private AiWorkerConfig aiWorkerConfig;
 
     @InjectMocks
     private DubbingRequestService dubbingRequestService;
@@ -74,6 +83,8 @@ class DubbingRequestServiceTest {
     @BeforeEach
     void setUp() {
         ReflectionTestUtils.setField(dubbingRequestService, "queueKey", "lms:dubbing:jobs");
+        ReflectionTestUtils.setField(dubbingRequestService, "progressChannel", "lms:dubbing:progress");
+        ReflectionTestUtils.setField(dubbingRequestService, "internalApiToken", "dev-internal-token");
 
         student = new User();
         student.setId(1L);
@@ -112,10 +123,11 @@ class DubbingRequestServiceTest {
             return job;
         });
         lenient().when(dubbingLockService.tryLock(LESSON_ID, "en-US")).thenReturn(true);
+        lenient().when(aiWorkerConfig.getBaseUrl()).thenReturn("http://ai-api:8000");
     }
 
     private RequestReq req() {
-        return new RequestReq("en-US");
+        return new RequestReq("en-US", null);
     }
 
     @Test
@@ -137,7 +149,7 @@ class DubbingRequestServiceTest {
 
     @Test
     void requestDubbing_throwsWhenTargetLanguageEqualsSourceLanguage() {
-        assertThatThrownBy(() -> dubbingRequestService.requestDubbing(STUDENT_EMAIL, LESSON_ID, new RequestReq("vi-VN")))
+        assertThatThrownBy(() -> dubbingRequestService.requestDubbing(STUDENT_EMAIL, LESSON_ID, new RequestReq("vi-VN", null)))
                 .isInstanceOf(BusinessRuleViolationException.class)
                 .hasMessageContaining("BR-DUB-09");
         verify(aiJobRepository, never()).save(any());
@@ -204,6 +216,40 @@ class DubbingRequestServiceTest {
                 .isInstanceOf(QuotaExceededException.class);
         verify(dubbingLockService, never()).tryLock(any(), any());
         verify(aiJobRepository, never()).save(any());
+    }
+
+    @Test
+    void requestDubbing_withValidVoiceName_setsVoiceMappingOnJob() {
+        VoiceMapping femaleVoice = new VoiceMapping();
+        femaleVoice.setLanguage("en-US");
+        femaleVoice.setVoiceName("en-US-JennyNeural");
+        femaleVoice.setGender("FEMALE");
+        when(voiceMappingRepository.findByLanguageAndIsActiveTrue("en-US")).thenReturn(List.of(femaleVoice));
+
+        Res result = dubbingRequestService.requestDubbing(STUDENT_EMAIL, LESSON_ID, new RequestReq("en-US", "en-US-JennyNeural"));
+
+        assertThat(result.status()).isEqualTo("CREATED");
+        var jobCaptor = org.mockito.ArgumentCaptor.forClass(AiJob.class);
+        verify(aiJobRepository).save(jobCaptor.capture());
+        assertThat(jobCaptor.getValue().getVoiceMapping()).isSameAs(femaleVoice);
+    }
+
+    @Test
+    void requestDubbing_withVoiceNameNotAvailableForLanguage_throws() {
+        assertThatThrownBy(() -> dubbingRequestService.requestDubbing(
+                STUDENT_EMAIL, LESSON_ID, new RequestReq("en-US", "khong-ton-tai")))
+                .isInstanceOf(BusinessRuleViolationException.class);
+        verify(aiJobRepository, never()).save(any());
+    }
+
+    @Test
+    void requestDubbing_withoutVoiceName_leavesJobVoiceMappingNull() {
+        Res result = dubbingRequestService.requestDubbing(STUDENT_EMAIL, LESSON_ID, req());
+
+        assertThat(result.status()).isEqualTo("CREATED");
+        var jobCaptor = org.mockito.ArgumentCaptor.forClass(AiJob.class);
+        verify(aiJobRepository).save(jobCaptor.capture());
+        assertThat(jobCaptor.getValue().getVoiceMapping()).isNull();
     }
 
     @Test
@@ -327,5 +373,98 @@ class DubbingRequestServiceTest {
         assertThat(job.getErrorMessage()).isNull();
         assertThat(job.getRetryCount()).isEqualTo(2);
         verify(listOperations).leftPush(anyString(), anyString());
+    }
+
+    // ── UC20 cancelDubbing ───────────────────────────────────────────
+
+    private AiJob activeJob(long id, JobStatus status, String celeryTaskId) {
+        AiJob job = new AiJob();
+        job.setId(id);
+        job.setLesson(lesson);
+        job.setTargetLanguage("en-US");
+        job.setStatus(status);
+        job.setActiveFlag(1);
+        job.setCeleryTaskId(celeryTaskId);
+        return job;
+    }
+
+    @Test
+    void cancelDubbing_throwsWhenNoActiveJob() {
+        when(aiJobRepository.findByLesson_IdAndTargetLanguageAndActiveFlag(LESSON_ID, "en-US", 1))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> dubbingRequestService.cancelDubbing(STUDENT_EMAIL, LESSON_ID, "en-US"))
+                .isInstanceOf(BusinessRuleViolationException.class);
+        verify(dubbingLockService, never()).release(any(), any());
+    }
+
+    @Test
+    void cancelDubbing_throwsWhenJobAlreadyFinished() {
+        AiJob job = activeJob(500L, JobStatus.COMPLETED, "celery-task-1");
+        when(aiJobRepository.findByLesson_IdAndTargetLanguageAndActiveFlag(LESSON_ID, "en-US", 1))
+                .thenReturn(Optional.of(job));
+
+        assertThatThrownBy(() -> dubbingRequestService.cancelDubbing(STUDENT_EMAIL, LESSON_ID, "en-US"))
+                .isInstanceOf(ConflictException.class);
+        verify(dubbingLockService, never()).release(any(), any());
+        verify(aiJobRepository, never()).save(any());
+    }
+
+    @Test
+    void cancelDubbing_setsCancelledStatusReleasesLockAndPublishesWsEvent() {
+        AiJob job = activeJob(501L, JobStatus.PROCESSING, "celery-task-2");
+        when(aiJobRepository.findByLesson_IdAndTargetLanguageAndActiveFlag(LESSON_ID, "en-US", 1))
+                .thenReturn(Optional.of(job));
+
+        Res result = dubbingRequestService.cancelDubbing(STUDENT_EMAIL, LESSON_ID, "en-US");
+
+        assertThat(result.status()).isEqualTo("CANCELLED");
+        assertThat(job.getStatus()).isEqualTo(JobStatus.CANCELLED);
+        assertThat(job.getActiveFlag()).isNull();
+        assertThat(job.getErrorMessage()).isEqualTo("Bị huỷ thủ công bởi học viên");
+        assertThat(job.getFinishedAt()).isNotNull();
+        verify(aiJobRepository).save(job);
+        verify(dubbingLockService).release(LESSON_ID, "en-US");
+        verify(redisTemplate).convertAndSend(eq("lms:dubbing:progress"), contains("\"status\":\"CANCELLED\""));
+    }
+
+    @Test
+    void cancelDubbing_skipsAiWorkerCallWhenJobNeverStarted() {
+        AiJob job = activeJob(502L, JobStatus.PENDING, null); // chua co celery_task_id
+        when(aiJobRepository.findByLesson_IdAndTargetLanguageAndActiveFlag(LESSON_ID, "en-US", 1))
+                .thenReturn(Optional.of(job));
+
+        dubbingRequestService.cancelDubbing(STUDENT_EMAIL, LESSON_ID, "en-US");
+
+        verify(restTemplate, never()).postForEntity(anyString(), any(), any());
+    }
+
+    @Test
+    void cancelDubbing_callsAiWorkerCancelEndpointWithCeleryTaskId() {
+        AiJob job = activeJob(503L, JobStatus.PROCESSING, "celery-task-3");
+        when(aiJobRepository.findByLesson_IdAndTargetLanguageAndActiveFlag(LESSON_ID, "en-US", 1))
+                .thenReturn(Optional.of(job));
+        // aiJobRepository.save(...) trong setUp() mock ghi de ID thanh 999L (dung chung cho moi
+        // test) — doc lai ID THAT SU cua job sau khi cancel de khop dung URL da goi.
+        dubbingRequestService.cancelDubbing(STUDENT_EMAIL, LESSON_ID, "en-US");
+
+        verify(restTemplate).postForEntity(
+                eq("http://ai-api:8000/admin/dubbing-jobs/" + job.getId() + "/cancel"),
+                any(HttpEntity.class), eq(Void.class));
+    }
+
+    @Test
+    void cancelDubbing_doesNotFailWhenAiWorkerCallThrows() {
+        AiJob job = activeJob(504L, JobStatus.PROCESSING, "celery-task-4");
+        when(aiJobRepository.findByLesson_IdAndTargetLanguageAndActiveFlag(LESSON_ID, "en-US", 1))
+                .thenReturn(Optional.of(job));
+        when(restTemplate.postForEntity(anyString(), any(), eq(Void.class)))
+                .thenThrow(new RestClientException("AI Worker khong ket noi duoc"));
+
+        // best-effort: loi goi AI Worker KHONG duoc lam hong ket qua huy o DB (da la nguon su that)
+        Res result = dubbingRequestService.cancelDubbing(STUDENT_EMAIL, LESSON_ID, "en-US");
+
+        assertThat(result.status()).isEqualTo("CANCELLED");
+        assertThat(job.getStatus()).isEqualTo(JobStatus.CANCELLED);
     }
 }

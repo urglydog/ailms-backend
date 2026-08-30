@@ -26,6 +26,7 @@ services:
       --collation-server=utf8mb4_unicode_ci
       --default-authentication-plugin=caching_sha2_password
     environment:
+      TZ: Asia/Ho_Chi_Minh
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
       MYSQL_DATABASE: ${MYSQL_DATABASE:-lms_db}
       # App dùng user riêng, không dùng root (nguyên tắc least-privilege)
@@ -91,6 +92,12 @@ services:
     ports:
       - "${BACKEND_PORT:-8080}:8080"
     environment:
+      # BUG THUC TE (30/08/2026): container KHONG dat TZ nen chay UTC, trong khi JDBC URL ben
+      # duoi khai "serverTimezone=Asia/Ho_Chi_Minh" — MySQL Connector/J tin loi khai bao nay,
+      # tu quy doi moi LocalDateTime.now() (Hibernate @CreatedDate...) LECH +7 GIO truoc khi ghi
+      # xuong DB (vd: ChatSession.createdAt hien "future" so voi gio that cua may chu). Dat TZ
+      # dung thuc te de loi khai bao o tren tro thanh dung, sua tan goc thay vi sua tung cho.
+      TZ: Asia/Ho_Chi_Minh
       LMS_CORS_ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
       # Datasource
