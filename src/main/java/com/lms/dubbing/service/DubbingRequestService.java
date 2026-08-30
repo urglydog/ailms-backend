@@ -7,6 +7,7 @@ import com.lms.auth.repository.UserRepository;
 import com.lms.catalog.entity.Course;
 import com.lms.catalog.entity.Lesson;
 import com.lms.catalog.repository.LessonRepository;
+import com.lms.common.config.AiWorkerConfig;
 import com.lms.common.enums.JobStatus;
 import com.lms.common.enums.TrackStatus;
 import com.lms.common.exception.AccessDeniedDomainException;
@@ -17,25 +18,34 @@ import com.lms.dubbing.dto.DubbingDto.RequestReq;
 import com.lms.dubbing.dto.DubbingDto.Res;
 import com.lms.dubbing.entity.AiJob;
 import com.lms.dubbing.entity.AudioTrack;
+import com.lms.dubbing.entity.VoiceMapping;
 import com.lms.dubbing.repository.AiJobRepository;
 import com.lms.dubbing.repository.AudioTrackRepository;
 import com.lms.dubbing.repository.VoiceMappingRepository;
 import com.lms.enrollment.repository.EnrollmentRepository;
+import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestTemplate;
 
 /**
  * UC18 — điều phối yêu cầu lồng tiếng AI theo đúng chuỗi tiền điều kiện của
  * {@code lms-dubbing-pipeline}: BR-DUB-09 → BR-DUB-07 → BR-DUB-04 → BR-DUB-05 → BR-DUB-06,
  * sau đó tạo {@link AiJob} PENDING và đẩy vào hàng đợi Redis cho AI Worker BRPOP.
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class DubbingRequestService {
@@ -50,9 +60,17 @@ public class DubbingRequestService {
     private final DubbingQuotaService dubbingQuotaService;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
+    private final RestTemplate restTemplate;
+    private final AiWorkerConfig aiWorkerConfig;
 
     @Value("${lms.redis-keys.dubbing-queue}")
     private String queueKey;
+
+    @Value("${lms.redis-keys.dubbing-progress}")
+    private String progressChannel;
+
+    @Value("${lms.internal.api-token}")
+    private String internalApiToken;
 
     @Transactional
     public Res requestDubbing(String email, Long lessonId, RequestReq req) {
@@ -71,10 +89,14 @@ public class DubbingRequestService {
         }
 
         // ② BR-DUB-07 — ngôn ngữ phải nằm trong voice_mappings đang active.
-        if (voiceMappingRepository.findByLanguageAndIsActiveTrue(targetLanguage).isEmpty()) {
+        List<VoiceMapping> activeVoices = voiceMappingRepository.findByLanguageAndIsActiveTrue(targetLanguage);
+        if (activeVoices.isEmpty()) {
             throw new BusinessRuleViolationException(
                     "Ngôn ngữ này chưa được kích hoạt lồng tiếng (BR-DUB-07)");
         }
+        // UC20 mở rộng — chọn giọng đọc là tuỳ chọn, nhưng nếu CÓ gửi lên thì phải là giọng
+        // thật đang active của đúng ngôn ngữ này (không tin dữ liệu từ client mù quáng).
+        VoiceMapping requestedVoice = resolveRequestedVoice(activeVoices, req.voiceName());
 
         // ③ BR-DUB-04 — đã có bản lồng tiếng hoàn chỉnh thì phát luôn, không chạy lại pipeline.
         Optional<AudioTrack> existingTrack = audioTrackRepository.findByLesson_IdAndLanguage(lessonId, targetLanguage);
@@ -101,6 +123,7 @@ public class DubbingRequestService {
             job.setLesson(lesson);
             job.setTargetLanguage(targetLanguage);
             job.setRequestedBy(user);
+            job.setVoiceMapping(requestedVoice);
             AiJob saved = aiJobRepository.save(job);
 
             // ⑦ LPUSH cho AI Worker BRPOP.
@@ -164,6 +187,102 @@ public class DubbingRequestService {
             dubbingLockService.release(lessonId, targetLanguage);
             throw e;
         }
+    }
+
+    /**
+     * UC20 — học viên chủ động huỷ job đang chạy giữa chừng. Đây là nơi DUY NHẤT chuyển
+     * trạng thái CANCELLED — DB ({@code be/}) luôn là nguồn sự thật, cập nhật NGAY trong
+     * transaction này, KHÔNG chờ AI Worker phản hồi rồi mới coi là huỷ xong (Celery revoke
+     * chỉ là hành động "cố dừng tiến trình đang chạy thật sớm nhất có thể" — best-effort,
+     * lỗi ở bước đó không được làm hỏng trải nghiệm huỷ của học viên).
+     *
+     * <p>Dữ liệu ĐÃ lưu của các chunk hoàn tất trước đó (BR-CHUNK-03) được GIỮ NGUYÊN,
+     * không xoá — mỗi chunk đã COMPLETED là file audio hợp lệ, độc lập, học viên vẫn nghe
+     * được đoạn đó bình thường. Chunk đang xử lý dở khi bị huỷ CHƯA từng được lưu (transcript/
+     * audio chỉ ghi khi cả chunk xong, xem {@code InternalDubbingService.upsertChunk}) nên
+     * không có gì để xoá ở đó cả.
+     */
+    @Transactional
+    public Res cancelDubbing(String email, Long lessonId, String targetLanguage) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User", email));
+        Lesson lesson = lessonRepository.findById(lessonId)
+                .orElseThrow(() -> new ResourceNotFoundException("Lesson", lessonId));
+        requireLessonAccess(user, lesson);
+
+        AiJob job = aiJobRepository.findByLesson_IdAndTargetLanguageAndActiveFlag(lessonId, targetLanguage, 1)
+                .orElseThrow(() -> new BusinessRuleViolationException(
+                        "Không có job lồng tiếng nào đang chạy cho ngôn ngữ này"));
+
+        if (job.getStatus() != JobStatus.PENDING && job.getStatus() != JobStatus.PROCESSING) {
+            throw new ConflictException("Job đã kết thúc (" + job.getStatus() + "), không huỷ được nữa");
+        }
+
+        job.setStatus(JobStatus.CANCELLED);
+        job.releaseActiveFlag();
+        job.setErrorMessage("Bị huỷ thủ công bởi học viên");
+        job.setFinishedAt(LocalDateTime.now());
+        aiJobRepository.save(job);
+
+        dubbingLockService.release(lessonId, targetLanguage);
+        publishCancelledEvent(job.getId(), lessonId);
+        requestAiWorkerCancel(job.getId(), job.getCeleryTaskId());
+
+        return new Res("CANCELLED", job.getId(), null);
+    }
+
+    /**
+     * Báo NGAY qua WS để FE dừng progress bar không phải chờ vòng poll/callback nào —
+     * publish thẳng lên CÙNG kênh Redis Pub/Sub mà AI Worker dùng
+     * ({@code app/redis_client.py::publish_progress}); {@link com.lms.dubbing.messaging.DubbingProgressSubscriber}
+     * đã lắng nghe kênh này rồi nên không cần thêm code phía subscriber.
+     */
+    private void publishCancelledEvent(Long jobId, Long lessonId) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("jobId", jobId);
+        payload.put("lessonId", lessonId);
+        payload.put("status", "CANCELLED");
+        try {
+            redisTemplate.convertAndSend(progressChannel, objectMapper.writeValueAsString(payload));
+        } catch (JsonProcessingException e) {
+            log.error("Khong tao duoc payload huy job {} de publish qua WS", jobId, e);
+        }
+    }
+
+    /**
+     * Cố dừng tiến trình Celery đang chạy thật (nếu đã start) — best-effort, KHÔNG throw:
+     * DB đã ghi CANCELLED ở trên rồi, học viên không cần biết bước này thành công hay không.
+     * {@code celeryTaskId} null nghĩa là job còn PENDING, chưa từng được AI Worker nhận —
+     * không có gì để huỷ phía đó.
+     */
+    private void requestAiWorkerCancel(Long jobId, String celeryTaskId) {
+        if (celeryTaskId == null) {
+            return;
+        }
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("X-Internal-Token", internalApiToken);
+        HttpEntity<Map<String, Object>> entity = new HttpEntity<>(Map.of("celeryTaskId", celeryTaskId), headers);
+        try {
+            restTemplate.postForEntity(
+                    aiWorkerConfig.getBaseUrl() + "/admin/dubbing-jobs/" + jobId + "/cancel", entity, Void.class);
+        } catch (RestClientException e) {
+            log.warn("Khong bao duoc AI Worker dung task {} cho job {} (khong anh huong ket qua huy o DB): {}",
+                    celeryTaskId, jobId, e.getMessage());
+        }
+    }
+
+    /** UC20 mở rộng — {@code null}/rỗng nghĩa là học viên không chọn (giữ hành vi cũ, AI Worker tự
+     * lấy giọng {@code isDefault}); có gửi lên thì PHẢI khớp đúng 1 giọng đang active của ngôn ngữ
+     * này, không thì coi là yêu cầu sai (client gửi tên giọng không tồn tại/đã bị Admin tắt). */
+    private VoiceMapping resolveRequestedVoice(List<VoiceMapping> activeVoices, String voiceName) {
+        if (voiceName == null || voiceName.isBlank()) {
+            return null;
+        }
+        return activeVoices.stream()
+                .filter(v -> voiceName.equals(v.getVoiceName()))
+                .findFirst()
+                .orElseThrow(() -> new BusinessRuleViolationException(
+                        "Giọng đọc \"" + voiceName + "\" không khả dụng cho ngôn ngữ này"));
     }
 
     /** Học viên đã ghi danh HOẶC giảng viên sở hữu khóa học (pre-warm, BR-DUB-06) mới được yêu cầu. */

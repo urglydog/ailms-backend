@@ -28,6 +28,7 @@ import com.lms.dubbing.repository.AudioTrackRepository;
 import com.lms.dubbing.repository.TranscriptRepository;
 import com.lms.dubbing.repository.TranscriptSegmentRepository;
 import com.lms.dubbing.repository.VoiceMappingRepository;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -55,11 +56,21 @@ public class InternalDubbingService {
     private final DubbingLockService dubbingLockService;
     private final NotificationService notificationService;
 
+    /**
+     * BR-DUB-01 chỉ cho phép bỏ qua bước ASR khi Transcript gốc đã PHỦ GẦN HẾT video — dung sai
+     * cho khoảng lặng/nhạc nền cuối video vốn dĩ không sinh ra câu thoại nào.
+     */
+    private static final int SOURCE_TRANSCRIPT_COMPLETENESS_TOLERANCE_SEC = 60;
+
     @Transactional(readOnly = true)
     public JobContextRes getContext(Long jobId) {
         AiJob job = loadJob(jobId);
         Lesson lesson = job.getLesson();
-        String voiceName = resolveVoiceName(job.getTargetLanguage());
+        // UC20 mở rộng — người kích hoạt ĐẦU TIÊN có thể đã chọn giọng cụ thể (job.voiceMapping);
+        // không thì giữ hành vi cũ, tự lấy giọng isDefault của ngôn ngữ (BR-DUB-07).
+        String voiceName = job.getVoiceMapping() != null
+                ? job.getVoiceMapping().getVoiceName()
+                : resolveVoiceName(job.getTargetLanguage());
 
         Optional<Transcript> sourceTranscript = transcriptRepository.findByLesson_IdAndIsSourceTrue(lesson.getId());
         List<SegmentDto> sourceSegments = sourceTranscript
@@ -68,6 +79,14 @@ public class InternalDubbingService {
                 .stream()
                 .map(this::toSegmentDto)
                 .toList();
+
+        // UC20 — một job TRƯỚC ĐÓ bị huỷ/thất bại giữa chừng (còn dở dang 1 vài chunk) có thể
+        // đã lưu MỘT PHẦN Transcript gốc rồi dừng. Nếu vẫn coi "đã có Transcript gốc" là đủ điều
+        // kiện bỏ qua ASR cho CẢ job mới, các chunk sau (không có câu nào khớp khung giờ trong
+        // phần Transcript dở dang đó) sẽ bị hiểu nhầm là "khoảng lặng" và giữ nguyên audio GỐC
+        // (chưa dịch) — sai lệch âm thầm, job vẫn báo COMPLETED. Coi Transcript dở dang này như
+        // CHƯA CÓ để AI Worker chạy lại ASR từ đầu, an toàn hơn nhiều so với dùng nhầm dữ liệu cũ.
+        boolean sourceTranscriptComplete = isSourceTranscriptComplete(sourceSegments, lesson.getDurationSec());
 
         return new JobContextRes(
                 job.getId(),
@@ -78,9 +97,17 @@ public class InternalDubbingService {
                 lesson.getSourceLanguage(),
                 job.getTargetLanguage(),
                 voiceName,
-                sourceTranscript.isPresent(),
-                sourceSegments
+                sourceTranscriptComplete,
+                sourceTranscriptComplete ? sourceSegments : List.of()
         );
+    }
+
+    private boolean isSourceTranscriptComplete(List<SegmentDto> segments, Integer durationSec) {
+        if (segments.isEmpty() || durationSec == null || durationSec <= 0) {
+            return false;
+        }
+        BigDecimal lastEndSec = segments.get(segments.size() - 1).endSec();
+        return lastEndSec.doubleValue() >= durationSec - SOURCE_TRANSCRIPT_COMPLETENESS_TOLERANCE_SEC;
     }
 
     @Transactional
@@ -279,14 +306,17 @@ public class InternalDubbingService {
                     AudioTrack t = new AudioTrack();
                     t.setLesson(lesson);
                     t.setLanguage(job.getTargetLanguage());
-                    String voiceName = resolveVoiceName(job.getTargetLanguage());
-                    VoiceMapping voiceMapping = voiceMappingRepository.findByLanguageAndIsActiveTrue(job.getTargetLanguage())
-                            .stream()
-                            .filter(v -> v.getVoiceName().equals(voiceName))
-                            .findFirst()
-                            .orElseThrow(() -> new BusinessRuleViolationException(
-                                    "Khong con giong doc active cho ngon ngu " + job.getTargetLanguage()));
-                    t.setVoiceName(voiceName);
+                    // UC20 mở rộng — dùng đúng giọng người kích hoạt đã chọn (nếu có), không thì
+                    // giữ hành vi cũ: tự lấy giọng isDefault (BR-DUB-07).
+                    VoiceMapping voiceMapping = job.getVoiceMapping() != null
+                            ? job.getVoiceMapping()
+                            : voiceMappingRepository.findByLanguageAndIsActiveTrue(job.getTargetLanguage())
+                                    .stream()
+                                    .filter(v -> v.getVoiceName().equals(resolveVoiceName(job.getTargetLanguage())))
+                                    .findFirst()
+                                    .orElseThrow(() -> new BusinessRuleViolationException(
+                                            "Khong con giong doc active cho ngon ngu " + job.getTargetLanguage()));
+                    t.setVoiceName(voiceMapping.getVoiceName());
                     t.setVoiceMapping(voiceMapping);
                     t.setStatus(TrackStatus.PARTIAL);
                     return t;

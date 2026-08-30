@@ -23,4 +23,12 @@ public class DubbingController {
             Principal principal, @PathVariable Long lessonId, @Valid @RequestBody RequestReq req) {
         return ResponseEntity.ok(dubbingRequestService.requestDubbing(principal.getName(), lessonId, req));
     }
+
+    /** UC20 — huỷ job lồng tiếng đang chạy (PENDING/PROCESSING) giữa chừng. */
+    @PostMapping("/api/v1/lessons/{lessonId}/dubbing/cancel")
+    public ResponseEntity<Res> cancelDubbing(
+            Principal principal, @PathVariable Long lessonId, @Valid @RequestBody RequestReq req) {
+        return ResponseEntity.ok(
+                dubbingRequestService.cancelDubbing(principal.getName(), lessonId, req.targetLanguage()));
+    }
 }

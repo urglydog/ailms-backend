@@ -19,6 +19,9 @@ public class InternalTutorService {
     public ContextRes getContext(Long lessonId) {
         Lesson lesson = lessonRepository.findById(lessonId)
                 .orElseThrow(() -> new ResourceNotFoundException("Lesson", lessonId));
-        return new ContextRes(lesson.getTitle(), lesson.getSourceLanguage(), lesson.getDurationSec());
+        var course = lesson.getChapter().getCourse();
+        return new ContextRes(
+                lesson.getTitle(), lesson.getSourceLanguage(), lesson.getDurationSec(),
+                course.getTitle(), course.getDescription());
     }
 }

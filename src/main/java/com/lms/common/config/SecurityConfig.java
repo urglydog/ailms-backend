@@ -71,7 +71,10 @@ public class SecurityConfig {
             "/api/v1/courses/**",
             "/api/v1/categories",
             "/api/v1/categories/**",
-            "/api/v1/lessons/**"
+            "/api/v1/lessons/**",
+            // UC20 mở rộng — danh mục ngôn ngữ/giọng đọc đang hỗ trợ, dữ liệu tham chiếu công khai
+            // giống courses/categories, không gắn với 1 bài học hay tài khoản cụ thể nào.
+            "/api/v1/voice-options"
             // /api/v1/discovery/** đã chuyển sang PUBLIC_ENDPOINTS vì discovery/chat là POST, không phải GET
     };
 

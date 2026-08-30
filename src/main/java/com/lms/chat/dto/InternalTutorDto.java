@@ -10,6 +10,10 @@ public class InternalTutorDto {
     public record ContextRes(
             String lessonTitle,
             String sourceLanguage,
-            Integer durationSec
+            Integer durationSec,
+            /** UC30 mở rộng — ngữ cảnh cho system prompt fallback Google Search Grounding
+             * khi transcript không có đoạn nào đủ liên quan (xem TutorService bên Python). */
+            String courseTitle,
+            String courseDescription
     ) {}
 }
