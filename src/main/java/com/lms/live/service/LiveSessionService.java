@@ -21,6 +21,7 @@ import io.livekit.server.CanPublishData;
 import io.livekit.server.CanSubscribe;
 import io.livekit.server.RoomJoin;
 import io.livekit.server.RoomName;
+import io.livekit.server.RoomServiceClient;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -45,6 +46,7 @@ public class LiveSessionService {
     private final UserRepository userRepository;
     private final LiveKitConfig liveKitConfig;
     private final ApplicationEventPublisher eventPublisher;
+    private final RoomServiceClient roomServiceClient;
 
     /** Định danh participant LiveKit của giảng viên — webhook (BR-LIVE-09) dựa vào tiền tố này để nhận diện. */
     public static String instructorIdentity(Long instructorId) {
@@ -150,7 +152,25 @@ public class LiveSessionService {
         liveSessionRepository.save(session);
 
         eventPublisher.publishEvent(new LiveSessionEndedEvent(session.getId()));
+        deleteRoomBestEffort(session.getRoomName());
         return toRes(session);
+    }
+
+    /**
+     * Đóng hẳn phòng phía LiveKit — bắt buộc mọi trình duyệt đang kết nối (giảng viên, học viên,
+     * Translation Agent) ngắt kết nối NGAY, không đợi client tự nhận ra phiên đã kết thúc rồi tự
+     * rời. Chống đúng rủi ro thực tế: trình duyệt "treo" (đóng máy không tắt tab, mất mạng giữa
+     * chừng...) vẫn giữ kết nối WebRTC tới LiveKit Cloud, phát sinh phí dù phiên đã ENDED trong DB
+     * từ lâu. Best-effort — DB đã ghi ENDED rồi (nguồn sự thật), lỗi ở bước này chỉ log lại chứ
+     * không làm hỏng kết quả kết thúc phiên.
+     */
+    private void deleteRoomBestEffort(String roomName) {
+        try {
+            roomServiceClient.deleteRoom(roomName).execute();
+        } catch (Exception e) {
+            log.warn("Khong dong duoc phong LiveKit {} (khong anh huong trang thai DB): {}",
+                    roomName, e.getMessage());
+        }
     }
 
     private String resolveSourceLanguage(String requested, User instructor) {

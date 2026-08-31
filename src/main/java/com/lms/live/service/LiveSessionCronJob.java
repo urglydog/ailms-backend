@@ -4,6 +4,7 @@ import com.lms.live.entity.LiveSession;
 import com.lms.live.enums.LiveSessionStatus;
 import com.lms.live.event.LiveSessionEndedEvent;
 import com.lms.live.repository.LiveSessionRepository;
+import io.livekit.server.RoomServiceClient;
 import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -30,6 +31,7 @@ public class LiveSessionCronJob {
 
     private final LiveSessionRepository liveSessionRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final RoomServiceClient roomServiceClient;
 
     @Scheduled(fixedRate = 15000)
     @Transactional
@@ -49,6 +51,20 @@ public class LiveSessionCronJob {
                     session.getId(), GRACE_SECONDS);
         }
         liveSessionRepository.saveAll(stale);
-        stale.forEach(session -> eventPublisher.publishEvent(new LiveSessionEndedEvent(session.getId())));
+        stale.forEach(session -> {
+            eventPublisher.publishEvent(new LiveSessionEndedEvent(session.getId()));
+            deleteRoomBestEffort(session.getRoomName());
+        });
+    }
+
+    /** Xem javadoc {@link LiveSessionService#deleteRoomBestEffort} — cùng lý do: đóng phòng thật
+     * phía LiveKit, không chỉ đổi trạng thái DB, tránh phát sinh phí từ kết nối "treo". */
+    private void deleteRoomBestEffort(String roomName) {
+        try {
+            roomServiceClient.deleteRoom(roomName).execute();
+        } catch (Exception e) {
+            log.warn("Khong dong duoc phong LiveKit {} (khong anh huong trang thai DB): {}",
+                    roomName, e.getMessage());
+        }
     }
 }
