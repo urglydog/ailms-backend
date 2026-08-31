@@ -130,6 +130,15 @@
             <version>2.0.1</version>
         </dependency>
 
+        <!-- ── Giai đoạn 11: LiveKit Server SDK — sinh AccessToken (JWT) cho phòng live,
+             xác thực webhook (BR-LIVE-09). Viết bằng Kotlin nhưng dùng trực tiếp từ Java được
+             (interop chuẩn), kéo theo kotlin-stdlib làm transitive dependency. ── -->
+        <dependency>
+            <groupId>io.livekit</groupId>
+            <artifactId>livekit-server</artifactId>
+            <version>0.15.1</version>
+        </dependency>
+
         <!-- ── Dev: hot reload trong container ────────────── -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

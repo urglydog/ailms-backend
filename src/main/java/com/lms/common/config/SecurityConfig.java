@@ -62,6 +62,9 @@ public class SecurityConfig {
             "/api/v1/payments/ipn-mock",
             // UC49 Course Discovery — stateless, cho phép Guest gọi (quota theo IP, kiểm trong controller)
             "/api/v1/discovery/chat",
+            // Giai đoạn 11 (F11.1) — LiveKit Cloud gọi vào, không có JWT của hệ thống; xác thực
+            // thật là chữ ký HMAC kiểm trong LiveKitWebhookController (giống HMAC IPN thanh toán)
+            "/api/v1/live/webhooks/livekit",
             "/ws/**"                    // handshake WebSocket, token kiểm ở tầng STOMP
     };
 
@@ -74,7 +77,17 @@ public class SecurityConfig {
             "/api/v1/lessons/**",
             // UC20 mở rộng — danh mục ngôn ngữ/giọng đọc đang hỗ trợ, dữ liệu tham chiếu công khai
             // giống courses/categories, không gắn với 1 bài học hay tài khoản cụ thể nào.
-            "/api/v1/voice-options"
+            "/api/v1/voice-options",
+            // Giai đoạn 11 (F11.2, UC51) — Guest xem được live PUBIC (BR-LIVE-01); quyền xem THẬT
+            // lọc ở LiveViewService, endpoint này chỉ mở cửa Spring Security, không phải "ai xem
+            // gì cũng được". "/api/v1/courses/{id}/live-sessions" đã nằm dưới "/api/v1/courses/**"
+            // ở trên rồi nên không cần liệt kê lại ở đây.
+            "/api/v1/live-sessions/*/view",
+            // Giai đoạn 11 (F11.3, UC52) — badge số người nghe/ngôn ngữ đang phát hiện cho cả
+            // Guest (BR-LIVE-06 chỉ giới hạn NGÔN NGỮ nào hợp lệ, không giới hạn AI XEM được badge
+            // này); kích hoạt/rời (POST/DELETE cùng path) vẫn bắt buộc JWT vì không nằm trong
+            // PUBLIC_GET_ENDPOINTS (chỉ áp dụng method GET, xem HttpMethod.GET bên dưới).
+            "/api/v1/live-sessions/*/language-tracks"
             // /api/v1/discovery/** đã chuyển sang PUBLIC_ENDPOINTS vì discovery/chat là POST, không phải GET
     };
 
