@@ -146,6 +146,10 @@ services:
       GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
       # Token nội bộ để AI Worker gọi callback về đây
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-dev-internal-token}
+      # Giai đoạn 11 — LiveKit Cloud (F11.1)
+      LIVEKIT_URL: ${LIVEKIT_URL:-}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
     volumes:
       - .:/app                              # hot-reload khi sửa code
       - backend_maven_cache:/root/.m2       # cache dependency Maven giữa các lần chạy

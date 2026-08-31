@@ -131,6 +131,12 @@ lms:
     # Token AI Worker dùng khi gọi callback về đây
     api-token: ${INTERNAL_API_TOKEN:dev-internal-token}
 
+  # Giai đoạn 11 (F11.1) — LiveKit Cloud (cloud.livekit.io), lấy 3 giá trị này ở Settings → Keys
+  livekit:
+    server-url: ${LIVEKIT_URL:}
+    api-key: ${LIVEKIT_API_KEY:}
+    api-secret: ${LIVEKIT_API_SECRET:}
+
   # Giai đoạn 5 — trước đây khối này bị lồng nhầm dưới `payment:` do lỗi thụt dòng, sau đó lại bị
   # lồng nhầm sang dưới `ai:` (khác root `lms:` mà code `@Value("${lms.redis-keys...}")` đọc —
   # làm app không boot lên được, xác nhận qua PlaceholderResolutionException khi restart Giai đoạn
