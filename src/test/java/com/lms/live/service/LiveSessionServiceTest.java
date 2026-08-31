@@ -17,6 +17,7 @@ import com.lms.live.enums.LiveSessionStatus;
 import com.lms.live.enums.LiveVisibility;
 import com.lms.live.event.LiveSessionEndedEvent;
 import com.lms.live.repository.LiveSessionRepository;
+import io.livekit.server.RoomServiceClient;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -25,10 +26,12 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import retrofit2.Call;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -48,6 +51,8 @@ class LiveSessionServiceTest {
     @Mock private UserRepository userRepository;
     @Mock private LiveKitConfig liveKitConfig;
     @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock private RoomServiceClient roomServiceClient;
+    @Mock private Call<Void> deleteRoomCall;
 
     private LiveSessionService liveSessionService;
 
@@ -56,9 +61,11 @@ class LiveSessionServiceTest {
     private Course course;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws Exception {
         liveSessionService = new LiveSessionService(
-                liveSessionRepository, courseRepository, userRepository, liveKitConfig, eventPublisher);
+                liveSessionRepository, courseRepository, userRepository, liveKitConfig, eventPublisher, roomServiceClient);
+        lenient().when(roomServiceClient.deleteRoom(anyString())).thenReturn(deleteRoomCall);
+        lenient().when(deleteRoomCall.execute()).thenReturn(null);
 
         instructor = new User();
         instructor.setId(1L);
@@ -190,6 +197,22 @@ class LiveSessionServiceTest {
         ArgumentCaptor<LiveSessionEndedEvent> captor = ArgumentCaptor.forClass(LiveSessionEndedEvent.class);
         verify(eventPublisher).publishEvent(captor.capture());
         assertThat(captor.getValue().liveSessionId()).isEqualTo(SESSION_ID);
+
+        // Chống phí LiveKit oan (BUG THẬT 31/08/2026) — phải chủ động đóng phòng, không chỉ đổi
+        // trạng thái DB rồi tin trình duyệt tự rời.
+        verify(roomServiceClient).deleteRoom(session.getRoomName());
+    }
+
+    @Test
+    void end_dangLive_maLiveKitLoiKhiDongPhong_vanKetThucBinhThuong() throws Exception {
+        LiveSession session = scheduledSession();
+        session.setStatus(LiveSessionStatus.LIVE);
+        when(liveSessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(session));
+        when(deleteRoomCall.execute()).thenThrow(new java.io.IOException("LiveKit khong ket noi duoc"));
+
+        Res res = liveSessionService.end(INSTRUCTOR_EMAIL, SESSION_ID);
+
+        assertThat(res.status()).isEqualTo(LiveSessionStatus.ENDED);
     }
 
     @Test
