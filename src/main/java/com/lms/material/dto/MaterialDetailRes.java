@@ -23,7 +23,12 @@ public record MaterialDetailRes(
     public record FlashcardDto(
             Long id,
             String frontText,
-            String backText
+            String backText,
+            java.time.LocalDate nextReviewAt,
+            Integer intervalDays,
+            Integer repetitions,
+            java.math.BigDecimal easiness,
+            Boolean isDue
     ) {}
 
     @Builder

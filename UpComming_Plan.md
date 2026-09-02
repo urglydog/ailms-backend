@@ -78,6 +78,6 @@ Dưới đây là đánh giá quy mô của các tính năng đề xuất. Để
 ## 🚀 ROADMAP THỰC THI NGẮN HẠN (Sắp xếp theo thứ tự)
 1. ✅ **[AI-Discovery]** Fix lỗi Function Calling và RAG để AI tìm đúng khóa học. (Hoàn thành)
 2. ✅ **[Học liệu - Scope & Language]** Chuẩn hóa dropdown chọn chương bài học và lọc động danh sách ngôn ngữ dưa trên transcript hiện có. (Hoàn thành)
-3. 🟡 **[Học liệu - Quiz]** Xây dựng hệ thống làm bài Quiz, chấm điểm, lưu lịch sử, cho phép Giảng viên tạo ngân hàng câu hỏi. (Đang tiến hành)
-4. **[Học liệu - Flashcard]** Triển khai thuật toán Spaced Repetition (SM-2) nhắc nhở học viên.
-5. **[Quyền hạn]** Cập nhật giao diện Instructor để quản lý bộ học liệu, cập nhật Admin để tracking tài nguyên LLM.
+3. ✅ **[Học liệu - Quiz]** Xây dựng hệ thống làm bài Quiz, chấm điểm, lưu lịch sử, cho phép Giảng viên tạo ngân hàng câu hỏi. (Hoàn thành)
+4. ✅ **[Học liệu - Flashcard]** Triển khai thuật toán Spaced Repetition (SM-2) nhắc nhở học viên. (Hoàn thành)
+5. 🟡 **[Quyền hạn]** Cập nhật giao diện Instructor để quản lý bộ học liệu, cập nhật Admin để tracking tài nguyên LLM. (Đang tiến hành)
