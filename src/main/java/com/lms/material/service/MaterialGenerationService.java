@@ -248,19 +248,33 @@ public class MaterialGenerationService {
         return audioTrackRepository.findAvailableLanguagesByCourse(courseId);
     }
 
-    public java.util.List<com.lms.catalog.dto.ChapterDto.Res> getCourseChapters(Long courseId) {
+    public java.util.List<com.lms.catalog.dto.ChapterDto.Res> getCourseChapters(Long courseId, String language) {
         if (!courseRepository.existsById(courseId)) {
             throw new ResourceNotFoundException("Course", courseId);
         }
+        
+        java.util.List<com.lms.dubbing.entity.AudioTrack> tracks = audioTrackRepository.findCompletedByCourse(courseId);
+        java.util.Map<Long, java.util.Set<String>> lessonLanguageMap = new java.util.HashMap<>();
+        for (com.lms.dubbing.entity.AudioTrack track : tracks) {
+            lessonLanguageMap.computeIfAbsent(track.getLesson().getId(), k -> new java.util.HashSet<>()).add(track.getLanguage());
+        }
+
         return chapterRepository.findByCourseIdOrderByDisplayOrderAsc(courseId).stream()
-                .map(chapter -> new com.lms.catalog.dto.ChapterDto.Res(
-                        chapter.getId(),
-                        chapter.getTitle(),
-                        chapter.getDisplayOrder(),
-                        lessonRepository.findByChapterIdOrderByDisplayOrderAsc(chapter.getId()).stream()
-                                .map(lesson -> new com.lms.catalog.dto.LessonDto.Res(
+                .map(chapter -> {
+                    java.util.List<com.lms.catalog.dto.LessonDto.Res> filteredLessons = lessonRepository.findByChapterIdOrderByDisplayOrderAsc(chapter.getId()).stream()
+                            .filter(lesson -> {
+                                java.util.Set<String> langs = lessonLanguageMap.get(lesson.getId());
+                                if (langs == null || langs.isEmpty()) return false;
+                                if (language != null && !language.isEmpty() && !langs.contains(language)) return false;
+                                return true;
+                            })
+                            .map(lesson -> {
+                                java.util.Set<String> langs = lessonLanguageMap.get(lesson.getId());
+                                String langDisplay = langs != null ? String.join(", ", langs) : "";
+                                String titleWithLangs = lesson.getTitle() + " (" + langDisplay + ")";
+                                return new com.lms.catalog.dto.LessonDto.Res(
                                         lesson.getId(),
-                                        lesson.getTitle(),
+                                        titleWithLangs,
                                         lesson.getDisplayOrder(),
                                         lesson.getIsPreview(),
                                         lesson.getStatus(),
@@ -268,9 +282,17 @@ public class MaterialGenerationService {
                                         lesson.getVideoUrl(),
                                         lesson.getYoutubeId(),
                                         lesson.getDurationSec()
-                                ))
-                                .toList()
-                ))
+                                );
+                            })
+                            .toList();
+                    return new com.lms.catalog.dto.ChapterDto.Res(
+                            chapter.getId(),
+                            chapter.getTitle(),
+                            chapter.getDisplayOrder(),
+                            filteredLessons
+                    );
+                })
+                .filter(chapter -> !chapter.lessons().isEmpty())
                 .toList();
     }
 }
