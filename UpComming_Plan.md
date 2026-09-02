@@ -45,7 +45,11 @@ Dưới đây là đánh giá quy mô của các tính năng đề xuất. Để
 *   **Lưu lịch sử, chấm điểm, xem đáp án:** Độ khả thi **Rất Cao**. Đây là tính năng bắt buộc phải có cho một LMS tiêu chuẩn.
 *   **Giải thích chuyên sâu (AI Socratic Tutor):** Độ khả thi **Cao**. Tận dụng lại module Socratic Tutor hiện có, gọi prompt phụ khi học viên làm sai.
 *   **Phân tích điểm yếu (Knowledge Gap), Adaptive Testing, Gamification, SCORM:** Độ khả thi **Thấp - Rất Khó**. Cần cấu trúc dữ liệu đồ sộ (tagging chi tiết cho từng câu hỏi), real-time engine phức tạp.
-*   👉 *Kế hoạch triển khai (Ngắn hạn):* Xây dựng luồng tính điểm, lưu lịch sử bài làm (QuizAttempt), chống gian lận cơ bản (trộn câu hỏi, giới hạn thời gian), và nhúng Socratic Tutor giải thích câu sai.
+*   👉 ### 3. Học liệu - Quiz 
+- ✅ **Trạng thái**: Đã hoàn thành
+- **Tiến độ**:
+  - Giao diện bài thi (có/không giới hạn thời gian).
+  - Tích hợp Socratic Tutor giải thích đáp án sai.
 
 ### 3.3 Nhóm Mindmap
 *   **Xuất ảnh (PNG/PDF):** Độ khả thi **Cao**. Dễ dàng thực hiện bằng các thư viện Frontend chụp màn hình canvas/SVG (ví dụ: html2canvas).
