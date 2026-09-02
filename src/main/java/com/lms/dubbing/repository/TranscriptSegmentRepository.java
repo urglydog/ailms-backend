@@ -19,4 +19,7 @@ public interface TranscriptSegmentRepository extends JpaRepository<TranscriptSeg
 
     @org.springframework.data.jpa.repository.Query("SELECT ts FROM TranscriptSegment ts JOIN ts.transcript t JOIN t.lesson l WHERE l.chapter.id = :chapterId AND t.isSource = true ORDER BY l.id ASC, ts.seq ASC")
     List<TranscriptSegment> findByChapterIdAndIsSourceTrue(@org.springframework.data.repository.query.Param("chapterId") Long chapterId);
+
+    @org.springframework.data.jpa.repository.Query("SELECT ts FROM TranscriptSegment ts JOIN ts.transcript t JOIN t.lesson l WHERE l.id IN :lessonIds AND t.isSource = true ORDER BY l.id ASC, ts.seq ASC")
+    List<TranscriptSegment> findByLessonIdInAndIsSourceTrue(@org.springframework.data.repository.query.Param("lessonIds") List<Long> lessonIds);
 }

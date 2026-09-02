@@ -53,6 +53,13 @@ public class InternalMaterialService {
             segments = transcriptSegmentRepository.findByCourseIdAndIsSourceTrue(generation.getCourse().getId());
         } else if (generation.getScopeType() == ScopeType.CHAPTER) {
             segments = transcriptSegmentRepository.findByChapterIdAndIsSourceTrue(generation.getScopeRefId());
+        } else if (generation.getScopeType() == ScopeType.CUSTOM_LESSONS && generation.getCustomLessonIds() != null && !generation.getCustomLessonIds().trim().isEmpty()) {
+            List<Long> lessonIds = java.util.Arrays.stream(generation.getCustomLessonIds().replaceAll("[\\[\\]\"]", "").split(","))
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .map(Long::parseLong)
+                    .toList();
+            segments = transcriptSegmentRepository.findByLessonIdInAndIsSourceTrue(lessonIds);
         } else {
             segments = List.of(); // Should not happen based on BR-MAT-01
         }
