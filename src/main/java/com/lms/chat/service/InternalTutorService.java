@@ -17,6 +17,10 @@ public class InternalTutorService {
 
     @Transactional(readOnly = true)
     public ContextRes getContext(Long lessonId) {
+        if (lessonId != null && lessonId == -1L) {
+            return new ContextRes("Bài tập trắc nghiệm", "vi", 0, "Hệ thống AI LMS", "Giải thích câu hỏi trắc nghiệm");
+        }
+        
         Lesson lesson = lessonRepository.findById(lessonId)
                 .orElseThrow(() -> new ResourceNotFoundException("Lesson", lessonId));
         var course = lesson.getChapter().getCourse();
