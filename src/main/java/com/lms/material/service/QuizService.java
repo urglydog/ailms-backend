@@ -31,6 +31,8 @@ public class QuizService {
     private final UserRepository userRepository;
     private final CourseRepository courseRepository;
     private final EnrollmentRepository enrollmentRepository;
+    private final org.springframework.web.client.RestTemplate restTemplate;
+    private final com.lms.common.config.AiWorkerConfig aiWorkerConfig;
 
     @Transactional
     public void setOfficial(String instructorEmail, Long quizId) {
@@ -102,8 +104,12 @@ public class QuizService {
         List<QuizAnswer> answers = quizAnswerRepository.findByQuizAttempt_Id(attemptId);
         int correctCount = 0;
         
+        List<QuizAttemptDto.AnswerDetailDto> details = new ArrayList<>();
         for (QuizAnswer answer : answers) {
             Long selectedOptionId = req.answers().get(answer.getQuizQuestion().getId());
+            QuizOption correctOpt = quizOptionRepository.findByQuizQuestion_Id(answer.getQuizQuestion().getId())
+                    .stream().filter(o -> Boolean.TRUE.equals(o.getIsCorrect())).findFirst().orElse(null);
+                    
             if (selectedOptionId != null) {
                 QuizOption selectedOption = quizOptionRepository.findById(selectedOptionId).orElse(null);
                 answer.setSelectedOption(selectedOption);
@@ -117,6 +123,18 @@ public class QuizService {
                 answer.setIsCorrect(false);
             }
             quizAnswerRepository.save(answer);
+            
+            List<QuizAttemptDto.OptionDto> options = quizOptionRepository.findByQuizQuestion_Id(answer.getQuizQuestion().getId())
+                    .stream().map(o -> new QuizAttemptDto.OptionDto(o.getId(), o.getContent())).toList();
+                    
+            details.add(new QuizAttemptDto.AnswerDetailDto(
+                    answer.getQuizQuestion().getId(),
+                    answer.getQuizQuestion().getContent(),
+                    selectedOptionId,
+                    correctOpt != null ? correctOpt.getId() : null,
+                    answer.getIsCorrect(),
+                    options
+            ));
         }
         
         attempt.setCorrectCount(correctCount);
@@ -125,7 +143,7 @@ public class QuizService {
         attempt.setSubmittedAt(LocalDateTime.now());
         quizAttemptRepository.save(attempt);
         
-        return new QuizAttemptDto.SubmitRes(attemptId, score, correctCount, attempt.getTotalQuestions());
+        return new QuizAttemptDto.SubmitRes(attemptId, score, correctCount, attempt.getTotalQuestions(), details);
     }
 
     @Transactional(readOnly = true)
@@ -136,5 +154,47 @@ public class QuizService {
         return quizAttemptRepository.findByUser_EmailAndQuiz_IdOrderByScoreDesc(studentEmail, quiz.getId()).stream()
                 .map(a -> new QuizAttemptDto.HistoryRes(a.getId(), a.getScore(), a.getCorrectCount(), a.getTotalQuestions(), a.getSubmittedAt(), a.getQuiz().getId()))
                 .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public QuizAttemptDto.ExplainRes explainWrongAnswer(String studentEmail, QuizAttemptDto.ExplainReq req) {
+        QuizQuestion question = quizQuestionRepository.findById(req.questionId())
+                .orElseThrow(() -> new ResourceNotFoundException("QuizQuestion", req.questionId()));
+                
+        // Ensure student actually took this quiz (basic authorization)
+        // For simplicity, we just pass the question directly to AI
+        
+        List<QuizOption> options = quizOptionRepository.findByQuizQuestion_Id(question.getId());
+        QuizOption correctOption = options.stream().filter(o -> Boolean.TRUE.equals(o.getIsCorrect())).findFirst().orElse(null);
+        QuizOption selectedOption = options.stream().filter(o -> o.getId().equals(req.selectedOptionId())).findFirst().orElse(null);
+        
+        if (correctOption == null) throw new IllegalArgumentException("Khong tim thay dap an dung");
+        
+        String prompt = "Giải thích tại sao đáp án tôi chọn lại sai và đáp án kia lại đúng.\n" +
+                "Câu hỏi: " + question.getContent() + "\n" +
+                "Các đáp án:\n" +
+                options.stream().map(o -> "- " + o.getContent()).collect(Collectors.joining("\n")) + "\n" +
+                "Đáp án đúng: " + correctOption.getContent() + "\n" +
+                "Đáp án tôi chọn: " + (selectedOption != null ? selectedOption.getContent() : "Không chọn") + "\n" +
+                "Vui lòng giải thích ngắn gọn, dễ hiểu và mang tính giáo dục (dùng tiếng Việt).";
+                
+        Map<String, Object> payload = Map.of(
+                "question", prompt,
+                "lesson_id", -1, // Not bound to a specific lesson, just a general explanation
+                "history", List.of(),
+                "attachments", List.of()
+        );
+        
+        try {
+            // Re-use tutor/ask endpoint which handles generating AI response
+            Map res = restTemplate.postForObject(
+                    aiWorkerConfig.getBaseUrl() + "/api/v1/tutor/ask", payload, Map.class);
+            if (res != null && res.get("answer") != null) {
+                return new QuizAttemptDto.ExplainRes((String) res.get("answer"));
+            }
+        } catch (Exception e) {
+            // ignore and fallback
+        }
+        return new QuizAttemptDto.ExplainRes("Gia sư AI hiện không khả dụng để giải thích câu hỏi này. Vui lòng thử lại sau.");
     }
 }

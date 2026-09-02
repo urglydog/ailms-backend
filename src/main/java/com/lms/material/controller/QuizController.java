@@ -44,4 +44,12 @@ public class QuizController {
     public ResponseEntity<List<QuizAttemptDto.HistoryRes>> getAttemptHistory(Principal principal, @PathVariable Long courseId) {
         return ResponseEntity.ok(quizService.getAttemptHistory(principal.getName(), courseId));
     }
+
+    @PostMapping("/quizzes/tutor/explain")
+    @PreAuthorize("hasRole('STUDENT')")
+    public ResponseEntity<QuizAttemptDto.ExplainRes> explainWrongAnswer(
+            Principal principal,
+            @RequestBody QuizAttemptDto.ExplainReq req) {
+        return ResponseEntity.ok(quizService.explainWrongAnswer(principal.getName(), req));
+    }
 }
