@@ -45,7 +45,11 @@ Dưới đây là đánh giá quy mô của các tính năng đề xuất. Để
 *   **Lưu lịch sử, chấm điểm, xem đáp án:** Độ khả thi **Rất Cao**. Đây là tính năng bắt buộc phải có cho một LMS tiêu chuẩn.
 *   **Giải thích chuyên sâu (AI Socratic Tutor):** Độ khả thi **Cao**. Tận dụng lại module Socratic Tutor hiện có, gọi prompt phụ khi học viên làm sai.
 *   **Phân tích điểm yếu (Knowledge Gap), Adaptive Testing, Gamification, SCORM:** Độ khả thi **Thấp - Rất Khó**. Cần cấu trúc dữ liệu đồ sộ (tagging chi tiết cho từng câu hỏi), real-time engine phức tạp.
-*   👉 *Kế hoạch triển khai (Ngắn hạn):* Xây dựng luồng tính điểm, lưu lịch sử bài làm (QuizAttempt), chống gian lận cơ bản (trộn câu hỏi, giới hạn thời gian), và nhúng Socratic Tutor giải thích câu sai.
+*   👉 ### 3. Học liệu - Quiz 
+- ✅ **Trạng thái**: Đã hoàn thành
+- **Tiến độ**:
+  - Giao diện bài thi (có/không giới hạn thời gian).
+  - Tích hợp Socratic Tutor giải thích đáp án sai.
 
 ### 3.3 Nhóm Mindmap
 *   **Xuất ảnh (PNG/PDF):** Độ khả thi **Cao**. Dễ dàng thực hiện bằng các thư viện Frontend chụp màn hình canvas/SVG (ví dụ: html2canvas).
@@ -74,6 +78,6 @@ Dưới đây là đánh giá quy mô của các tính năng đề xuất. Để
 ## 🚀 ROADMAP THỰC THI NGẮN HẠN (Sắp xếp theo thứ tự)
 1. ✅ **[AI-Discovery]** Fix lỗi Function Calling và RAG để AI tìm đúng khóa học. (Hoàn thành)
 2. ✅ **[Học liệu - Scope & Language]** Chuẩn hóa dropdown chọn chương bài học và lọc động danh sách ngôn ngữ dưa trên transcript hiện có. (Hoàn thành)
-3. 🟡 **[Học liệu - Quiz]** Xây dựng hệ thống làm bài Quiz, chấm điểm, lưu lịch sử, cho phép Giảng viên tạo ngân hàng câu hỏi. (Đang tiến hành)
-4. **[Học liệu - Flashcard]** Triển khai thuật toán Spaced Repetition (SM-2) nhắc nhở học viên.
-5. **[Quyền hạn]** Cập nhật giao diện Instructor để quản lý bộ học liệu, cập nhật Admin để tracking tài nguyên LLM.
+3. ✅ **[Học liệu - Quiz]** Xây dựng hệ thống làm bài Quiz, chấm điểm, lưu lịch sử, cho phép Giảng viên tạo ngân hàng câu hỏi. (Hoàn thành)
+4. ✅ **[Học liệu - Flashcard]** Triển khai thuật toán Spaced Repetition (SM-2) nhắc nhở học viên. (Hoàn thành)
+5. 🟡 **[Quyền hạn]** Cập nhật giao diện Instructor để quản lý bộ học liệu, cập nhật Admin để tracking tài nguyên LLM. (Đang tiến hành)

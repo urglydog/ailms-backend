@@ -41,6 +41,7 @@ public class MaterialGenerationService {
     private final com.lms.material.repository.MindmapRepository mindmapRepository;
     private final com.lms.material.repository.FlashcardDeckRepository flashcardDeckRepository;
     private final com.lms.material.repository.FlashcardRepository flashcardRepository;
+    private final com.lms.material.repository.FlashcardReviewRepository flashcardReviewRepository;
     private final com.lms.material.repository.QuizRepository quizRepository;
     private final com.lms.material.repository.QuizQuestionRepository quizQuestionRepository;
     private final com.lms.material.repository.QuizOptionRepository quizOptionRepository;
@@ -140,13 +141,39 @@ public class MaterialGenerationService {
         } else if (generation.getMaterialType() == com.lms.common.enums.MaterialType.FLASHCARD) {
             java.util.Optional<com.lms.material.entity.FlashcardDeck> deck = flashcardDeckRepository.findByMaterialGeneration_Id(generation.getId());
             if (deck.isPresent()) {
-                flashcards = flashcardRepository.findByFlashcardDeck_Id(deck.get().getId())
+                Long deckId = deck.get().getId();
+                java.util.Map<Long, com.lms.material.entity.FlashcardReview> reviewMap = flashcardReviewRepository.findByUser_IdAndFlashcard_FlashcardDeck_Id(user.getId(), deckId)
+                        .stream().collect(java.util.stream.Collectors.toMap(r -> r.getFlashcard().getId(), r -> r));
+
+                flashcards = flashcardRepository.findByFlashcardDeck_Id(deckId)
                         .stream()
-                        .map(f -> com.lms.material.dto.MaterialDetailRes.FlashcardDto.builder()
-                                .id(f.getId())
-                                .frontText(f.getFrontText())
-                                .backText(f.getBackText())
-                                .build())
+                        .map(card -> {
+                            com.lms.material.entity.FlashcardReview r = reviewMap.get(card.getId());
+                            if (r != null) {
+                                boolean isDue = r.getNextReviewAt() == null || !r.getNextReviewAt().isAfter(java.time.LocalDate.now());
+                                return com.lms.material.dto.MaterialDetailRes.FlashcardDto.builder()
+                                        .id(card.getId())
+                                        .frontText(card.getFrontText())
+                                        .backText(card.getBackText())
+                                        .nextReviewAt(r.getNextReviewAt())
+                                        .intervalDays(r.getIntervalDays())
+                                        .repetitions(r.getRepetitions())
+                                        .easiness(r.getEasiness())
+                                        .isDue(isDue)
+                                        .build();
+                            } else {
+                                return com.lms.material.dto.MaterialDetailRes.FlashcardDto.builder()
+                                        .id(card.getId())
+                                        .frontText(card.getFrontText())
+                                        .backText(card.getBackText())
+                                        .nextReviewAt(java.time.LocalDate.now())
+                                        .intervalDays(0)
+                                        .repetitions(0)
+                                        .easiness(new java.math.BigDecimal("2.50"))
+                                        .isDue(true)
+                                        .build();
+                            }
+                        })
                         .toList();
             }
         } else if (generation.getMaterialType() == com.lms.common.enums.MaterialType.QUIZ) {
