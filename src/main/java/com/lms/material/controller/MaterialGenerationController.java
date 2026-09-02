@@ -52,7 +52,9 @@ public class MaterialGenerationController {
     }
 
     @GetMapping("/course-chapters")
-    public ResponseEntity<List<com.lms.catalog.dto.ChapterDto.Res>> getCourseChapters(@RequestParam Long courseId) {
-        return ResponseEntity.ok(materialGenerationService.getCourseChapters(courseId));
+    public ResponseEntity<List<com.lms.catalog.dto.ChapterDto.Res>> getCourseChapters(
+            @RequestParam Long courseId,
+            @RequestParam(required = false) String language) {
+        return ResponseEntity.ok(materialGenerationService.getCourseChapters(courseId, language));
     }
 }
