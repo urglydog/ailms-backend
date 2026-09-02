@@ -45,12 +45,12 @@ services:
     image: redis:7-alpine
     container_name: lms_redis
     restart: unless-stopped
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:?Thieu_Mat_Khau_Redis_trong_env}
     volumes:
       - redis_data:/data
     # Healthcheck để backend/worker chờ đúng thời điểm Redis sẵn sàng
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:?Thieu_Mat_Khau_Redis_trong_env}", "ping"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -108,6 +108,7 @@ services:
       # (property đã đổi tên từ Boot 3.0 — dùng tên cũ là Redis không kết nối được)
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD:?Thieu_Mat_Khau_Redis_trong_env}
       # Mail (Mailpit)
       SPRING_MAIL_HOST: mailpit
       SPRING_MAIL_PORT: 1025
@@ -182,7 +183,7 @@ services:
     env_file:
       - ../ai-worker/.env
     environment: &ai_env
-      REDIS_URL: redis://redis:6379/0
+      REDIS_URL: redis://:${REDIS_PASSWORD:?Thieu_Mat_Khau_Redis_trong_env}@redis:6379/0
       # AI Worker KHÔNG kết nối MySQL trực tiếp (xem architecture.md) —
       # mọi thay đổi dữ liệu phải gọi callback về backend.
       INTERNAL_BE_URL: http://backend:8080
