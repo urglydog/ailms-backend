@@ -30,11 +30,30 @@ public class QuizAttemptDto {
             Map<Long, Long> answers
     ) {}
 
+    public record AnswerDetailDto(
+            Long questionId,
+            String content,
+            Long selectedOptionId,
+            Long correctOptionId,
+            boolean isCorrect,
+            List<OptionDto> options
+    ) {}
+
     public record SubmitRes(
             Long attemptId,
             BigDecimal score,
             Integer correctCount,
-            Integer totalQuestions
+            Integer totalQuestions,
+            List<AnswerDetailDto> details
+    ) {}
+
+    public record ExplainReq(
+            Long questionId,
+            Long selectedOptionId
+    ) {}
+
+    public record ExplainRes(
+            String explanation
     ) {}
 
     public record HistoryRes(
