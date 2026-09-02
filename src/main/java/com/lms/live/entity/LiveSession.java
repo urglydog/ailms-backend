@@ -60,6 +60,16 @@ public class LiveSession extends BaseEntity {
     @Column(name = "instructor_disconnected_at")
     private LocalDateTime instructorDisconnectedAt;
 
+    /**
+     * F11.5 mở rộng — số người đang xem "Phụ đề gốc" (độc lập hoàn toàn với lồng tiếng: trước đây
+     * phụ đề chỉ là sản phẩm phụ của {@code LiveLanguageTrack}, không ai chọn dịch thì không có
+     * Azure nào chạy nên không có chữ nào để hiện). Không cần bảng/UNIQUE riêng như
+     * {@code LiveLanguageTrack} vì chỉ có ĐÚNG 1 luồng/phiên (không có chiều "ngôn ngữ" để dedupe)
+     * — 1 counter ngay trên session là đủ. 0 → dừng luồng nhận diện gốc phía AI Worker.
+     */
+    @Column(name = "original_subtitle_listener_count", nullable = false)
+    private Integer originalSubtitleListenerCount = 0;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "instructor_id", nullable = false)
     private User instructor;
