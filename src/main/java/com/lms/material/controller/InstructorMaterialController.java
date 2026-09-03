@@ -21,6 +21,8 @@ public class InstructorMaterialController {
 
     private final MindmapRepository mindmapRepository;
     private final FlashcardDeckRepository flashcardDeckRepository;
+    private final com.lms.material.repository.MaterialGenerationRepository materialGenerationRepository;
+    private final com.lms.material.repository.QuizRepository quizRepository;
 
     @PutMapping("/mindmaps/{id}/set-official")
     @PreAuthorize("hasRole('INSTRUCTOR')")
@@ -56,9 +58,7 @@ public class InstructorMaterialController {
     public ResponseEntity<java.util.List<java.util.Map<String, Object>>> getMaterialsForCourse(Principal principal, @PathVariable Long courseId) {
         // Fetch all generated materials for the course
         java.util.List<com.lms.material.entity.MaterialGeneration> generations = 
-            com.lms.context.ApplicationContextProvider.getApplicationContext()
-                .getBean(com.lms.material.repository.MaterialGenerationRepository.class)
-                .findByCourse_IdOrderByCreatedAtDesc(courseId);
+            materialGenerationRepository.findByCourse_IdOrderByCreatedAtDesc(courseId);
                 
         java.util.List<java.util.Map<String, Object>> result = new java.util.ArrayList<>();
         for (com.lms.material.entity.MaterialGeneration gen : generations) {
@@ -82,9 +82,7 @@ public class InstructorMaterialController {
                         map.put("isOfficial", f.getIsOfficial());
                     });
                 } else if (gen.getMaterialType() == com.lms.common.enums.MaterialType.QUIZ) {
-                    com.lms.context.ApplicationContextProvider.getApplicationContext()
-                        .getBean(com.lms.material.repository.QuizRepository.class)
-                        .findByMaterialGeneration_Id(gen.getId()).ifPresent(q -> {
+                    quizRepository.findByMaterialGeneration_Id(gen.getId()).ifPresent(q -> {
                             map.put("materialId", q.getId());
                             map.put("isOfficial", q.getIsOfficial());
                             map.put("randomPickCount", q.getRandomPickCount());

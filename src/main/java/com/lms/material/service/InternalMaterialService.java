@@ -150,7 +150,7 @@ public class InternalMaterialService {
 
         if (req.usageMetadata() != null) {
             com.lms.common.entity.AiUsageLog usageLog = new com.lms.common.entity.AiUsageLog();
-            usageLog.setUser(generation.getUser());
+            usageLog.setUserId(generation.getUser().getId());
             usageLog.setFeatureType(generation.getMaterialType().name());
             
             int promptTokens = req.usageMetadata().promptTokens() != null ? req.usageMetadata().promptTokens() : 0;
