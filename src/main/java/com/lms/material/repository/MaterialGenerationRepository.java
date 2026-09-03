@@ -23,4 +23,6 @@ public interface MaterialGenerationRepository extends JpaRepository<MaterialGene
     Optional<MaterialGeneration> findTopByUser_IdAndCourse_IdOrderByVersionNoDesc(Long userId, Long courseId);
     
     List<MaterialGeneration> findByUser_IdAndCourse_IdOrderByVersionNoDesc(Long userId, Long courseId);
+
+    List<MaterialGeneration> findByCourse_IdOrderByCreatedAtDesc(Long courseId);
 }

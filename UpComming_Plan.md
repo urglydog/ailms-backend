@@ -70,8 +70,11 @@ Dưới đây là đánh giá quy mô của các tính năng đề xuất. Để
 - **Phân quyền sinh học liệu:**
   - **Giảng viên (Instructor):** Là người nắm quyền **chính** trong việc sinh ra bộ Quiz, Flashcard, Mindmap chuẩn (Official Materials) cho khóa học của mình. Giảng viên cấu hình độ khó, số lượng, lưu lại làm tài nguyên dùng chung.
   - **Học viên (Student):** Học viên sử dụng các bộ học liệu chuẩn do Giảng viên tạo ra. Chỉ cung cấp cho học viên quyền sinh học liệu "Tùy chỉnh cá nhân" với **giới hạn rất khắt khe** (BR-MAT-08).
-- **Hệ thống tổ chức thi (Quiz Engine):** Cập nhật bảng `quizzes` có thêm cờ `is_official`, cho phép Giảng viên tạo ngân hàng câu hỏi (100 câu), hệ thống tự động bốc ngẫu nhiên (30 câu) cho mỗi lần học viên làm kiểm tra. Lấy điểm cao nhất.
-- **Admin Dashboard:** Bổ sung tính năng theo dõi chi phí API / số lượng token sinh ra theo từng người dùng (Giảng viên/Học viên). Thêm nút "Khóa quyền AI" đối với các tài khoản có dấu hiệu spam. 
+5. 🟡 **[Quyền hạn]** Cập nhật giao diện Instructor để quản lý bộ học liệu, cập nhật Admin để tracking tài nguyên LLM. (Đang tiến hành)
+   - **Tối ưu Quiz Engine (Hệ thống thi)**: Nâng cấp bảng `quizzes` bằng cách bổ sung cấu hình thi (thời gian mở/đóng, thời gian làm bài, số lần làm bài tối đa, số lượng câu hỏi xào ngẫu nhiên, cho phép xem lại đáp án). Nếu cờ `allow_review = false`, Backend sẽ tự động ẩn đáp án đúng.
+   - **Phân quyền sinh học liệu**: Cấp quyền `is_official` cho Flashcard và Mindmap để Giảng viên đánh dấu học liệu chuẩn của khóa học. Học viên chỉ được xem học liệu chuẩn và bị giới hạn nghiêm ngặt việc sinh học liệu cá nhân.
+   - **Giao diện Instructor**: Xây dựng màn hình "Cấu hình Bài thi" và "Bảng điểm lớp học" (Gradebook) giúp Giảng viên quản lý khóa học như một LMS chuyên nghiệp.
+   - **Admin Dashboard & Tracking**: Tạo bảng `ai_usage_logs` ghi nhận lượng token tiêu thụ mỗi khi gọi API LLM. Xây dựng màn hình Analytics cho Admin và tích hợp nút "Khóa quyền AI" (cột `is_ai_locked` trong `users`) đối với người dùng lạm dụng. 
 
 ---
 

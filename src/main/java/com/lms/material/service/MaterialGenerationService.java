@@ -58,6 +58,10 @@ public class MaterialGenerationService {
     public MaterialGenerationRes requestGeneration(String email, MaterialGenerationReq req) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("User", email));
+                
+        if (Boolean.TRUE.equals(user.getIsAiLocked())) {
+            throw new AccessDeniedDomainException("Tai khoan cua ban da bi khoa tinh nang AI do vi pham chinh sach su dung.");
+        }
         Course course = courseRepository.findById(req.courseId())
                 .orElseThrow(() -> new ResourceNotFoundException("Course", req.courseId()));
 

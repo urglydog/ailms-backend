@@ -49,6 +49,26 @@ public class QuizService {
     }
 
     @Transactional
+    public void updateQuizSettings(String instructorEmail, Long quizId, com.lms.material.dto.QuizDto.QuizSettingsReq req) {
+        Quiz quiz = quizRepository.findById(quizId)
+                .orElseThrow(() -> new ResourceNotFoundException("Quiz", quizId));
+        Course course = quiz.getMaterialGeneration().getCourse();
+        
+        if (!course.getInstructor().getEmail().equals(instructorEmail)) {
+            throw new AccessDeniedDomainException("Chi giang vien cua khoa hoc moi duoc sua cau hinh bai thi");
+        }
+        
+        quiz.setRandomPickCount(req.randomPickCount());
+        if (req.allowReview() != null) quiz.setAllowReview(req.allowReview());
+        quiz.setStartTime(req.startTime());
+        quiz.setEndTime(req.endTime());
+        quiz.setDurationMinutes(req.durationMinutes());
+        quiz.setMaxAttempts(req.maxAttempts());
+        
+        quizRepository.save(quiz);
+    }
+
+    @Transactional
     public QuizAttemptDto.StartRes startAttempt(String studentEmail, Long courseId) {
         User student = userRepository.findByEmail(studentEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("User", studentEmail));
@@ -59,10 +79,29 @@ public class QuizService {
         
         Quiz quiz = quizRepository.findFirstByMaterialGeneration_Course_IdAndIsOfficialTrueOrderByCreatedAtDesc(courseId)
                 .orElseThrow(() -> new ResourceNotFoundException("Khong tim thay bai Quiz chinh thuc nao cho khoa hoc", courseId));
+                
+        // Kiểm tra khung giờ mở/đóng thi
+        LocalDateTime now = LocalDateTime.now();
+        if (quiz.getStartTime() != null && now.isBefore(quiz.getStartTime())) {
+            throw new AccessDeniedDomainException("Bai thi chua mo. Thoi gian mo: " + quiz.getStartTime());
+        }
+        if (quiz.getEndTime() != null && now.isAfter(quiz.getEndTime())) {
+            throw new AccessDeniedDomainException("Bai thi da ket thuc vao luc: " + quiz.getEndTime());
+        }
+        
+        // Kiểm tra số lần thi
+        if (quiz.getMaxAttempts() != null) {
+            long attemptCount = quizAttemptRepository.findByUser_EmailAndQuiz_IdOrderByScoreDesc(studentEmail, quiz.getId()).size();
+            if (attemptCount >= quiz.getMaxAttempts()) {
+                throw new AccessDeniedDomainException("Ban da het so luot lam bai thi nay (" + quiz.getMaxAttempts() + " luot)");
+            }
+        }
         
         List<QuizQuestion> allQuestions = quizQuestionRepository.findByQuiz_IdOrderByDisplayOrderAsc(quiz.getId());
         Collections.shuffle(allQuestions);
-        List<QuizQuestion> selectedQuestions = allQuestions.stream().limit(30).collect(Collectors.toList());
+        
+        int pickCount = quiz.getRandomPickCount() != null ? quiz.getRandomPickCount() : allQuestions.size();
+        List<QuizQuestion> selectedQuestions = allQuestions.stream().limit(pickCount).collect(Collectors.toList());
         
         QuizAttempt attempt = new QuizAttempt();
         attempt.setQuiz(quiz);
@@ -105,6 +144,8 @@ public class QuizService {
         int correctCount = 0;
         
         List<QuizAttemptDto.AnswerDetailDto> details = new ArrayList<>();
+        boolean allowReview = Boolean.TRUE.equals(attempt.getQuiz().getAllowReview());
+        
         for (QuizAnswer answer : answers) {
             Long selectedOptionId = req.answers().get(answer.getQuizQuestion().getId());
             QuizOption correctOpt = quizOptionRepository.findByQuizQuestion_Id(answer.getQuizQuestion().getId())
@@ -131,8 +172,8 @@ public class QuizService {
                     answer.getQuizQuestion().getId(),
                     answer.getQuizQuestion().getContent(),
                     selectedOptionId,
-                    correctOpt != null ? correctOpt.getId() : null,
-                    answer.getIsCorrect(),
+                    allowReview && correctOpt != null ? correctOpt.getId() : null, // Ẩn đáp án đúng nếu allowReview = false
+                    allowReview ? answer.getIsCorrect() : false, // Ẩn kết quả Đúng/Sai nếu allowReview = false
                     options
             ));
         }
@@ -158,6 +199,12 @@ public class QuizService {
 
     @Transactional(readOnly = true)
     public QuizAttemptDto.ExplainRes explainWrongAnswer(String studentEmail, QuizAttemptDto.ExplainReq req) {
+        User user = userRepository.findByEmail(studentEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("User", studentEmail));
+        if (Boolean.TRUE.equals(user.getIsAiLocked())) {
+            throw new AccessDeniedDomainException("Tai khoan cua ban da bi khoa tinh nang AI do vi pham chinh sach su dung.");
+        }
+        
         QuizQuestion question = quizQuestionRepository.findById(req.questionId())
                 .orElseThrow(() -> new ResourceNotFoundException("QuizQuestion", req.questionId()));
                 

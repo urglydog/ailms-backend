@@ -42,6 +42,7 @@ public class InternalMaterialService {
     private final QuizRepository quizRepository;
     private final QuizQuestionRepository quizQuestionRepository;
     private final QuizOptionRepository quizOptionRepository;
+    private final com.lms.common.repository.AiUsageLogRepository aiUsageLogRepository;
 
     @Transactional(readOnly = true)
     public GenerationContextRes getContext(Long generationId) {
@@ -145,6 +146,25 @@ public class InternalMaterialService {
         } else {
             generation.setStatus(GenStatus.FAILED);
             generation.setErrorMessage(req.errorMessage());
+        }
+
+        if (req.usageMetadata() != null) {
+            com.lms.common.entity.AiUsageLog usageLog = new com.lms.common.entity.AiUsageLog();
+            usageLog.setUserId(generation.getUser().getId());
+            usageLog.setFeatureType(generation.getMaterialType().name());
+            
+            int promptTokens = req.usageMetadata().promptTokens() != null ? req.usageMetadata().promptTokens() : 0;
+            int completionTokens = req.usageMetadata().completionTokens() != null ? req.usageMetadata().completionTokens() : 0;
+            
+            usageLog.setPromptTokens(promptTokens);
+            usageLog.setCompletionTokens(completionTokens);
+            usageLog.setTotalTokens(promptTokens + completionTokens);
+            
+            // Tạm tính cost: $1.5 / 1M prompt tokens, $2.0 / 1M completion tokens (Gemini Flash)
+            double cost = (promptTokens / 1000000.0 * 1.5) + (completionTokens / 1000000.0 * 2.0);
+            usageLog.setCostUsd(java.math.BigDecimal.valueOf(cost));
+            
+            aiUsageLogRepository.save(usageLog);
         }
 
         materialGenerationRepository.save(generation);
