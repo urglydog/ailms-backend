@@ -30,7 +30,14 @@ public class InternalMaterialDto {
             String errorMessage,
             String mermaidCode,
             List<FlashcardDto> flashcards,
-            List<QuizDto> quizzes
+            List<QuizDto> quizzes,
+            UsageMetadataDto usageMetadata
+    ) {}
+    
+    public record UsageMetadataDto(
+            Integer promptTokens,
+            Integer completionTokens,
+            Integer totalTokens
     ) {}
 
     public record FlashcardDto(

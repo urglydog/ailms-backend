@@ -24,6 +24,16 @@ public class QuizController {
         return ResponseEntity.ok().build();
     }
 
+    @PutMapping("/instructor/quizzes/{quizId}/settings")
+    @PreAuthorize("hasRole('INSTRUCTOR')")
+    public ResponseEntity<Void> updateQuizSettings(
+            Principal principal, 
+            @PathVariable Long quizId, 
+            @RequestBody com.lms.material.dto.QuizDto.QuizSettingsReq req) {
+        quizService.updateQuizSettings(principal.getName(), quizId, req);
+        return ResponseEntity.ok().build();
+    }
+
     @GetMapping("/courses/{courseId}/quizzes/official/attempt")
     @PreAuthorize("hasRole('STUDENT')")
     public ResponseEntity<QuizAttemptDto.StartRes> startAttempt(Principal principal, @PathVariable Long courseId) {

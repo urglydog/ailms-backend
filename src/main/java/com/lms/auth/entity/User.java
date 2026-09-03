@@ -50,4 +50,11 @@ public class User extends BaseEntity {
      */
     @Column(name = "is_active", nullable = false)
     private Boolean isActive = true;
+
+    /**
+     * Admin khóa quyền gọi AI của user (Cong viec 5).
+     * Khi TRUE, user bị từ chối mọi yêu cầu sinh học liệu / chat AI.
+     */
+    @Column(name = "is_ai_locked", nullable = false)
+    private Boolean isAiLocked = false;
 }
