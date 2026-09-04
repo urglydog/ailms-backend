@@ -10,6 +10,9 @@ public class QuizDto {
             LocalDateTime startTime,
             LocalDateTime endTime,
             Integer durationMinutes,
-            Integer maxAttempts
+            Integer maxAttempts,
+            Boolean isProctored,
+            Integer maxViolations
     ) {}
+
 }

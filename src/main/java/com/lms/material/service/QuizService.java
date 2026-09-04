@@ -64,6 +64,8 @@ public class QuizService {
         quiz.setEndTime(req.endTime());
         quiz.setDurationMinutes(req.durationMinutes());
         quiz.setMaxAttempts(req.maxAttempts());
+        if (req.isProctored() != null) quiz.setIsProctored(req.isProctored());
+        if (req.maxViolations() != null) quiz.setMaxViolations(req.maxViolations());
         
         quizRepository.save(quiz);
     }
@@ -128,8 +130,16 @@ public class QuizService {
             questionDtos.add(new QuizAttemptDto.QuestionDto(q.getId(), q.getContent(), q.getDisplayOrder(), optionDtos));
         }
         
-        return new QuizAttemptDto.StartRes(attempt.getId(), quiz.getId(), questionDtos);
+        return new QuizAttemptDto.StartRes(
+                attempt.getId(), 
+                quiz.getId(), 
+                questionDtos,
+                quiz.getIsProctored(),
+                quiz.getMaxViolations(),
+                quiz.getDurationMinutes()
+        );
     }
+
 
     @Transactional
     public QuizAttemptDto.SubmitRes submitAttempt(String studentEmail, Long attemptId, QuizAttemptDto.SubmitReq req) {
