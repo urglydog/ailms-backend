@@ -62,43 +62,76 @@ public class InstructorMaterialController {
                 
         java.util.List<java.util.Map<String, Object>> result = new java.util.ArrayList<>();
         for (com.lms.material.entity.MaterialGeneration gen : generations) {
-            java.util.Map<String, Object> map = new java.util.HashMap<>();
-            map.put("id", gen.getId());
-            map.put("materialType", gen.getMaterialType());
-            map.put("title", gen.getTitle());
-            map.put("createdAt", gen.getCreatedAt());
-            map.put("status", gen.getStatus());
-            map.put("isOfficial", false); // default
+            boolean createdByInstructor = gen.getUser() != null && gen.getUser().getEmail().equals(principal.getName());
             
+            boolean isOfficial = false;
+            Long materialId = null;
+            Integer questionCount = 0;
+            Integer randomPickCount = null;
+            Boolean allowReview = true;
+            java.time.LocalDateTime startTime = null;
+            java.time.LocalDateTime endTime = null;
+            Integer durationMinutes = null;
+            Integer maxAttempts = null;
+            Boolean isProctored = false;
+            Integer maxViolations = 3;
+
             if (gen.getStatus() == com.lms.common.enums.GenStatus.COMPLETED) {
                 if (gen.getMaterialType() == com.lms.common.enums.MaterialType.MINDMAP) {
-                    mindmapRepository.findByMaterialGeneration_Id(gen.getId()).ifPresent(m -> {
-                        map.put("materialId", m.getId());
-                        map.put("isOfficial", m.getIsOfficial());
-                    });
+                    var m = mindmapRepository.findByMaterialGeneration_Id(gen.getId()).orElse(null);
+                    if (m != null) {
+                        materialId = m.getId();
+                        isOfficial = m.getIsOfficial();
+                    }
                 } else if (gen.getMaterialType() == com.lms.common.enums.MaterialType.FLASHCARD) {
-                    flashcardDeckRepository.findByMaterialGeneration_Id(gen.getId()).ifPresent(f -> {
-                        map.put("materialId", f.getId());
-                        map.put("isOfficial", f.getIsOfficial());
-                    });
+                    var f = flashcardDeckRepository.findByMaterialGeneration_Id(gen.getId()).orElse(null);
+                    if (f != null) {
+                        materialId = f.getId();
+                        isOfficial = f.getIsOfficial();
+                    }
                 } else if (gen.getMaterialType() == com.lms.common.enums.MaterialType.QUIZ) {
-                    quizRepository.findByMaterialGeneration_Id(gen.getId()).ifPresent(q -> {
-                            map.put("materialId", q.getId());
-                            map.put("isOfficial", q.getIsOfficial());
-                            map.put("randomPickCount", q.getRandomPickCount());
-                            map.put("allowReview", q.getAllowReview());
-                            map.put("startTime", q.getStartTime());
-                            map.put("endTime", q.getEndTime());
-                            map.put("durationMinutes", q.getDurationMinutes());
-                            map.put("maxAttempts", q.getMaxAttempts());
-                            map.put("isProctored", q.getIsProctored());
-                            map.put("maxViolations", q.getMaxViolations());
-                        });
+                    var q = quizRepository.findByMaterialGeneration_Id(gen.getId()).orElse(null);
+                    if (q != null) {
+                        materialId = q.getId();
+                        isOfficial = q.getIsOfficial();
+                        questionCount = q.getQuestionCount();
+                        randomPickCount = q.getRandomPickCount();
+                        allowReview = q.getAllowReview();
+                        startTime = q.getStartTime();
+                        endTime = q.getEndTime();
+                        durationMinutes = q.getDurationMinutes();
+                        maxAttempts = q.getMaxAttempts();
+                        isProctored = q.getIsProctored();
+                        maxViolations = q.getMaxViolations();
+                    }
                 }
-
             }
-            result.add(map);
+
+            // CHỈ GIỮ LẠI: Học liệu do Giảng viên tự sinh HOẶC học liệu đang là Official.
+            // Bỏ qua các học liệu tự luyện cá nhân của Học viên.
+            if (createdByInstructor || isOfficial) {
+                java.util.Map<String, Object> map = new java.util.HashMap<>();
+                map.put("id", gen.getId());
+                map.put("materialType", gen.getMaterialType());
+                map.put("title", gen.getTitle());
+                map.put("createdAt", gen.getCreatedAt());
+                map.put("status", gen.getStatus());
+                map.put("createdByInstructor", createdByInstructor);
+                map.put("materialId", materialId);
+                map.put("isOfficial", isOfficial);
+                map.put("questionCount", questionCount);
+                map.put("randomPickCount", randomPickCount);
+                map.put("allowReview", allowReview);
+                map.put("startTime", startTime);
+                map.put("endTime", endTime);
+                map.put("durationMinutes", durationMinutes);
+                map.put("maxAttempts", maxAttempts);
+                map.put("isProctored", isProctored);
+                map.put("maxViolations", maxViolations);
+                result.add(map);
+            }
         }
         return ResponseEntity.ok(result);
     }
 }
+
