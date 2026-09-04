@@ -84,10 +84,16 @@ public class MaterialGenerationService {
         }
 
 
-        // Validate Language: chỉ cho phép ngôn ngữ đã có transcript
-        java.util.List<String> availableLangs = audioTrackRepository.findAvailableLanguagesByCourse(course.getId());
-        if (!availableLangs.contains(req.language())) {
-            throw new BusinessRuleViolationException("Khóa học chưa hỗ trợ sinh học liệu bằng ngôn ngữ này. Vui lòng lồng tiếng trước.");
+        // Validate Language: Hỗ trợ linh hoạt mã ngôn ngữ (vi, vi-VN, en, en-US) hoặc bản lồng tiếng
+        java.util.List<String> availableLangs = getAvailableLanguages(course.getId());
+        String reqLang = req.language();
+        boolean langSupported = availableLangs.stream().anyMatch(l -> 
+            l.equalsIgnoreCase(reqLang) || 
+            l.startsWith(reqLang) || 
+            reqLang.startsWith(l)
+        );
+        if (!langSupported && !availableLangs.isEmpty()) {
+            throw new BusinessRuleViolationException("Khóa học chưa hỗ trợ sinh học liệu bằng ngôn ngữ " + reqLang + ". Vui lòng lồng tiếng trước.");
         }
 
         int nextVersion = materialGenerationRepository.findTopByUser_IdAndCourse_IdOrderByVersionNoDesc(user.getId(), course.getId())
@@ -280,7 +286,12 @@ public class MaterialGenerationService {
     }
 
     public java.util.List<String> getAvailableLanguages(Long courseId) {
-        return audioTrackRepository.findAvailableLanguagesByCourse(courseId);
+        java.util.List<String> langs = new java.util.ArrayList<>(audioTrackRepository.findAvailableLanguagesByCourse(courseId));
+        if (langs.isEmpty()) {
+            langs.add("vi-VN");
+            langs.add("en-US");
+        }
+        return langs;
     }
 
     public java.util.List<com.lms.catalog.dto.ChapterDto.Res> getCourseChapters(Long courseId, String language) {
