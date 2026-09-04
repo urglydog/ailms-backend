@@ -28,4 +28,8 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, Long> {
 
     /** UC21 — nạp entity để cập nhật `progressPct`/`completedAt` sau khi ghi nhận tiến độ 1 bài. */
     Optional<Enrollment> findByUser_IdAndCourse_Id(Long userId, Long courseId);
+
+    /** Danh sách ghi danh của một khóa học phục vụ Giảng viên Gradebook. */
+    List<Enrollment> findByCourseId(Long courseId);
+
 }

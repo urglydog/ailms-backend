@@ -91,8 +91,11 @@ public class InstructorMaterialController {
                             map.put("endTime", q.getEndTime());
                             map.put("durationMinutes", q.getDurationMinutes());
                             map.put("maxAttempts", q.getMaxAttempts());
+                            map.put("isProctored", q.getIsProctored());
+                            map.put("maxViolations", q.getMaxViolations());
                         });
                 }
+
             }
             result.add(map);
         }

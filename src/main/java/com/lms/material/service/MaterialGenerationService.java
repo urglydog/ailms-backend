@@ -67,18 +67,22 @@ public class MaterialGenerationService {
 
         requireCourseAccess(user, course);
 
-        // BR-MAT-08: Hạn ngạch 6 lần/ngày
-        LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
-        long todayCount = materialGenerationRepository.countByUser_IdAndCreatedAtGreaterThanEqual(user.getId(), startOfDay);
-        if (todayCount >= 6) {
-            throw new BusinessRuleViolationException("Đã đạt giới hạn sinh học liệu (6 lần/ngày) - BR-MAT-08");
+        boolean isInstructor = course.getInstructor().getId().equals(user.getId());
+        if (!isInstructor) {
+            // BR-MAT-08: Hạn ngạch 6 lần/ngày (Chỉ áp dụng cho Học viên)
+            LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
+            long todayCount = materialGenerationRepository.countByUser_IdAndCreatedAtGreaterThanEqual(user.getId(), startOfDay);
+            if (todayCount >= 6) {
+                throw new BusinessRuleViolationException("Đã đạt giới hạn sinh học liệu (6 lần/ngày) - BR-MAT-08");
+            }
+
+            // BR-MAT-07: Giới hạn 10 bộ / khóa học (Chỉ áp dụng cho Học viên)
+            long courseCount = materialGenerationRepository.countByUser_IdAndCourse_Id(user.getId(), course.getId());
+            if (courseCount >= 10) {
+                throw new BusinessRuleViolationException("Đã đạt giới hạn sinh học liệu cho khóa học này (tối đa 10 bộ) - BR-MAT-07");
+            }
         }
 
-        // BR-MAT-07: Giới hạn 10 bộ / khóa học
-        long courseCount = materialGenerationRepository.countByUser_IdAndCourse_Id(user.getId(), course.getId());
-        if (courseCount >= 10) {
-            throw new BusinessRuleViolationException("Đã đạt giới hạn sinh học liệu cho khóa học này (tối đa 10 bộ) - BR-MAT-07");
-        }
 
         // Validate Language: chỉ cho phép ngôn ngữ đã có transcript
         java.util.List<String> availableLangs = audioTrackRepository.findAvailableLanguagesByCourse(course.getId());

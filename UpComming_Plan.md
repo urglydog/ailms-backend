@@ -44,43 +44,81 @@ Dưới đây là đánh giá quy mô của các tính năng đề xuất. Để
 ### 3.2 Nhóm Quiz (Trắc nghiệm)
 *   **Lưu lịch sử, chấm điểm, xem đáp án:** Độ khả thi **Rất Cao**. Đây là tính năng bắt buộc phải có cho một LMS tiêu chuẩn.
 *   **Giải thích chuyên sâu (AI Socratic Tutor):** Độ khả thi **Cao**. Tận dụng lại module Socratic Tutor hiện có, gọi prompt phụ khi học viên làm sai.
-*   **Phân tích điểm yếu (Knowledge Gap), Adaptive Testing, Gamification, SCORM:** Độ khả thi **Thấp - Rất Khó**. Cần cấu trúc dữ liệu đồ sộ (tagging chi tiết cho từng câu hỏi), real-time engine phức tạp.
-*   👉 ### 3. Học liệu - Quiz 
-- ✅ **Trạng thái**: Đã hoàn thành
-- **Tiến độ**:
-  - Giao diện bài thi (có/không giới hạn thời gian).
-  - Tích hợp Socratic Tutor giải thích đáp án sai.
+*   **Phân tích điểm yếu (Knowledge Gap), Adaptive Testing, Gamification, SCORM:** Độ khả thi **Thấp - Rất Khó**. Cần cấu trúc## 4. Quy Trình Xuất Bản Khóa Học & Tích Hợp Giám Sát Thi Cử AI (Anti-Cheat Proctoring)
 
-### 3.3 Nhóm Mindmap
-*   **Xuất ảnh (PNG/PDF):** Độ khả thi **Cao**. Dễ dàng thực hiện bằng các thư viện Frontend chụp màn hình canvas/SVG (ví dụ: html2canvas).
-*   **Mở rộng bằng AI (Node Expansion):** Độ khả thi **Trung bình**. Cần xử lý UI phức tạp (Right click -> gọi API LLM -> chèn thêm node vào biểu đồ Mermaid/React Flow).
-*   **Thuyết trình, Biên tập cộng tác (Real-time), Đính kèm file:** Độ khả thi **Thấp**. Đòi hỏi xây dựng hệ thống WebSocket đồng bộ trạng thái như Google Docs.
-*   👉 *Kế hoạch triển khai (Ngắn hạn):* Thêm nút Export hình ảnh/PDF. Chỉnh sửa UI hiển thị Mindmap rõ ràng, đẹp mắt hơn. Đưa các tính năng khác vào Dài hạn.
+**🔴 Kết Quả Kiểm Tra Mã Nguồn & Tích Hợp Tính Năng Giám Sát Thi Cử AI:**
+
+### 1. Kiểm Tra Mã Nguồn Frontend (`AntiCheatExamPage` - `app/(student)/exam/[quizId]/page.tsx`):
+- FE **ĐÃ CÓ SẴN** module giám sát thi cử thông minh bằng AI tích hợp thư viện `@vladmandic/face-api`:
+  1. **Nhận diện Khuôn mặt AI Continuous Loop:** Quét webcam mỗi 2 giây, cảnh báo khi `NO_FACE` (không thấy mặt) hoặc phát hiện nhiều hơn 1 người trong khung hình.
+  2. **Theo dõi Chuyển động & Hành vi Vi phạm:** Phát hiện chuyển tab (`visibilitychange`), mất tiêu điểm cửa sổ (`blur`), rời chuột khỏi viền màn hình (`mouseleave`).
+  3. **Tự Động Đóng Bài Thi (Auto-Close/Submit):** Vi phạm quá 3 lần (`violationCount >= 3`) -> Hệ thống tự động thu bài và chấm điểm lập tức.
 
 ---
 
-## 4. Cân Bằng Quyền Hạn, Vai Trò (Instructor & Admin)
-**🔴 Vấn đề hiện tại:**
-- Đang trao quá nhiều quyền hạn tiêu tốn tài nguyên (API Key, LLM Token) cho Học viên, dễ dẫn đến quá tải hệ thống hoặc vượt hạn mức chi phí.
-- Giảng viên thiếu công cụ để tự tổ chức các bộ đề chuẩn cho khóa học.
+### 2. Tích Hợp Vào Màn Hình Cấu Hình Bài Thi Của GIẢNG VIÊN:
+- Trong **Modal Cấu Hình Quiz** phía Giảng viên (`/instructor/courses/[id]/materials`):
+  - Bổ sung công tắc (Toggle): **[ 🟢 Bật Giám Sát Thi Cử AI (Camera & Tab Tracking) ]**.
+  - Bổ sung ô cấu hình: **[ Số lần vi phạm tối đa trước khi tự đóng bài ]** (Mặc định: `3` lần).
+  - Khi Giảng viên bật tính năng này, đề thi Official sẽ tự động bắt buộc Học viên phải bật Camera và chạy qua bộ lọc AI Anti-Cheat khi làm bài.
 
-**🟢 Độ khả thi:** Rất Cao (Thiên về kiến trúc và cấu quyền truy cập).
+---
 
-**🛠 Cách triển khai:**
-- **Phân quyền sinh học liệu:**
-  - **Giảng viên (Instructor):** Là người nắm quyền **chính** trong việc sinh ra bộ Quiz, Flashcard, Mindmap chuẩn (Official Materials) cho khóa học của mình. Giảng viên cấu hình độ khó, số lượng, lưu lại làm tài nguyên dùng chung.
-  - **Học viên (Student):** Học viên sử dụng các bộ học liệu chuẩn do Giảng viên tạo ra. Chỉ cung cấp cho học viên quyền sinh học liệu "Tùy chỉnh cá nhân" với **giới hạn rất khắt khe** (BR-MAT-08).
-5. 🟡 **[Quyền hạn]** Cập nhật giao diện Instructor để quản lý bộ học liệu, cập nhật Admin để tracking tài nguyên LLM. (Đang tiến hành)
-   - **Tối ưu Quiz Engine (Hệ thống thi)**: Nâng cấp bảng `quizzes` bằng cách bổ sung cấu hình thi (thời gian mở/đóng, thời gian làm bài, số lần làm bài tối đa, số lượng câu hỏi xào ngẫu nhiên, cho phép xem lại đáp án). Nếu cờ `allow_review = false`, Backend sẽ tự động ẩn đáp án đúng.
-   - **Phân quyền sinh học liệu**: Cấp quyền `is_official` cho Flashcard và Mindmap để Giảng viên đánh dấu học liệu chuẩn của khóa học. Học viên chỉ được xem học liệu chuẩn và bị giới hạn nghiêm ngặt việc sinh học liệu cá nhân.
-   - **Giao diện Instructor**: Xây dựng màn hình "Cấu hình Bài thi" và "Bảng điểm lớp học" (Gradebook) giúp Giảng viên quản lý khóa học như một LMS chuyên nghiệp.
-   - **Admin Dashboard & Tracking**: Tạo bảng `ai_usage_logs` ghi nhận lượng token tiêu thụ mỗi khi gọi API LLM. Xây dựng màn hình Analytics cho Admin và tích hợp nút "Khóa quyền AI" (cột `is_ai_locked` trong `users`) đối với người dùng lạm dụng. 
+### 3. Bảng Tổng Hợp Công Việc Sắp Thực Hiện (Task 5 Comprehensive Plan):
+
+- **Bước 1: Triển khai Backend Shared Language Pool & Dubbing Cache**
+  - Tận dụng `DubbingLockService` & `DubbingRequestService` hiện có. Cung cấp API ngôn ngữ sẵn có cho Giảng viên.
+
+- **Bước 2: Xây Dựng Màn Hình Quản Lý Học Liệu Official Cho Giảng Viên (`/instructor/courses/[id]/materials`)**
+  - Khung bấm sinh AI Official (Quiz, Flashcard, Mindmap).
+  - Full Edit CRUD câu hỏi & đáp án đề thi Official.
+  - Modal Cấu hình Bài thi tích hợp **Công tắc Bật/Tắt Giám sát Thi cử AI (Camera Proctoring)**, bộ chọn ngày giờ, chặn số âm.
+
+- **Bước 3: Xây Dựng Màn Hình Gradebook & Tracking Chi Tiết (`/instructor/courses/[id]/gradebook`)**
+  - Thống kê tiến độ lớp học.
+  - Bảng điểm và Modal **[Xem Chi Tiết Bài Làm]** soi lại từng câu nộp của học viên.
+
+- **Bước 4: Chuẩn Hóa Trải Nghiệm Học Viên & Anti-Cheat Exam**
+  - Học viên thi Quiz Official với giao diện AI Proctoring (nếu Giảng viên bật).
+  - Học liệu tự luyện cá nhân nằm trong tủ cá nhân, bị giới hạn 6 lượt/ngày (`BR-MAT-08`), không bị đẩy sang trang Giảng viên.
+
+- **Bước 5: Admin LLM Resource Analytics & Dynamic Quantity Scaling**
+  - Áp trần số câu hỏi theo Word Count bài giảng để chống AI Hallucination.
+  - Log token (`ai_usage_logs`) và công tắc khóa AI (`is_ai_locked`).
 
 ---
 
 ## 🚀 ROADMAP THỰC THI NGẮN HẠN (Sắp xếp theo thứ tự)
 1. ✅ **[AI-Discovery]** Fix lỗi Function Calling và RAG để AI tìm đúng khóa học. (Hoàn thành)
-2. ✅ **[Học liệu - Scope & Language]** Chuẩn hóa dropdown chọn chương bài học và lọc động danh sách ngôn ngữ dưa trên transcript hiện có. (Hoàn thành)
+2. ✅ **[Học liệu - Scope & Language]** Chuẩn hóa dropdown chọn chương bài học và lọc động danh sách ngôn ngữ dựa trên transcript hiện có. (Hoàn thành)
+3. ✅ **[Học liệu - Quiz]** Xây dựng hệ thống làm bài Quiz, chấm điểm, lưu lịch sử cho Học viên. (Hoàn thành)
+4. ✅ **[Học liệu - Flashcard]** Triển khai thuật toán Spaced Repetition (SM-2) nhắc nhở học viên. (Hoàn thành)
+5. 🟡 **[Task 5 Full Execution]** Triển khai Kho Ngôn Ngữ Dùng Chung, Trang Materials & Gradebook Giảng viên (tích hợp Cấu hình Anti-Cheat Proctoring), và Admin LLM Tracking. (Đang chờ DUYỆT TỪ BẠN để bắt đầu code!)
+
+
+
+
+
+
+
+
+ích hợp bộ chọn Thời gian trực quan (Time Wheel/Spinner hoặc Hour:Minute picker) giúp Giảng viên chọn giờ chính xác mà không cần gõ phím thô.
+- **Tự động tính Thời gian đóng bài:**
+  - Ngay khi Giảng viên chọn "Thời gian mở bài" + "Thời gian làm bài", hệ thống **tự động tính sẵn và điền** `Thời gian đóng bài = Thời gian mở bài + Thời gian làm bài`. Vẫn cho phép Giảng viên điều chỉnh nới rộng khung giờ làm bài nếu cần.
+- **Khắc phục lỗi HTTP Response Save Settings:**
+  - Sửa Backend `QuizController` để trả về JSON response hợp lệ (ví dụ: `{"message": "Quiz settings updated successfully"}`), khắc phục triệt để lỗi `JSON.parse`.
+
+### 5.3. Admin Dashboard & Tracking Tài Nguyên LLM
+- **Bảng `ai_usage_logs`:** Ghi nhận token, cost, model, userId mỗi lượt gọi LLM.
+- **Màn hình Analytics Admin:** Báo cáo chi tiết tài nguyên AI tiêu thụ theo thời gian và theo user.
+- **Khóa quyền AI:** Nút công tắc "Khóa quyền AI" (`is_ai_locked`) cho Admin khóa các tài khoản lạm dụng.
+
+---
+
+## 🚀 ROADMAP THỰC THI NGẮN HẠN (Sắp xếp theo thứ tự)
+1. ✅ **[AI-Discovery]** Fix lỗi Function Calling và RAG để AI tìm đúng khóa học. (Hoàn thành)
+2. ✅ **[Học liệu - Scope & Language]** Chuẩn hóa dropdown chọn chương bài học và lọc động danh sách ngôn ngữ dựa trên transcript hiện có. (Hoàn thành)
 3. ✅ **[Học liệu - Quiz]** Xây dựng hệ thống làm bài Quiz, chấm điểm, lưu lịch sử, cho phép Giảng viên tạo ngân hàng câu hỏi. (Hoàn thành)
 4. ✅ **[Học liệu - Flashcard]** Triển khai thuật toán Spaced Repetition (SM-2) nhắc nhở học viên. (Hoàn thành)
-5. 🟡 **[Quyền hạn]** Cập nhật giao diện Instructor để quản lý bộ học liệu, cập nhật Admin để tracking tài nguyên LLM. (Đang tiến hành)
+5. 🟡 **[Quyền hạn & UX Instructor & Admin Tracking]** Tái cấu trúc phân quyền học liệu Instructor (Official vs Personal), bổ sung Preview học liệu, tối ưu toàn diện UI/UX Modal Cấu hình Quiz, và xây dựng Admin LLM Tracking. (Đang chờ duyệt Plan mới)
+

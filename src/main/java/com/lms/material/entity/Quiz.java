@@ -58,6 +58,15 @@ public class Quiz extends BaseEntity {
     @Column(name = "max_attempts")
     private Integer maxAttempts;
 
+    /** Bật/Tắt Giám sát Thi cử AI Anti-Cheat (Camera & Tab Tracking). */
+    @Column(name = "is_proctored", nullable = false)
+    private Boolean isProctored = false;
+
+    /** Số lần vi phạm tối đa trước khi hệ thống tự động thu bài. Mặc định 3. */
+    @Column(name = "max_violations")
+    private Integer maxViolations = 3;
+
+
     @OneToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "material_generation_id", nullable = false, unique = true)
     private MaterialGeneration materialGeneration;

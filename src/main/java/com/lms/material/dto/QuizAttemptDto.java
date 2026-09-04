@@ -22,8 +22,12 @@ public class QuizAttemptDto {
     public record StartRes(
             Long attemptId,
             Long quizId,
-            List<QuestionDto> questions
+            List<QuestionDto> questions,
+            Boolean isProctored,
+            Integer maxViolations,
+            Integer durationMinutes
     ) {}
+
 
     public record SubmitReq(
             // Key: quizQuestionId, Value: selectedOptionId
