@@ -89,9 +89,11 @@ public class MaterialGeneration extends BaseEntity {
     @JoinColumn(name = "course_id", nullable = false)
     private Course course;
 
-    /** BR-MAT-01: luon false voi nguoi khac - moi bo thuoc dung 1 hoc vien. */
+    /** BR-MAT-01: Cho phép người tạo hoặc Giảng viên sở hữu khóa học được xem/sử dụng học liệu. */
     public boolean isReusableBy(User other) {
         if (user == null || other == null) return false;
-        return user.getId() != null && user.getId().equals(other.getId());
+        if (user.getId() != null && user.getId().equals(other.getId())) return true;
+        if (course != null && course.getInstructor() != null && course.getInstructor().getId() != null && course.getInstructor().getId().equals(other.getId())) return true;
+        return false;
     }
 }
