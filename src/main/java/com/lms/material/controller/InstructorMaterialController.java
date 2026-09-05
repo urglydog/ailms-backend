@@ -53,7 +53,7 @@ public class InstructorMaterialController {
     }
 
     @GetMapping("/courses/{courseId}")
-    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @PreAuthorize("isAuthenticated()")
     @Transactional(readOnly = true)
     public ResponseEntity<java.util.List<java.util.Map<String, Object>>> getMaterialsForCourse(Principal principal, @PathVariable Long courseId) {
         // Fetch all generated materials for the course

@@ -54,10 +54,10 @@ public class QuizController {
         return ResponseEntity.ok(Map.of("message", "Xóa câu hỏi thành công"));
     }
 
-    @GetMapping("/courses/{courseId}/quizzes/official/attempt")
+    @GetMapping("/quizzes/{quizId}/start-attempt")
     @PreAuthorize("hasRole('STUDENT')")
-    public ResponseEntity<QuizAttemptDto.StartRes> startAttempt(Principal principal, @PathVariable Long courseId) {
-        return ResponseEntity.ok(quizService.startAttempt(principal.getName(), courseId));
+    public ResponseEntity<QuizAttemptDto.StartRes> startAttempt(Principal principal, @PathVariable Long quizId) {
+        return ResponseEntity.ok(quizService.startAttempt(principal.getName(), quizId));
     }
 
     @PostMapping("/quizzes/attempts/{attemptId}/submit")
