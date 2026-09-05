@@ -23,6 +23,7 @@ public class InstructorMaterialController {
     private final FlashcardDeckRepository flashcardDeckRepository;
     private final com.lms.material.repository.MaterialGenerationRepository materialGenerationRepository;
     private final com.lms.material.repository.QuizRepository quizRepository;
+    private final com.lms.material.repository.QuizAttemptRepository quizAttemptRepository;
 
     @PutMapping("/mindmaps/{id}/set-official")
     @PreAuthorize("hasRole('INSTRUCTOR')")
@@ -107,31 +108,37 @@ public class InstructorMaterialController {
                 }
             }
 
+            Integer attemptCount = 0;
+            if (materialId != null && gen.getMaterialType() == com.lms.common.enums.MaterialType.QUIZ) {
+                attemptCount = quizAttemptRepository.findByUser_EmailAndQuiz_IdOrderByScoreDesc(principal.getName(), materialId).size();
+            }
+
             // CHỈ GIỮ LẠI: Học liệu do Giảng viên tự sinh HOẶC học liệu đang là Official.
             // Bỏ qua các học liệu tự luyện cá nhân của Học viên.
             if (createdByInstructor || isOfficial) {
-                java.util.Map<String, Object> map = new java.util.HashMap<>();
-                map.put("id", gen.getId());
-                map.put("materialType", gen.getMaterialType());
-                map.put("title", gen.getTitle());
-                map.put("createdAt", gen.getCreatedAt());
-                map.put("status", gen.getStatus());
-                map.put("createdByInstructor", createdByInstructor);
-                map.put("materialId", materialId);
-                map.put("isOfficial", isOfficial);
-                map.put("questionCount", questionCount);
-                map.put("randomPickCount", randomPickCount);
-                map.put("allowReview", allowReview);
-                map.put("startTime", startTime);
-                map.put("endTime", endTime);
-                map.put("durationMinutes", durationMinutes);
-                map.put("maxAttempts", maxAttempts);
-                map.put("isProctored", isProctored);
-                map.put("maxViolations", maxViolations);
-                result.add(map);
+                result.add(java.util.Map.ofEntries(
+                        java.util.Map.entry("id", gen.getId()),
+                        java.util.Map.entry("materialType", gen.getMaterialType().name()),
+                        java.util.Map.entry("title", gen.getTitle() != null ? gen.getTitle() : ""),
+                        java.util.Map.entry("language", gen.getLanguage()),
+                        java.util.Map.entry("createdAt", gen.getCreatedAt()),
+                        java.util.Map.entry("status", gen.getStatus().name()),
+                        java.util.Map.entry("isOfficial", isOfficial),
+                        java.util.Map.entry("versionNo", gen.getVersionNo()),
+                        java.util.Map.entry("materialId", materialId != null ? materialId : ""),
+                        java.util.Map.entry("questionCount", questionCount != null ? questionCount : 0),
+                        java.util.Map.entry("randomPickCount", randomPickCount != null ? randomPickCount : ""),
+                        java.util.Map.entry("allowReview", allowReview),
+                        java.util.Map.entry("startTime", startTime != null ? startTime.toString() : ""),
+                        java.util.Map.entry("endTime", endTime != null ? endTime.toString() : ""),
+                        java.util.Map.entry("durationMinutes", durationMinutes != null ? durationMinutes : ""),
+                        java.util.Map.entry("maxAttempts", maxAttempts != null ? maxAttempts : ""),
+                        java.util.Map.entry("attemptCount", attemptCount),
+                        java.util.Map.entry("isProctored", isProctored),
+                        java.util.Map.entry("maxViolations", maxViolations != null ? maxViolations : 3)
+                ));
             }
         }
         return ResponseEntity.ok(result);
     }
 }
-
