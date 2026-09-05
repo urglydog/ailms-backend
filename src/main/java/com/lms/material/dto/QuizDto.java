@@ -15,4 +15,15 @@ public class QuizDto {
             Integer maxViolations
     ) {}
 
+    public record OptionReq(
+            Long id,
+            String content,
+            Boolean isCorrect
+    ) {}
+
+    public record QuestionUpdateReq(
+            String content,
+            java.util.List<OptionReq> options
+    ) {}
+
 }
