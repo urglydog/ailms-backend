@@ -66,8 +66,54 @@ public class QuizService {
         quiz.setMaxAttempts(req.maxAttempts());
         if (req.isProctored() != null) quiz.setIsProctored(req.isProctored());
         if (req.maxViolations() != null) quiz.setMaxViolations(req.maxViolations());
-        
         quizRepository.save(quiz);
+    }
+
+    @Transactional
+    public void updateQuestion(String instructorEmail, Long questionId, com.lms.material.dto.QuizDto.QuestionUpdateReq req) {
+        QuizQuestion question = quizQuestionRepository.findById(questionId)
+                .orElseThrow(() -> new ResourceNotFoundException("QuizQuestion", questionId));
+        Course course = question.getQuiz().getMaterialGeneration().getCourse();
+        if (!course.getInstructor().getEmail().equals(instructorEmail)) {
+            throw new AccessDeniedDomainException("Ban khong co quyen");
+        }
+        
+        question.setContent(req.content());
+        quizQuestionRepository.save(question);
+        
+        List<QuizOption> existingOptions = quizOptionRepository.findByQuizQuestion_Id(questionId);
+        quizOptionRepository.deleteAll(existingOptions);
+        
+        if (req.options() != null) {
+            for (var optReq : req.options()) {
+                QuizOption opt = new QuizOption();
+                opt.setQuizQuestion(question);
+                opt.setContent(optReq.content());
+                opt.setIsCorrect(optReq.isCorrect());
+                quizOptionRepository.save(opt);
+            }
+        }
+    }
+
+    @Transactional
+    public void deleteQuestion(String instructorEmail, Long questionId) {
+        QuizQuestion question = quizQuestionRepository.findById(questionId)
+                .orElseThrow(() -> new ResourceNotFoundException("QuizQuestion", questionId));
+        Course course = question.getQuiz().getMaterialGeneration().getCourse();
+        if (!course.getInstructor().getEmail().equals(instructorEmail)) {
+            throw new AccessDeniedDomainException("Ban khong co quyen");
+        }
+        
+        Quiz quiz = question.getQuiz();
+        
+        List<QuizOption> options = quizOptionRepository.findByQuizQuestion_Id(questionId);
+        quizOptionRepository.deleteAll(options);
+        quizQuestionRepository.delete(question);
+        
+        if (quiz.getQuestionCount() != null && quiz.getQuestionCount() > 0) {
+            quiz.setQuestionCount(quiz.getQuestionCount() - 1);
+            quizRepository.save(quiz);
+        }
     }
 
     @Transactional
