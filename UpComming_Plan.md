@@ -53,7 +53,7 @@ AI Gia sư hiện đang giải thích đáp án sai bằng tiếng Việt mặc 
 - Backend: `QuizService.explainWrongAnswer(...)` — bổ sung `language` vào prompt gửi Gemini.
 - Không thay đổi schema DB, không thay đổi entity, không thay đổi endpoint.
 
-**Trạng thái:** ✅ Hoàn thành
+**Trạng thái:** ❌ Chưa pass
 
 ---
 
@@ -213,7 +213,7 @@ Có 3 nút riêng biệt (+ Sinh Mindmap, + Sinh Flashcard, + Sinh Quiz Thi Cử
 
 **Phạm vi thay đổi:** Frontend — sidebar navigation, layout instructor, GradebookPage.
 
-**Trạng thái:** 🔄 Đang thực hiện
+**Trạng thái:** ❌ Chưa pass
 
 ---
 
@@ -262,7 +262,7 @@ Có 3 nút riêng biệt (+ Sinh Mindmap, + Sinh Flashcard, + Sinh Quiz Thi Cử
 - Backend: `QuizService.startAttempt` (check max attempts).
 - Frontend: `exam/[quizId]/page.tsx` (timer + result screen + toast removal).
 
-**Trạng thái:** 🔄 Đang thực hiện
+**Trạng thái:** ❌ Chưa pass
 
 ---
 
@@ -271,15 +271,15 @@ Có 3 nút riêng biệt (+ Sinh Mindmap, + Sinh Flashcard, + Sinh Quiz Thi Cử
 | # | Task | Khả thi | Phạm vi | Ưu tiên | Trạng thái |
 |---|---|---|---|---|---|
 | 1 | TTS Flashcard đúng ngôn ngữ | 🟢 Cao | FE only | 🔴 Cao | ✅ Hoàn thành |
-| 2 | AI Gia sư trả lời theo ngôn ngữ Quiz | 🟢 Cao | BE (prompt) | 🔴 Cao | ✅ Hoàn thành |
+| 2 | AI Gia sư trả lời theo ngôn ngữ Quiz | 🟢 Cao | BE (prompt) | 🔴 Cao | ❌ Chưa pass |
 | 3 | Tiến độ học tập: fix redirect + tracking | 🟡 TB | FE | 🟠 TB | ⬜ Chưa |
 | 4 | SRS Flashcard + WebSocket notification | 🟡 TB | BE + FE | 🟡 Dài hạn | ⬜ Chưa |
 | 5A | Học viên CRUD học liệu cá nhân | 🟢 Cao | FE | 🟠 TB | ⬜ Chưa |
 | 5B | Kéo thả Mindmap giảng viên (React Flow) | 🟡 Khó | FE (lib mới) | 🟡 Dài hạn | ⬜ Chưa |
 | 6 | Sort/filter/rename kho học liệu | 🟢 Cao | FE (+BE nhỏ) | 🟠 TB | ⬜ Chưa |
 | 7 | Gom 3 nút sinh học liệu thành 1 | 🟢 Cao | FE only | 🟠 TB | ⬜ Chưa |
-| 8 | Navigation breadcrumb + fix 404 gradebook | 🟢 Cao | FE | 🔴 Cao | ✅ Hoàn thành |
-| 9 | Fix Quiz: attempts + timer + result screen | 🟢 Cao | FE + BE | 🔴 Cao | ✅ Hoàn thành |
+| 8 | Navigation breadcrumb + fix 404 gradebook | 🟢 Cao | FE | 🔴 Cao | ❌ Chưa pass |
+| 9 | Fix Quiz: attempts + timer + result screen | 🟢 Cao | FE + BE | 🔴 Cao | ❌ Chưa pass |
 
 ---
 
