@@ -8,9 +8,11 @@ import jakarta.validation.Valid;
 import java.security.Principal;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
  * UC50 — tạo/lên lịch, bắt đầu, kết thúc phiên Live (chỉ giảng viên sở hữu khóa học).
@@ -41,6 +43,13 @@ public class LiveSessionController {
     @GetMapping("/{sessionId}")
     public ResponseEntity<Res> getOwned(Principal principal, @PathVariable Long sessionId) {
         return ResponseEntity.ok(liveSessionService.getOwned(principal.getName(), sessionId));
+    }
+
+    /** F11.9 mở rộng — ảnh riêng cho buổi live (không bắt buộc, xem `LiveSessionService.uploadThumbnail`). */
+    @PostMapping(value = "/{sessionId}/thumbnail", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<Res> uploadThumbnail(
+            Principal principal, @PathVariable Long sessionId, @RequestPart("file") MultipartFile file) {
+        return ResponseEntity.ok(liveSessionService.uploadThumbnail(principal.getName(), sessionId, file));
     }
 
     @PostMapping("/{sessionId}/start")

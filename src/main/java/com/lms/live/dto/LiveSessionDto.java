@@ -27,6 +27,9 @@ public class LiveSessionDto {
     public record Res(
             Long id,
             String title,
+            /** F11.9 mở rộng — {@code null} nghĩa là giảng viên chưa tự tải ảnh riêng cho buổi
+             * live này; FE tự hiện `courseThumbnailUrl` thay thế trong trường hợp đó. */
+            String thumbnailUrl,
             LiveVisibility visibility,
             LiveSessionStatus status,
             String roomName,
@@ -35,7 +38,8 @@ public class LiveSessionDto {
             LocalDateTime startedAt,
             LocalDateTime endedAt,
             Long courseId,
-            String courseTitle
+            String courseTitle,
+            String courseThumbnailUrl
     ) {}
 
     /** UC50 — trả về ngay sau khi bấm "Bắt đầu Live", đủ để FE connect LiveKit React SDK. */

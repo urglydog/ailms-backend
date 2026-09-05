@@ -7,8 +7,11 @@ import com.lms.catalog.repository.CourseRepository;
 import com.lms.common.config.LiveKitConfig;
 import com.lms.common.enums.Role;
 import com.lms.common.exception.AccessDeniedDomainException;
+import com.lms.common.exception.BusinessRuleViolationException;
 import com.lms.common.exception.ConflictException;
+import com.lms.common.exception.InvalidRequestException;
 import com.lms.common.exception.ResourceNotFoundException;
+import com.lms.common.storage.StorageService;
 import com.lms.live.dto.LiveSessionDto.CreateReq;
 import com.lms.live.dto.LiveSessionDto.Res;
 import com.lms.live.dto.LiveSessionDto.StartRes;
@@ -26,12 +29,15 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.mock.web.MockMultipartFile;
 import retrofit2.Call;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -53,6 +59,7 @@ class LiveSessionServiceTest {
     @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private RoomServiceClient roomServiceClient;
     @Mock private Call<Void> deleteRoomCall;
+    @Mock private StorageService storageService;
 
     private LiveSessionService liveSessionService;
 
@@ -62,8 +69,8 @@ class LiveSessionServiceTest {
 
     @BeforeEach
     void setUp() throws Exception {
-        liveSessionService = new LiveSessionService(
-                liveSessionRepository, courseRepository, userRepository, liveKitConfig, eventPublisher, roomServiceClient);
+        liveSessionService = new LiveSessionService(liveSessionRepository, courseRepository, userRepository,
+                liveKitConfig, eventPublisher, roomServiceClient, storageService);
         lenient().when(roomServiceClient.deleteRoom(anyString())).thenReturn(deleteRoomCall);
         lenient().when(deleteRoomCall.execute()).thenReturn(null);
 
@@ -223,5 +230,51 @@ class LiveSessionServiceTest {
         assertThatThrownBy(() -> liveSessionService.end(INSTRUCTOR_EMAIL, SESSION_ID))
                 .isInstanceOf(ConflictException.class);
         verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void uploadThumbnail_anhJpegHopLe_thanhCong() {
+        LiveSession session = scheduledSession();
+        when(liveSessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(session));
+        byte[] jpegMagicBytes = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0, 0x00, 0x10};
+        MockMultipartFile file = new MockMultipartFile("file", "thumb.jpg", "image/jpeg", jpegMagicBytes);
+        when(storageService.upload(anyString(), any(), anyLong(), eq("image/jpeg")))
+                .thenReturn("https://cdn.example.com/live-thumbnails/20/x.jpg");
+
+        Res result = liveSessionService.uploadThumbnail(INSTRUCTOR_EMAIL, SESSION_ID, file);
+
+        assertThat(result.thumbnailUrl()).isEqualTo("https://cdn.example.com/live-thumbnails/20/x.jpg");
+    }
+
+    @Test
+    void uploadThumbnail_fileGiaMaoAnh_nemInvalidRequest() {
+        LiveSession session = scheduledSession();
+        when(liveSessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(session));
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "thumb.jpg", "image/jpeg", "%PDF-1.4 gia mao anh".getBytes());
+
+        assertThatThrownBy(() -> liveSessionService.uploadThumbnail(INSTRUCTOR_EMAIL, SESSION_ID, file))
+                .isInstanceOf(InvalidRequestException.class);
+    }
+
+    @Test
+    void uploadThumbnail_vuotQua5MB_nemBusinessRuleViolation() {
+        LiveSession session = scheduledSession();
+        when(liveSessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(session));
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "thumb.jpg", "image/jpeg", new byte[6 * 1024 * 1024]);
+
+        assertThatThrownBy(() -> liveSessionService.uploadThumbnail(INSTRUCTOR_EMAIL, SESSION_ID, file))
+                .isInstanceOf(BusinessRuleViolationException.class);
+    }
+
+    @Test
+    void uploadThumbnail_khongPhaiChuSoHuu_nemAccessDenied() {
+        LiveSession session = scheduledSession();
+        when(liveSessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(session));
+        MockMultipartFile file = new MockMultipartFile("file", "thumb.jpg", "image/jpeg", new byte[]{1, 2, 3});
+
+        assertThatThrownBy(() -> liveSessionService.uploadThumbnail(OTHER_INSTRUCTOR_EMAIL, SESSION_ID, file))
+                .isInstanceOf(AccessDeniedDomainException.class);
     }
 }

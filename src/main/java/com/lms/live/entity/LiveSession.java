@@ -28,6 +28,12 @@ public class LiveSession extends BaseEntity {
     @Column(name = "title", nullable = false, length = 255)
     private String title;
 
+    /** F11.9 mở rộng — ảnh riêng cho buổi live, hiện trên trang khám phá `/live`. {@code null}
+     * nghĩa là giảng viên chưa tự tải ảnh riêng — tầng đọc ({@code LiveViewService}) tự rơi về
+     * {@code course.thumbnailUrl} làm mặc định, không bắt buộc phải có ảnh riêng. */
+    @Column(name = "thumbnail_url", length = 500)
+    private String thumbnailUrl;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "visibility", nullable = false, length = 20)
     private LiveVisibility visibility;

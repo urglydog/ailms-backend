@@ -10,11 +10,15 @@ WORKDIR /app
 
 # curl cho healthcheck của docker-compose
 # ffmpeg (ffprobe) để lấy durationSec + kiểm MP4 hợp lệ khi nạp video (BR-CHUNK-01, Giai đoạn 4)
-# python3-pip để cài yt-dlp — xác nhận link YouTube còn công khai + lấy durationSec, cùng công cụ
-# dự án đã chọn cho YouTube ở ai-worker (nhất quán, không cần thêm API key)
+#
+# BUG THẬT (05/09/2026): trước đây cài thêm python3-pip + yt-dlp ở đây để
+# YoutubeMetadataService xác nhận link YouTube còn công khai + lấy durationSec — bỏ HẲN sau khi
+# phát hiện yt-dlp bị YouTube chặn theo dải IP datacenter/VPS ("Sign in to confirm you're not a
+# bot") ngay khi deploy lên server thật, dù video hoàn toàn public. Đã chuyển
+# YoutubeMetadataService sang gọi YouTube Data API v3 chính thức (cần YOUTUBE_API_KEY trong .env,
+# xem application.yml) — không cần yt-dlp cho việc này nữa.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl ffmpeg python3-pip \
-    && pip3 install --no-cache-dir --break-system-packages yt-dlp \
+    && apt-get install -y --no-install-recommends curl ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Tải dependency trước, tách khỏi source để cache layer:

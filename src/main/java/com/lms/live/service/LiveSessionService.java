@@ -6,8 +6,11 @@ import com.lms.catalog.entity.Course;
 import com.lms.catalog.repository.CourseRepository;
 import com.lms.common.config.LiveKitConfig;
 import com.lms.common.exception.AccessDeniedDomainException;
+import com.lms.common.exception.BusinessRuleViolationException;
 import com.lms.common.exception.ConflictException;
+import com.lms.common.exception.InvalidRequestException;
 import com.lms.common.exception.ResourceNotFoundException;
+import com.lms.common.storage.StorageService;
 import com.lms.live.dto.LiveSessionDto.CreateReq;
 import com.lms.live.dto.LiveSessionDto.Res;
 import com.lms.live.dto.LiveSessionDto.StartRes;
@@ -22,14 +25,18 @@ import io.livekit.server.CanSubscribe;
 import io.livekit.server.RoomJoin;
 import io.livekit.server.RoomName;
 import io.livekit.server.RoomServiceClient;
+import java.io.IOException;
+import java.io.InputStream;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.tika.Tika;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
  * UC50 — vòng đời phiên Live Classroom, phía giảng viên (F11.1). Endpoint GET cho người XEM
@@ -47,6 +54,8 @@ public class LiveSessionService {
     private final LiveKitConfig liveKitConfig;
     private final ApplicationEventPublisher eventPublisher;
     private final RoomServiceClient roomServiceClient;
+    private final StorageService storageService;
+    private final Tika tika = new Tika();
 
     /** Định danh participant LiveKit của giảng viên — webhook (BR-LIVE-09) dựa vào tiền tố này để nhận diện. */
     public static String instructorIdentity(Long instructorId) {
@@ -173,6 +182,52 @@ public class LiveSessionService {
         }
     }
 
+    /**
+     * F11.9 mở rộng — ảnh riêng cho buổi live, KHÔNG bắt buộc (khác ảnh bìa khóa học). Sửa được
+     * bất kỳ lúc nào, kể cả khi phiên đang {@code LIVE} (thuần cosmetic, không như
+     * {@code sourceLanguage} bị khoá cứng theo BR-LIVE-04). Logic validate/upload NGUYÊN VẸN
+     * {@code CourseService.uploadThumbnail} — cùng giới hạn 5MB, cùng định dạng JPEG/PNG/WEBP,
+     * cùng dùng {@link StorageService} lên B2 — chỉ đổi tiền tố key lưu trữ.
+     */
+    @Transactional
+    public Res uploadThumbnail(String instructorEmail, Long sessionId, MultipartFile file) {
+        User instructor = requireUser(instructorEmail);
+        LiveSession session = requireSession(sessionId);
+        requireOwnership(instructor, session.getCourse());
+
+        if (file.isEmpty()) {
+            throw new InvalidRequestException("File ảnh trống");
+        }
+        long maxBytes = 5L * 1024 * 1024;
+        if (file.getSize() > maxBytes) {
+            throw new BusinessRuleViolationException("Ảnh thumbnail vượt quá 5MB");
+        }
+
+        String detectedMime;
+        try (InputStream sniff = file.getInputStream()) {
+            detectedMime = tika.detect(sniff);
+        } catch (IOException e) {
+            throw new InvalidRequestException("Không đọc được file ảnh: " + e.getMessage());
+        }
+        String extension = switch (detectedMime) {
+            case "image/jpeg" -> "jpg";
+            case "image/png" -> "png";
+            case "image/webp" -> "webp";
+            default -> throw new InvalidRequestException("Chỉ chấp nhận ảnh JPEG/PNG/WEBP");
+        };
+
+        String key = "live-thumbnails/" + sessionId + "/" + UUID.randomUUID() + "." + extension;
+        String url;
+        try (InputStream in = file.getInputStream()) {
+            url = storageService.upload(key, in, file.getSize(), detectedMime);
+        } catch (IOException e) {
+            throw new InvalidRequestException("Không tải được ảnh lên kho lưu trữ: " + e.getMessage());
+        }
+
+        session.setThumbnailUrl(url);
+        return toRes(liveSessionRepository.save(session));
+    }
+
     private String resolveSourceLanguage(String requested, User instructor) {
         return (requested == null || requested.isBlank()) ? instructor.getPreferredLanguage() : requested;
     }
@@ -196,8 +251,8 @@ public class LiveSessionService {
 
     private Res toRes(LiveSession s) {
         return new Res(
-                s.getId(), s.getTitle(), s.getVisibility(), s.getStatus(), s.getRoomName(),
+                s.getId(), s.getTitle(), s.getThumbnailUrl(), s.getVisibility(), s.getStatus(), s.getRoomName(),
                 s.getSourceLanguage(), s.getScheduledAt(), s.getStartedAt(), s.getEndedAt(),
-                s.getCourse().getId(), s.getCourse().getTitle());
+                s.getCourse().getId(), s.getCourse().getTitle(), s.getCourse().getThumbnailUrl());
     }
 }
