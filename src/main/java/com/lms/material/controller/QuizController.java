@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1")
@@ -19,19 +20,38 @@ public class QuizController {
 
     @PutMapping("/instructor/quizzes/{quizId}/set-official")
     @PreAuthorize("hasRole('INSTRUCTOR')")
-    public ResponseEntity<Void> setOfficial(Principal principal, @PathVariable Long quizId) {
+    public ResponseEntity<Map<String, String>> setOfficial(Principal principal, @PathVariable Long quizId) {
         quizService.setOfficial(principal.getName(), quizId);
-        return ResponseEntity.ok().build();
+        return ResponseEntity.ok(Map.of("message", "Đã đánh dấu là học liệu chính thức"));
     }
 
     @PutMapping("/instructor/quizzes/{quizId}/settings")
     @PreAuthorize("hasRole('INSTRUCTOR')")
-    public ResponseEntity<Void> updateQuizSettings(
+    public ResponseEntity<Map<String, String>> updateQuizSettings(
             Principal principal, 
             @PathVariable Long quizId, 
             @RequestBody com.lms.material.dto.QuizDto.QuizSettingsReq req) {
         quizService.updateQuizSettings(principal.getName(), quizId, req);
-        return ResponseEntity.ok().build();
+        return ResponseEntity.ok(Map.of("message", "Lưu cấu hình thành công"));
+    }
+
+    @PutMapping("/instructor/quizzes/questions/{questionId}")
+    @PreAuthorize("hasRole('INSTRUCTOR')")
+    public ResponseEntity<Map<String, String>> updateQuestion(
+            Principal principal,
+            @PathVariable Long questionId,
+            @RequestBody com.lms.material.dto.QuizDto.QuestionUpdateReq req) {
+        quizService.updateQuestion(principal.getName(), questionId, req);
+        return ResponseEntity.ok(Map.of("message", "Cập nhật câu hỏi thành công"));
+    }
+
+    @DeleteMapping("/instructor/quizzes/questions/{questionId}")
+    @PreAuthorize("hasRole('INSTRUCTOR')")
+    public ResponseEntity<Map<String, String>> deleteQuestion(
+            Principal principal,
+            @PathVariable Long questionId) {
+        quizService.deleteQuestion(principal.getName(), questionId);
+        return ResponseEntity.ok(Map.of("message", "Xóa câu hỏi thành công"));
     }
 
     @GetMapping("/courses/{courseId}/quizzes/official/attempt")

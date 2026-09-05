@@ -27,7 +27,7 @@ public class InstructorMaterialController {
     @PutMapping("/mindmaps/{id}/set-official")
     @PreAuthorize("hasRole('INSTRUCTOR')")
     @Transactional
-    public ResponseEntity<Void> setMindmapOfficial(Principal principal, @PathVariable Long id, @RequestParam(defaultValue = "true") boolean isOfficial) {
+    public ResponseEntity<java.util.Map<String, String>> setMindmapOfficial(Principal principal, @PathVariable Long id, @RequestParam(defaultValue = "true") boolean isOfficial) {
         Mindmap mindmap = mindmapRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Mindmap", id));
         if (!mindmap.getMaterialGeneration().getCourse().getInstructor().getEmail().equals(principal.getName())) {
@@ -35,13 +35,13 @@ public class InstructorMaterialController {
         }
         mindmap.setIsOfficial(isOfficial);
         mindmapRepository.save(mindmap);
-        return ResponseEntity.ok().build();
+        return ResponseEntity.ok(java.util.Map.of("message", isOfficial ? "Đã đặt làm học liệu chính thức" : "Đã hủy học liệu chính thức"));
     }
 
     @PutMapping("/flashcards/{id}/set-official")
     @PreAuthorize("hasRole('INSTRUCTOR')")
     @Transactional
-    public ResponseEntity<Void> setFlashcardOfficial(Principal principal, @PathVariable Long id, @RequestParam(defaultValue = "true") boolean isOfficial) {
+    public ResponseEntity<java.util.Map<String, String>> setFlashcardOfficial(Principal principal, @PathVariable Long id, @RequestParam(defaultValue = "true") boolean isOfficial) {
         FlashcardDeck deck = flashcardDeckRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("FlashcardDeck", id));
         if (!deck.getMaterialGeneration().getCourse().getInstructor().getEmail().equals(principal.getName())) {
@@ -49,7 +49,7 @@ public class InstructorMaterialController {
         }
         deck.setIsOfficial(isOfficial);
         flashcardDeckRepository.save(deck);
-        return ResponseEntity.ok().build();
+        return ResponseEntity.ok(java.util.Map.of("message", isOfficial ? "Đã đặt làm học liệu chính thức" : "Đã hủy học liệu chính thức"));
     }
 
     @GetMapping("/courses/{courseId}")
