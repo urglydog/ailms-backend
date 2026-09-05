@@ -140,22 +140,26 @@ public class MaterialGenerationService {
         MaterialGeneration generation = materialGenerationRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("MaterialGeneration", id));
         
-        if (!generation.isReusableBy(user)) {
-            throw new AccessDeniedDomainException("Học liệu này thuộc về người khác");
-        }
+        boolean isOfficial = false;
         
         String mermaidCode = null;
         java.util.List<com.lms.material.dto.MaterialDetailRes.FlashcardDto> flashcards = null;
         java.util.List<com.lms.material.dto.MaterialDetailRes.QuizQuestionDto> quizQuestions = null;
         
         if (generation.getMaterialType() == com.lms.common.enums.MaterialType.MINDMAP) {
-            mermaidCode = mindmapRepository.findByMaterialGeneration_Id(generation.getId())
-                    .map(com.lms.material.entity.Mindmap::getMermaidCode)
-                    .orElse(null);
+            java.util.Optional<com.lms.material.entity.Mindmap> mindmapOpt = mindmapRepository.findByMaterialGeneration_Id(generation.getId());
+            if (mindmapOpt.isPresent()) {
+                com.lms.material.entity.Mindmap mindmap = mindmapOpt.get();
+                mermaidCode = mindmap.getMermaidCode();
+                isOfficial = mindmap.getIsOfficial() != null ? mindmap.getIsOfficial() : false;
+            }
         } else if (generation.getMaterialType() == com.lms.common.enums.MaterialType.FLASHCARD) {
-            java.util.Optional<com.lms.material.entity.FlashcardDeck> deck = flashcardDeckRepository.findByMaterialGeneration_Id(generation.getId());
-            if (deck.isPresent()) {
-                Long deckId = deck.get().getId();
+            java.util.Optional<com.lms.material.entity.FlashcardDeck> deckOpt = flashcardDeckRepository.findByMaterialGeneration_Id(generation.getId());
+            if (deckOpt.isPresent()) {
+                com.lms.material.entity.FlashcardDeck deck = deckOpt.get();
+                isOfficial = deck.getIsOfficial() != null ? deck.getIsOfficial() : false;
+                
+                Long deckId = deck.getId();
                 java.util.Map<Long, com.lms.material.entity.FlashcardReview> reviewMap = flashcardReviewRepository.findByUser_IdAndFlashcard_FlashcardDeck_Id(user.getId(), deckId)
                         .stream().collect(java.util.stream.Collectors.toMap(r -> r.getFlashcard().getId(), r -> r));
 
@@ -191,9 +195,12 @@ public class MaterialGenerationService {
                         .toList();
             }
         } else if (generation.getMaterialType() == com.lms.common.enums.MaterialType.QUIZ) {
-            java.util.Optional<com.lms.material.entity.Quiz> quiz = quizRepository.findByMaterialGeneration_Id(generation.getId());
-            if (quiz.isPresent()) {
-                quizQuestions = quizQuestionRepository.findByQuiz_IdOrderByDisplayOrderAsc(quiz.get().getId())
+            java.util.Optional<com.lms.material.entity.Quiz> quizOpt = quizRepository.findByMaterialGeneration_Id(generation.getId());
+            if (quizOpt.isPresent()) {
+                com.lms.material.entity.Quiz quiz = quizOpt.get();
+                isOfficial = quiz.getIsOfficial() != null ? quiz.getIsOfficial() : false;
+                
+                quizQuestions = quizQuestionRepository.findByQuiz_IdOrderByDisplayOrderAsc(quiz.getId())
                         .stream()
                         .map(q -> com.lms.material.dto.MaterialDetailRes.QuizQuestionDto.builder()
                                 .id(q.getId())
@@ -210,6 +217,10 @@ public class MaterialGenerationService {
                                 .build())
                         .toList();
             }
+        }
+        
+        if (!generation.isReusableBy(user) && !isOfficial) {
+            throw new AccessDeniedDomainException("Học liệu này thuộc về người khác");
         }
         
         return com.lms.material.dto.MaterialDetailRes.builder()

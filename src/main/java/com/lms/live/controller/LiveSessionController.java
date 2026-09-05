@@ -40,24 +40,24 @@ public class LiveSessionController {
         return ResponseEntity.ok(liveSessionService.listMine(principal.getName()));
     }
 
-    @GetMapping("/{sessionId}")
+    @GetMapping("/{sessionId:\\d+}")
     public ResponseEntity<Res> getOwned(Principal principal, @PathVariable Long sessionId) {
         return ResponseEntity.ok(liveSessionService.getOwned(principal.getName(), sessionId));
     }
 
     /** F11.9 mở rộng — ảnh riêng cho buổi live (không bắt buộc, xem `LiveSessionService.uploadThumbnail`). */
-    @PostMapping(value = "/{sessionId}/thumbnail", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping(value = "/{sessionId:\\d+}/thumbnail", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<Res> uploadThumbnail(
             Principal principal, @PathVariable Long sessionId, @RequestPart("file") MultipartFile file) {
         return ResponseEntity.ok(liveSessionService.uploadThumbnail(principal.getName(), sessionId, file));
     }
 
-    @PostMapping("/{sessionId}/start")
+    @PostMapping("/{sessionId:\\d+}/start")
     public ResponseEntity<StartRes> start(Principal principal, @PathVariable Long sessionId) {
         return ResponseEntity.ok(liveSessionService.start(principal.getName(), sessionId));
     }
 
-    @PostMapping("/{sessionId}/end")
+    @PostMapping("/{sessionId:\\d+}/end")
     public ResponseEntity<Res> end(Principal principal, @PathVariable Long sessionId) {
         return ResponseEntity.ok(liveSessionService.end(principal.getName(), sessionId));
     }

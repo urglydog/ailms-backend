@@ -117,16 +117,21 @@ public class QuizService {
     }
 
     @Transactional
-    public QuizAttemptDto.StartRes startAttempt(String studentEmail, Long courseId) {
+    public QuizAttemptDto.StartRes startAttempt(String studentEmail, Long quizId) {
         User student = userRepository.findByEmail(studentEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("User", studentEmail));
         
+        Quiz quiz = quizRepository.findById(quizId)
+                .orElseThrow(() -> new ResourceNotFoundException("Khong tim thay bai Quiz chinh thuc", quizId));
+
+        if (!quiz.getIsOfficial()) {
+            throw new AccessDeniedDomainException("Bai thi nay khong phai la bai thi chinh thuc");
+        }
+        
+        Long courseId = quiz.getMaterialGeneration().getCourse().getId();
         if (!enrollmentRepository.existsByUser_IdAndCourse_Id(student.getId(), courseId)) {
             throw new AccessDeniedDomainException("Ban can dang ky khoa hoc nay de lam bai Quiz");
         }
-        
-        Quiz quiz = quizRepository.findFirstByMaterialGeneration_Course_IdAndIsOfficialTrueOrderByCreatedAtDesc(courseId)
-                .orElseThrow(() -> new ResourceNotFoundException("Khong tim thay bai Quiz chinh thuc nao cho khoa hoc", courseId));
                 
         // Kiểm tra khung giờ mở/đóng thi
         LocalDateTime now = LocalDateTime.now();
