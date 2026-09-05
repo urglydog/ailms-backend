@@ -1,124 +1,286 @@
-# UPCOMING PLAN - KẾ HOẠCH PHÁT TRIỂN TIẾP THEO
+# UPCOMING PLAN — KẾ HOẠCH CẢI TIẾN LMS
 
-Tài liệu này ghi chú lại các vấn đề hiện đọng và định hướng mở rộng các tính năng cốt lõi của nền tảng AI-Powered LMS. Kế hoạch được phân rã dựa trên mức độ khả thi và thứ tự ưu tiên triển khai.
-
----
-
-## 1. Cải Tiến AI Course Discovery (Agent Tìm Kiếm)
-**🔴 Vấn đề hiện tại:**
-- AI Discovery đang hoạt động kém hiệu quả, hành xử như một thanh công cụ tìm kiếm keyword truyền thống thay vì một trợ lý thông minh. 
-- Lỗi không tìm thấy khóa học khi gõ "tiếng anh" dù khóa học có tồn tại (như quan sát trên giao diện). Việc bóc tách keyword và lọc (filter) đang gặp vấn đề.
-
-**🟢 Độ khả thi:** Rất cao (Có thể triển khai ngay lập tức).
-
-**🛠 Cách triển khai:**
-- **Nâng cấp Function Calling:** Cấu hình lại prompt của LLM để AI thực sự phân tích ngữ nghĩa (intent) thay vì chỉ nhặt keyword. 
-- **Tích hợp Vector Search (RAG) hoặc Full-text Search mạnh hơn:** Nếu người dùng hỏi "tiếng anh", AI cần gọi function tìm kiếm với đa dạng biến thể (English, Tiếng Anh giao tiếp, IELTS...) hoặc map trực tiếp vào Category ID phù hợp.
-- **Fallback logic:** Đảm bảo function gọi DB trả về kết quả chính xác, AI lấy danh sách đó format lại thành ngôn ngữ tự nhiên thay vì tự bịa ra câu trả lời chung chung "Dưới đây là một số khóa học" nhưng danh sách thì rỗng.
+> **Quy tắc bắt buộc:**
+> - Tuân thủ tuyệt đối Skill-set, Business Rule (BR) hiện tại của hệ thống.
+> - Không ảnh hưởng chức năng đang hoạt động ổn định.
+> - Không tự ý thay đổi nội dung file `.env` / biến môi trường.
+> - Không tự ý commit, push bất kỳ thay đổi nào khi chưa được xác nhận.
+> - Mỗi task phải đợi lệnh **CONFIRM** từ người dùng trước khi bắt đầu triển khai.
 
 ---
 
-## 2. Tối Ưu UX/UI và Logic Sinh Học Liệu (Scope & Ngôn ngữ)
-**🔴 Vấn đề hiện tại:**
-- **Phạm vi (Scope):** Người dùng không phân biệt được sự khác nhau giữa sinh "toàn khóa học" và "từng chương". Thiếu tính năng cho phép chọn sinh học liệu cho một chương cụ thể hoặc một bài học cụ thể. 
-- **Ngôn ngữ (Language):** Chỉ fix cứng (hardcode) Tiếng Anh và Tiếng Việt. Đôi khi chọn Tiếng Anh nhưng Mindmap ra Tiếng Việt do video chưa từng được lồng tiếng/tạo transcript tiếng Anh.
+## TASK 1 — Phát âm Flashcard đúng ngôn ngữ hoặc loại bỏ hoàn toàn
 
-**🟢 Độ khả thi:** Cao.
+**Vấn đề:**
+Nút phát âm (Text-to-Speech) trong thẻ Flashcard phía học viên đang dùng cứng `lang='en-US'` nên khi thẻ có nội dung tiếng Việt hoặc tiếng Nhật (như ảnh ví dụ) phát âm sẽ sai hoàn toàn.
 
-**🛠 Cách triển khai:**
-- **Mở rộng dropdown Phạm vi:** Thay vì chỉ có "Theo chương", phải là "Chọn chương: [Chương 1, Chương 2...]". Nếu có thể, hiển thị cấu trúc cây (Tree Select) cho phép tick chọn đích danh các bài học muốn sinh học liệu để tránh lãng phí token LLM.
-- **Động hóa danh sách Ngôn ngữ:** Dropdown ngôn ngữ khi sinh học liệu **chỉ hiển thị các ngôn ngữ mà khóa học (hoặc video đó) đã có sẵn transcript trên CloudCDN**. Backend cần truy vấn bảng `audio_tracks` hoặc `transcripts` để trả về danh sách ngôn ngữ hợp lệ.
-- **Xử lý ngoại lệ (Validation):** Chặn hoàn toàn việc sinh học liệu bằng ngôn ngữ chưa được lồng tiếng. Hiện cảnh báo: "Vui lòng lồng tiếng khóa học sang ngôn ngữ [X] trước khi sinh học liệu bằng ngôn ngữ này".
+**Mức độ khả thi:** 🟢 Cao
 
----
+**Đề xuất:** Ưu tiên cách A (sửa đúng ngôn ngữ) thay vì xóa bỏ — tính năng TTS giá trị với người học ngôn ngữ.
 
-## 3. Đánh Giá Khả Thi Mở Rộng Tiện Ích Flashcard, Quiz & Mindmap
+**Cách thực hiện:**
+- **Phương án A (Khuyến nghị):** Đọc trường `language` từ metadata của `FlashcardDeck` (đã lưu trong entity) và truyền vào `SpeechSynthesisUtterance.lang` khi gọi Web Speech API. Không cần gọi thêm bất kỳ AI API key nào — dùng hoàn toàn Web API của trình duyệt.
+  - Map: `vi` → `vi-VN`, `en` → `en-US`, `ja` → `ja-JP`, `ko` → `ko-KR`, `zh` → `zh-CN`, …
+  - Fallback khi ngôn ngữ không xác định: ẩn nút phát âm thay vì phát sai.
+- **Phương án B (Đơn giản, an toàn):** Ẩn hẳn nút phát âm ở phía học viên. Mindmap đã OK theo yêu cầu của bạn, nên chỉ cần tắt TTS cho Flashcard.
 
-Dưới đây là đánh giá quy mô của các tính năng đề xuất. Để phù hợp với năng lực hệ thống hiện tại, kế hoạch sẽ chia làm 2 giai đoạn (Ngắn hạn & Dài hạn).
+**Phạm vi thay đổi:**
+- Frontend only: component Flashcard của học viên (`/app/(student)/materials/[id]/page.tsx` hoặc component con).
+- Không đụng backend, không đụng API key.
 
-### 3.1 Nhóm Flashcard
-*   **Xuất/Nhập (Anki/Quizlet), Text-to-Speech (TTS), lật thẻ 2 chiều, Rich Media:** Độ khả thi **Trung bình - Cao**. Dễ làm ở Frontend. TTS có thể dùng Web Speech API miễn phí của trình duyệt.
-*   **Hệ thống ôn tập ngắt quãng (SRS - SM-2):** Độ khả thi **Rất Cao**. (Thực tế Business Rule BR-CARD-01 đã có thiết kế này, chỉ cần code logic Backend/Redis để tính toán ngày ôn tập).
-*   👉 *Kế hoạch triển khai (Ngắn hạn):* Tập trung làm thuật toán SRS (SM-2), lật thẻ 2 chiều và TTS bằng Web API. Các tính năng Import/Export đẩy xuống Dài hạn.
-
-### 3.2 Nhóm Quiz (Trắc nghiệm)
-*   **Lưu lịch sử, chấm điểm, xem đáp án:** Độ khả thi **Rất Cao**. Đây là tính năng bắt buộc phải có cho một LMS tiêu chuẩn.
-*   **Giải thích chuyên sâu (AI Socratic Tutor):** Độ khả thi **Cao**. Tận dụng lại module Socratic Tutor hiện có, gọi prompt phụ khi học viên làm sai.
-*   **Phân tích điểm yếu (Knowledge Gap), Adaptive Testing, Gamification, SCORM:** Độ khả thi **Thấp - Rất Khó**. Cần cấu trúc## 4. Quy Trình Xuất Bản Khóa Học & Tích Hợp Giám Sát Thi Cử AI (Anti-Cheat Proctoring)
-
-**🔴 Kết Quả Kiểm Tra Mã Nguồn & Tích Hợp Tính Năng Giám Sát Thi Cử AI:**
-
-### 1. Kiểm Tra Mã Nguồn Frontend (`AntiCheatExamPage` - `app/(student)/exam/[quizId]/page.tsx`):
-- FE **ĐÃ CÓ SẴN** module giám sát thi cử thông minh bằng AI tích hợp thư viện `@vladmandic/face-api`:
-  1. **Nhận diện Khuôn mặt AI Continuous Loop:** Quét webcam mỗi 2 giây, cảnh báo khi `NO_FACE` (không thấy mặt) hoặc phát hiện nhiều hơn 1 người trong khung hình.
-  2. **Theo dõi Chuyển động & Hành vi Vi phạm:** Phát hiện chuyển tab (`visibilitychange`), mất tiêu điểm cửa sổ (`blur`), rời chuột khỏi viền màn hình (`mouseleave`).
-  3. **Tự Động Đóng Bài Thi (Auto-Close/Submit):** Vi phạm quá 3 lần (`violationCount >= 3`) -> Hệ thống tự động thu bài và chấm điểm lập tức.
+**Trạng thái:** ✅ Hoàn thành
 
 ---
 
-### 2. Tích Hợp Vào Màn Hình Cấu Hình Bài Thi Của GIẢNG VIÊN:
-- Trong **Modal Cấu Hình Quiz** phía Giảng viên (`/instructor/courses/[id]/materials`):
-  - Bổ sung công tắc (Toggle): **[ 🟢 Bật Giám Sát Thi Cử AI (Camera & Tab Tracking) ]**.
-  - Bổ sung ô cấu hình: **[ Số lần vi phạm tối đa trước khi tự đóng bài ]** (Mặc định: `3` lần).
-  - Khi Giảng viên bật tính năng này, đề thi Official sẽ tự động bắt buộc Học viên phải bật Camera và chạy qua bộ lọc AI Anti-Cheat khi làm bài.
+## TASK 2 — Ngôn ngữ phản hồi của AI Gia sư khi giải thích đáp án sai Quiz
+
+**Vấn đề:**
+AI Gia sư hiện đang giải thích đáp án sai bằng tiếng Việt mặc dù bộ Quiz có thể được tạo từ nội dung tiếng Nhật hoặc ngôn ngữ khác. Câu hỏi: nên fix cứng một ngôn ngữ hay theo ngôn ngữ của bộ Quiz?
+
+**Mức độ khả thi:** 🟢 Cao
+
+**Phân tích & Đề xuất:**
+
+| Phương án | Ưu điểm | Nhược điểm |
+|---|---|---|
+| **A. Fix cứng tiếng Anh** | Nhất quán, không tốn thêm context token, Gemini giỏi tiếng Anh nhất | Học viên phải đọc tiếng Anh — có thể gây rào cản |
+| **B. Theo ngôn ngữ của bộ Quiz** | Trải nghiệm tự nhiên nhất | Tốn ~100–300 token bổ sung/lần gọi vì phải thêm ngôn ngữ vào system prompt; Gemini đôi khi không nhất quán với ngôn ngữ ít phổ biến |
+| **C. Theo ngôn ngữ lồng tiếng khóa học** | Đồng nhất với trải nghiệm học | Cần query thêm bảng audio_tracks |
+
+**Khuyến nghị của tôi:** **Phương án B** — Truyền trường `language` từ entity `Quiz` / `MaterialGeneration` vào system prompt của AI Gia sư với chỉ dẫn: *"Respond exclusively in [language]."* Chi phí token tăng không đáng kể (< 5 token cho dòng lệnh ngôn ngữ), nhưng trải nghiệm tốt hơn nhiều. Đây không phải gọi AI mới mà chỉ điều chỉnh prompt trong lần gọi đã có sẵn.
+
+**Phạm vi thay đổi:**
+- Backend: `QuizService.explainWrongAnswer(...)` — bổ sung `language` vào prompt gửi Gemini.
+- Không thay đổi schema DB, không thay đổi entity, không thay đổi endpoint.
+
+**Trạng thái:** ✅ Hoàn thành
 
 ---
 
-### 3. Bảng Tổng Hợp Công Việc Sắp Thực Hiện (Task 5 Comprehensive Plan):
+## TASK 3 — Sửa màn hình Tiến độ học tập: redirect sai + thiếu tracking + thiếu tab
 
-- **Bước 1: Triển khai Backend Shared Language Pool & Dubbing Cache**
-  - Tận dụng `DubbingLockService` & `DubbingRequestService` hiện có. Cung cấp API ngôn ngữ sẵn có cho Giảng viên.
+**Vấn đề (theo mô tả):**
+1. Nhấn vào thanh tiến độ → redirect sang trang chi tiết khóa học (đúng), nhưng các khóa học bên dưới hiển thị icon khóa (sai — học viên đã mua).
+2. Không có tab hay nút nào để xem chi tiết tracking tiến độ (số bài hoàn thành, % theo chương...).
+3. Chưa rõ tiến độ % tính dựa trên số liệu gì.
 
-- **Bước 2: Xây Dựng Màn Hình Quản Lý Học Liệu Official Cho Giảng Viên (`/instructor/courses/[id]/materials`)**
-  - Khung bấm sinh AI Official (Quiz, Flashcard, Mindmap).
-  - Full Edit CRUD câu hỏi & đáp án đề thi Official.
-  - Modal Cấu hình Bài thi tích hợp **Công tắc Bật/Tắt Giám sát Thi cử AI (Camera Proctoring)**, bộ chọn ngày giờ, chặn số âm.
+**Mức độ khả thi:** 🟡 Trung bình (cần làm rõ logic backend trước)
 
-- **Bước 3: Xây Dựng Màn Hình Gradebook & Tracking Chi Tiết (`/instructor/courses/[id]/gradebook`)**
-  - Thống kê tiến độ lớp học.
-  - Bảng điểm và Modal **[Xem Chi Tiết Bài Làm]** soi lại từng câu nộp của học viên.
+**Làm rõ logic tính tiến độ (BR-PROGRESS-01):**
+- Backend có bảng `lesson_progresses` — mỗi row ghi nhận học viên đã xem >= 90% bài học đó (BR-PROGRESS-01: threshold 90%).
+- `% tiến độ = số bài đã hoàn thành / tổng số bài của khóa * 100`.
+- Hiện API `/api/v1/progress` trả về `completedLessons` và `totalLessons` — frontend cần dùng đúng 2 trường này.
 
-- **Bước 4: Chuẩn Hóa Trải Nghiệm Học Viên & Anti-Cheat Exam**
-  - Học viên thi Quiz Official với giao diện AI Proctoring (nếu Giảng viên bật).
-  - Học liệu tự luyện cá nhân nằm trong tủ cá nhân, bị giới hạn 6 lượt/ngày (`BR-MAT-08`), không bị đẩy sang trang Giảng viên.
+**Cách thực hiện:**
+1. **Fix redirect:** Khi nhấn vào thanh tiến độ → chuyển đến `/learn/[lessonId]` (bài học cuối cùng đang học) thay vì trang giới thiệu khóa học. Nếu chưa học bài nào thì mới redirect vào trang chi tiết khóa.
+2. **Fix icon khóa:** Kiểm tra lại component `CourseCard` — khi render trong trang `/progress` phải biết học viên đã enroll → không hiện icon khóa. Truyền prop `isEnrolled={true}` hoặc dùng route segment khác.
+3. **Bổ sung tab/section tracking:** Thêm accordion hoặc section "Chi tiết tiến độ" mở ra danh sách từng chương + số bài hoàn thành / tổng số bài trong chương đó.
+4. **Hiển thị số liệu rõ ràng:** `X/Y bài hoàn thành · Z% · Bài gần nhất: [tên bài]`.
 
-- **Bước 5: Admin LLM Resource Analytics & Dynamic Quantity Scaling**
-  - Áp trần số câu hỏi theo Word Count bài giảng để chống AI Hallucination.
-  - Log token (`ai_usage_logs`) và công tắc khóa AI (`is_ai_locked`).
+**Phạm vi thay đổi:** Frontend (`/app/(student)/progress/page.tsx`), không đụng backend.
 
----
-
-## 🚀 ROADMAP THỰC THI NGẮN HẠN (Sắp xếp theo thứ tự)
-1. ✅ **[AI-Discovery]** Fix lỗi Function Calling và RAG để AI tìm đúng khóa học. (Hoàn thành)
-2. ✅ **[Học liệu - Scope & Language]** Chuẩn hóa dropdown chọn chương bài học và lọc động danh sách ngôn ngữ dựa trên transcript hiện có. (Hoàn thành)
-3. ✅ **[Học liệu - Quiz]** Xây dựng hệ thống làm bài Quiz, chấm điểm, lưu lịch sử cho Học viên. (Hoàn thành)
-4. ✅ **[Học liệu - Flashcard]** Triển khai thuật toán Spaced Repetition (SM-2) nhắc nhở học viên. (Hoàn thành)
-5. 🟡 **[Task 5 Full Execution]** Triển khai Kho Ngôn Ngữ Dùng Chung, Trang Materials & Gradebook Giảng viên (tích hợp Cấu hình Anti-Cheat Proctoring), và Admin LLM Tracking. (Đang chờ DUYỆT TỪ BẠN để bắt đầu code!)
-
-
-
-
-
-
-
-
-ích hợp bộ chọn Thời gian trực quan (Time Wheel/Spinner hoặc Hour:Minute picker) giúp Giảng viên chọn giờ chính xác mà không cần gõ phím thô.
-- **Tự động tính Thời gian đóng bài:**
-  - Ngay khi Giảng viên chọn "Thời gian mở bài" + "Thời gian làm bài", hệ thống **tự động tính sẵn và điền** `Thời gian đóng bài = Thời gian mở bài + Thời gian làm bài`. Vẫn cho phép Giảng viên điều chỉnh nới rộng khung giờ làm bài nếu cần.
-- **Khắc phục lỗi HTTP Response Save Settings:**
-  - Sửa Backend `QuizController` để trả về JSON response hợp lệ (ví dụ: `{"message": "Quiz settings updated successfully"}`), khắc phục triệt để lỗi `JSON.parse`.
-
-### 5.3. Admin Dashboard & Tracking Tài Nguyên LLM
-- **Bảng `ai_usage_logs`:** Ghi nhận token, cost, model, userId mỗi lượt gọi LLM.
-- **Màn hình Analytics Admin:** Báo cáo chi tiết tài nguyên AI tiêu thụ theo thời gian và theo user.
-- **Khóa quyền AI:** Nút công tắc "Khóa quyền AI" (`is_ai_locked`) cho Admin khóa các tài khoản lạm dụng.
+**Trạng thái:** ⬜ Chưa tiến hành
 
 ---
 
-## 🚀 ROADMAP THỰC THI NGẮN HẠN (Sắp xếp theo thứ tự)
-1. ✅ **[AI-Discovery]** Fix lỗi Function Calling và RAG để AI tìm đúng khóa học. (Hoàn thành)
-2. ✅ **[Học liệu - Scope & Language]** Chuẩn hóa dropdown chọn chương bài học và lọc động danh sách ngôn ngữ dựa trên transcript hiện có. (Hoàn thành)
-3. ✅ **[Học liệu - Quiz]** Xây dựng hệ thống làm bài Quiz, chấm điểm, lưu lịch sử, cho phép Giảng viên tạo ngân hàng câu hỏi. (Hoàn thành)
-4. ✅ **[Học liệu - Flashcard]** Triển khai thuật toán Spaced Repetition (SM-2) nhắc nhở học viên. (Hoàn thành)
-5. 🟡 **[Quyền hạn & UX Instructor & Admin Tracking]** Tái cấu trúc phân quyền học liệu Instructor (Official vs Personal), bổ sung Preview học liệu, tối ưu toàn diện UI/UX Modal Cấu hình Quiz, và xây dựng Admin LLM Tracking. (Đang chờ duyệt Plan mới)
+## TASK 4 — Hệ thống SRS Flashcard + Thông báo ôn tập (Chuông Socket)
 
+**Vấn đề:**
+1. Học viên đánh dấu mức độ khó cho từng thẻ (Dễ / Trung bình / Khó) — nhưng chức năng này hiện chỉ lưu giá trị, chưa có hệ thống SRS nào lên lịch ôn tập dựa vào đó.
+2. Icon chuông thông báo trên Header đang dùng dummy data (hardcode), chưa kết nối WebSocket thật.
+
+**Mức độ khả thi:** 🟡 Trung bình (SRS cần thêm backend scheduler)
+
+**Cách thực hiện — SRS (Spaced Repetition System):**
+- Áp dụng thuật toán **SM-2** (đơn giản, phổ biến):
+  - Dễ → interval nhân 2.5
+  - Trung bình → interval giữ nguyên
+  - Khó → reset về 1 ngày
+- Lưu `next_review_at` vào bảng `flashcard_progresses` (thêm cột hoặc bảng mới nếu chưa có).
+- Backend cần một **Scheduled Job** (Spring `@Scheduled`) chạy mỗi ngày, quét các thẻ đến hạn ôn và tạo Notification cho học viên.
+
+**Cách thực hiện — Thông báo WebSocket:**
+- Backend đã có STOMP/WebSocket cấu hình. Cần:
+  1. Tạo endpoint STOMP `/topic/notifications/{userId}`.
+  2. Gửi push notification qua STOMP khi scheduler phát hiện thẻ đến hạn.
+  3. Frontend: thay dummy data trong `NotificationProvider` bằng STOMP subscription thật.
+
+**Lưu ý BR:** Không thay đổi BR-CARD-01 hiện tại. Thêm bảng DB phải đi kèm Flyway migration mới.
+
+**Trạng thái:** ⬜ Chưa tiến hành
+
+---
+
+## TASK 5 — Quyền CRUD học liệu cá nhân của học viên & Kéo thả Mindmap cho giảng viên
+
+**Vấn đề & Đề xuất:**
+Có 2 luồng cần xem xét riêng:
+
+### 5A — Học viên CRUD học liệu cá nhân (Flashcard & Quiz)
+
+**Mức độ khả thi:** 🟢 Cao (chỉ frontend + API đã có sẵn)
+
+**Khuyến nghị:** **Nên làm** — mục tiêu học viên tự cá nhân hóa tài liệu mà không tốn AI API key.
+
+**Giới hạn quyền học viên (stricter than instructor):**
+| Loại | Cho phép | Không cho phép |
+|---|---|---|
+| Flashcard | Sửa nội dung card (mặt trước/sau), thêm ghi chú cá nhân, xóa card | Tạo deck mới bằng AI, đổi ngôn ngữ |
+| Quiz | Xem lại đáp án, xem giải thích, xóa khỏi kho cá nhân | Sửa câu hỏi/đáp án (tránh gian lận), tạo quiz mới bằng AI |
+| Mindmap | Xem, zoom, pan | Sửa code Mermaid (xem 5B bên dưới) |
+
+**Phạm vi thay đổi:** Frontend `MaterialManager.tsx` (tab Personal) + gọi các endpoint PATCH/DELETE đã có sẵn trong backend.
+
+### 5B — Kéo thả Mindmap cho giảng viên (Drag & Drop → UML sync)
+
+**Mức độ khả thi:** 🟡 Trung bình-Khó (cần thay thư viện Mermaid)
+
+**Đề xuất thư viện thay thế Mermaid:**
+- **React Flow** (`reactflow`) — render node-edge, hỗ trợ drag & drop native, có thể export lại thành Mermaid text.
+- Hoặc **GoJS** (thương mại, chất lượng cao hơn nhưng có phí).
+
+**Cơ chế đồng bộ 2 chiều:**
+1. Khi giảng viên kéo node → React Flow cập nhật state graph.
+2. Một hàm `graphToMermaid(nodes, edges)` chuyển đổi state → chuỗi Mermaid text.
+3. Textarea UML bên cạnh cập nhật realtime.
+4. Ngược lại: khi sửa text UML → parse lại → cập nhật React Flow canvas.
+
+**Học viên:** Giữ nguyên chỉ xem (Mermaid render only). Không cho sửa Mermaid code.
+
+**Trạng thái:** ⬜ Chưa tiến hành
+
+---
+
+## TASK 6 — Cải tiến giao diện Kho Học Liệu cá nhân học viên (sort, filter, đổi tên)
+
+**Vấn đề:**
+- Học liệu hiển thị dạng list thẳng theo thứ tự tạo, không phân nhóm theo type.
+- Không có filter.
+- Học liệu mặc định tên "Học liệu không tên" — xấu và không có nghĩa.
+
+**Mức độ khả thi:** 🟢 Cao
+
+**Cách thực hiện:**
+1. **Group by type:** Hiển thị 3 section riêng: 🧠 Mindmap · 🃏 Flashcard · 📝 Quiz — mỗi section có số lượng và có thể thu gọn.
+2. **Filter bar:** Thêm pill/chip filter: `Tất cả | Mindmap | Flashcard | Quiz | Official | Cá nhân`.
+3. **Sort:** Dropdown `Mới nhất | Cũ nhất | Tên A–Z`.
+4. **Inline rename:** Click vào tên học liệu → input inline edit → Enter để lưu. Gọi API PATCH `/api/v1/materials/{id}` (cập nhật trường `title`). Tên mặc định khi tạo nên được đặt dựa trên tên khóa học + loại học liệu + số thứ tự (ví dụ: *"Unity - Mindmap #1"*) thay vì "Học liệu không tên".
+
+**Phạm vi thay đổi:**
+- Frontend: `MaterialManager.tsx`.
+- Backend: kiểm tra xem endpoint PATCH title đã có chưa; nếu chưa thêm action nhỏ vào `MaterialGenerationController`.
+- Đổi tên mặc định: sửa logic tạo tên trong `MaterialGenerationService`.
+
+**Trạng thái:** ⬜ Chưa tiến hành
+
+---
+
+## TASK 7 — Gom 3 nút sinh học liệu thành 1 nút + popup thông minh
+
+**Vấn đề:**
+Có 3 nút riêng biệt (+ Sinh Mindmap, + Sinh Flashcard, + Sinh Quiz Thi Cử) và trong popup lại còn có thẻ `<select>` để chọn lại loại — dư thừa, UI rối.
+
+**Mức độ khả thi:** 🟢 Cao (pure frontend refactor)
+
+**Cách thực hiện:**
+1. Thay 3 nút bằng **1 nút** duy nhất: `🤖 Sinh Học Liệu AI`.
+2. Popup mở ra với:
+   - **Bước 1:** Chọn loại (3 card lớn có icon: Mindmap / Flashcard / Quiz) — thay thế select dropdown hiện tại.
+   - **Bước 2:** Sau khi chọn loại, popup cập nhật nội dung (options tương ứng với loại đó) — ngôn ngữ, phạm vi, cấu hình quiz…
+3. Có nút **Quay lại** để đổi loại trong cùng popup.
+
+**Phạm vi thay đổi:** Frontend only — component popup sinh học liệu trong màn hình instructor materials.
+
+**Trạng thái:** ⬜ Chưa tiến hành
+
+---
+
+## TASK 8 — Điều hướng (Navigation) trong Kho Học Liệu & Đề thi + fix nút 404
+
+**Vấn đề:**
+1. Đang xem chi tiết một học liệu, muốn quay lại list phải nhấn nút "← Quay lại danh sách" nhỏ, không trực quan.
+2. Click vào chữ "Kho Học Liệu & Đề Thi" trên sidebar không về lại màn hình danh sách.
+3. Nút "Quản lý Học liệu & Quiz" trên màn hình Bảng điểm lớp học → 404 Not Found.
+4. Mỗi màn hình có nút thoát nhỏ li ti riêng lẻ gây phân tán.
+
+**Mức độ khả thi:** 🟢 Cao
+
+**Cách thực hiện:**
+1. **Breadcrumb navigation:** Thêm breadcrumb chuẩn ở đầu mỗi màn hình con: `Kho Học Liệu & Đề Thi > [Tên học liệu]` — click vào phần nào sẽ về đúng màn hình đó. Loại bỏ các nút "Quay lại danh sách" nhỏ li ti.
+2. **Sidebar link:** Đảm bảo click "Kho Học Liệu & Đề Thi" trên sidebar luôn reset state về màn hình danh sách (không giữ lại state chi tiết cũ).
+3. **Fix nút 404 Bảng điểm:** Nút "Quản lý Học liệu & Quiz" đang link sai route. Sửa href thành `/instructor/materials?courseId={courseId}` thay vì route không tồn tại hiện tại.
+4. **Tab ngang (Tổng quan / Khóa học / …):** Mỗi tab khi click phải reset về trạng thái gốc của chức năng đó — không giữ state của màn hình con đang mở.
+
+**Phạm vi thay đổi:** Frontend — sidebar navigation, layout instructor, GradebookPage.
+
+**Trạng thái:** 🔄 Đang thực hiện
+
+---
+
+## TASK 9 — Fix Quiz: giới hạn lần làm bài + đồng hồ đếm ngược + màn hình kết quả
+
+**Vấn đề (chi tiết từ mô tả):**
+1. **Max attempts không được enforce:** Giảng viên set 1 lần nhưng học viên đã làm 2 lần vẫn cho làm tiếp.
+2. **Không có đồng hồ đếm ngược:** Set 3 phút nhưng màn hình làm bài không hiển thị timer.
+3. **Toast "nộp bài" không phù hợp:** Hiện toast xanh lá "Đã nộp bài - bạn đạt 0 điểm" — không nên dùng toast cho thông tin quan trọng này.
+4. **Màn hình kết quả quá sơ sài:** Chỉ hiện `Hoàn thành bài thi! 0/10 Điểm` và số câu đúng. Cần thêm chi tiết.
+5. **Nút "Quay lại Tiến độ học tập"** không có tác dụng rõ ràng.
+
+**Mức độ khả thi:**
+- Fix max attempts: 🟢 Cao — lỗi logic backend.
+- Đồng hồ đếm ngược: 🟢 Cao — thuần frontend.
+- Màn hình kết quả: 🟢 Cao — thuần frontend.
+
+**Cách thực hiện:**
+
+### 9.1 Fix max attempts (Backend)
+- Kiểm tra lại `QuizService.startAttempt()`: truy vấn `quizAttemptRepository.countByUser_EmailAndQuiz_Id(...)` — đảm bảo đang đếm đúng theo `quizId` (không phải courseId cũ).
+- Thêm log để xác nhận `attemptCount >= maxAttempts` được check trước khi tạo attempt mới.
+
+### 9.2 Đồng hồ đếm ngược (Frontend)
+- Khi `startAttempt` trả về `durationMinutes`, bắt đầu countdown `useEffect` + `setInterval`.
+- Hiển thị timer cố định ở góc trên bên phải màn hình làm bài: `⏱ 02:47`.
+- Khi hết giờ → tự động gọi `submitQuiz` và chuyển sang màn hình kết quả.
+
+### 9.3 Màn hình kết quả (Frontend)
+- **Xóa toast** "Đã nộp bài" — thông tin này phải hiển thị trực tiếp trên màn hình kết quả, không dùng toast.
+- **Màn hình kết quả nâng cấp:**
+  ```
+  ✅ Đã nộp bài thành công
+  Điểm của bạn: 7/10
+  ──────────────────────
+  ✅ Số câu đúng:  7/10
+  ❌ Số câu sai:   3/10
+  ⏱ Thời gian làm bài: 2 phút 13 giây
+  📅 Thời gian nộp: 05/09/2026 16:19
+  ──────────────────────
+  [Xem lại đáp án] [Về trang học]
+  ```
+- Nút "Quay lại Tiến độ học tập" → đổi thành "Về trang học" redirect đến `/learn/[lastLessonId]` hoặc `/my-courses` nếu không có lastLesson.
+
+**Phạm vi thay đổi:**
+- Backend: `QuizService.startAttempt` (check max attempts).
+- Frontend: `exam/[quizId]/page.tsx` (timer + result screen + toast removal).
+
+**Trạng thái:** 🔄 Đang thực hiện
+
+---
+
+## Bảng Tóm Tắt & Thứ Tự Ưu Tiên
+
+| # | Task | Khả thi | Phạm vi | Ưu tiên | Trạng thái |
+|---|---|---|---|---|---|
+| 1 | TTS Flashcard đúng ngôn ngữ | 🟢 Cao | FE only | 🔴 Cao | ✅ Hoàn thành |
+| 2 | AI Gia sư trả lời theo ngôn ngữ Quiz | 🟢 Cao | BE (prompt) | 🔴 Cao | ✅ Hoàn thành |
+| 3 | Tiến độ học tập: fix redirect + tracking | 🟡 TB | FE | 🟠 TB | ⬜ Chưa |
+| 4 | SRS Flashcard + WebSocket notification | 🟡 TB | BE + FE | 🟡 Dài hạn | ⬜ Chưa |
+| 5A | Học viên CRUD học liệu cá nhân | 🟢 Cao | FE | 🟠 TB | ⬜ Chưa |
+| 5B | Kéo thả Mindmap giảng viên (React Flow) | 🟡 Khó | FE (lib mới) | 🟡 Dài hạn | ⬜ Chưa |
+| 6 | Sort/filter/rename kho học liệu | 🟢 Cao | FE (+BE nhỏ) | 🟠 TB | ⬜ Chưa |
+| 7 | Gom 3 nút sinh học liệu thành 1 | 🟢 Cao | FE only | 🟠 TB | ⬜ Chưa |
+| 8 | Navigation breadcrumb + fix 404 gradebook | 🟢 Cao | FE | 🔴 Cao | ✅ Hoàn thành |
+| 9 | Fix Quiz: attempts + timer + result screen | 🟢 Cao | FE + BE | 🔴 Cao | ✅ Hoàn thành |
+
+---
+
+*Cập nhật lần cuối: 05/09/2026 — Chờ CONFIRM từng task trước khi triển khai.*

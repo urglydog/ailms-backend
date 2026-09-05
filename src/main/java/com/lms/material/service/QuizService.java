@@ -278,13 +278,19 @@ public class QuizService {
         
         if (correctOption == null) throw new IllegalArgumentException("Khong tim thay dap an dung");
         
-        String prompt = "Giải thích tại sao đáp án tôi chọn lại sai và đáp án kia lại đúng.\n" +
-                "Câu hỏi: " + question.getContent() + "\n" +
-                "Các đáp án:\n" +
+        // Lấy ngôn ngữ từ MaterialGeneration để AI trả lời đúng ngôn ngữ của bộ Quiz (Task 2)
+        String quizLanguage = question.getQuiz().getMaterialGeneration().getLanguage();
+        String languageInstruction = (quizLanguage != null && !quizLanguage.isBlank())
+                ? "\nIMPORTANT: Respond exclusively in the language with BCP-47 code: '" + quizLanguage + "'. Do NOT switch languages."
+                : "";
+
+        String prompt = "Explain why the answer I chose is wrong and why the correct answer is right.\n" +
+                "Question: " + question.getContent() + "\n" +
+                "Options:\n" +
                 options.stream().map(o -> "- " + o.getContent()).collect(Collectors.joining("\n")) + "\n" +
-                "Đáp án đúng: " + correctOption.getContent() + "\n" +
-                "Đáp án tôi chọn: " + (selectedOption != null ? selectedOption.getContent() : "Không chọn") + "\n" +
-                "Vui lòng giải thích ngắn gọn, dễ hiểu và mang tính giáo dục (dùng tiếng Việt).";
+                "Correct answer: " + correctOption.getContent() + "\n" +
+                "My answer: " + (selectedOption != null ? selectedOption.getContent() : "None selected") + "\n" +
+                "Please provide a concise, clear, and educational explanation." + languageInstruction;
                 
         Map<String, Object> payload = Map.of(
                 "question", prompt,
