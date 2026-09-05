@@ -69,10 +69,16 @@ public class QuizController {
         return ResponseEntity.ok(quizService.submitAttempt(principal.getName(), attemptId, req));
     }
 
-    @GetMapping("/courses/{courseId}/quizzes/attempts")
+    @GetMapping("/quizzes/{quizId}/attempts")
     @PreAuthorize("hasRole('STUDENT')")
-    public ResponseEntity<List<QuizAttemptDto.HistoryRes>> getAttemptHistory(Principal principal, @PathVariable Long courseId) {
-        return ResponseEntity.ok(quizService.getAttemptHistory(principal.getName(), courseId));
+    public ResponseEntity<List<QuizAttemptDto.HistoryRes>> getAttemptHistory(Principal principal, @PathVariable Long quizId) {
+        return ResponseEntity.ok(quizService.getAttemptHistory(principal.getName(), quizId));
+    }
+
+    @GetMapping("/quizzes/attempts/{attemptId}")
+    @PreAuthorize("hasRole('STUDENT')")
+    public ResponseEntity<QuizAttemptDto.SubmitRes> getAttemptDetail(Principal principal, @PathVariable Long attemptId) {
+        return ResponseEntity.ok(quizService.getAttemptDetail(principal.getName(), attemptId));
     }
 
     @PostMapping("/quizzes/tutor/explain")

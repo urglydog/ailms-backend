@@ -249,6 +249,40 @@ public class QuizService {
     }
 
     @Transactional(readOnly = true)
+    public QuizAttemptDto.SubmitRes getAttemptDetail(String studentEmail, Long attemptId) {
+        QuizAttempt attempt = quizAttemptRepository.findById(attemptId)
+                .orElseThrow(() -> new ResourceNotFoundException("QuizAttempt", attemptId));
+        
+        if (!attempt.getUser().getEmail().equals(studentEmail)) {
+            throw new AccessDeniedDomainException("Ban khong co quyen xem bai thi nay");
+        }
+        
+        List<QuizAnswer> answers = quizAnswerRepository.findByQuizAttempt_Id(attemptId);
+        List<QuizAttemptDto.AnswerDetailDto> details = new ArrayList<>();
+        boolean allowReview = Boolean.TRUE.equals(attempt.getQuiz().getAllowReview());
+        
+        for (QuizAnswer answer : answers) {
+            QuizOption correctOpt = quizOptionRepository.findByQuizQuestion_Id(answer.getQuizQuestion().getId())
+                    .stream().filter(o -> Boolean.TRUE.equals(o.getIsCorrect())).findFirst().orElse(null);
+                    
+            List<QuizAttemptDto.OptionDto> options = quizOptionRepository.findByQuizQuestion_Id(answer.getQuizQuestion().getId())
+                    .stream().map(o -> new QuizAttemptDto.OptionDto(o.getId(), o.getContent())).toList();
+                    
+            details.add(new QuizAttemptDto.AnswerDetailDto(
+                    answer.getQuizQuestion().getId(),
+                    answer.getQuizQuestion().getContent(),
+                    answer.getSelectedOption() != null ? answer.getSelectedOption().getId() : null,
+                    allowReview && correctOpt != null ? correctOpt.getId() : null,
+                    allowReview ? answer.getIsCorrect() : false,
+                    options
+            ));
+        }
+        
+        return new QuizAttemptDto.SubmitRes(attemptId, attempt.getScore(), attempt.getCorrectCount(), attempt.getTotalQuestions(), details);
+    }
+
+
+    @Transactional(readOnly = true)
     public List<QuizAttemptDto.HistoryRes> getAttemptHistory(String studentEmail, Long courseId) {
         Quiz quiz = quizRepository.findFirstByMaterialGeneration_Course_IdAndIsOfficialTrueOrderByCreatedAtDesc(courseId)
                 .orElseThrow(() -> new ResourceNotFoundException("Khong tim thay bai Quiz chinh thuc nao cho khoa hoc", courseId));
@@ -281,22 +315,23 @@ public class QuizService {
         // Lấy ngôn ngữ từ MaterialGeneration để AI trả lời đúng ngôn ngữ của bộ Quiz (Task 2)
         String quizLanguage = question.getQuiz().getMaterialGeneration().getLanguage();
         String languageInstruction = (quizLanguage != null && !quizLanguage.isBlank())
-                ? "\nIMPORTANT: Respond exclusively in the language with BCP-47 code: '" + quizLanguage + "'. Do NOT switch languages."
+                ? "CRITICAL RULE: YOU MUST WRITE YOUR ENTIRE RESPONSE IN THE LANGUAGE CORRESPONDING TO CODE '" + quizLanguage + "'. (e.g. if 'ja', you MUST reply entirely in Japanese). DO NOT USE VIETNAMESE OR ENGLISH. THIS IS STRICTLY REQUIRED.\n\n"
                 : "";
 
-        String prompt = "Explain why the answer I chose is wrong and why the correct answer is right.\n" +
+        String prompt = languageInstruction + "Explain why the answer I chose is wrong and why the correct answer is right.\n" +
                 "Question: " + question.getContent() + "\n" +
                 "Options:\n" +
                 options.stream().map(o -> "- " + o.getContent()).collect(Collectors.joining("\n")) + "\n" +
                 "Correct answer: " + correctOption.getContent() + "\n" +
                 "My answer: " + (selectedOption != null ? selectedOption.getContent() : "None selected") + "\n" +
-                "Please provide a concise, clear, and educational explanation." + languageInstruction;
+                "Please provide a concise, clear, and educational explanation.";
                 
         Map<String, Object> payload = Map.of(
                 "question", prompt,
                 "lesson_id", -1, // Not bound to a specific lesson, just a general explanation
                 "history", List.of(),
-                "attachments", List.of()
+                "attachments", List.of(),
+                "language", quizLanguage != null ? quizLanguage : ""
         );
         
         try {
