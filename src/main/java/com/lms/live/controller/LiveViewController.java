@@ -48,7 +48,7 @@ public class LiveViewController {
         return ResponseEntity.ok(liveViewService.listEnrolledFeed(authentication.getName()));
     }
 
-    @GetMapping("/api/v1/live-sessions/{sessionId}/view")
+    @GetMapping("/api/v1/live-sessions/{sessionId:\\d+}/view")
     public ResponseEntity<DetailRes> view(Authentication authentication, @PathVariable Long sessionId) {
         return ResponseEntity.ok(liveViewService.view(emailOf(authentication), sessionId));
     }
