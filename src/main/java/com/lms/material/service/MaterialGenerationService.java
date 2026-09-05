@@ -134,6 +134,7 @@ public class MaterialGenerationService {
         return toDto(saved);
     }
 
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public com.lms.material.dto.MaterialDetailRes getDetail(String email, Long id) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("User", email));
