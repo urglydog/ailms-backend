@@ -8,6 +8,7 @@ import com.lms.common.exception.ResourceNotFoundException;
 import com.lms.enrollment.repository.EnrollmentRepository;
 import com.lms.common.config.LiveKitConfig;
 import com.lms.live.dto.LiveViewDto.DetailRes;
+import com.lms.live.dto.LiveViewDto.FeedItemRes;
 import com.lms.live.dto.LiveViewDto.SummaryRes;
 import com.lms.live.entity.LiveSession;
 import com.lms.live.enums.LiveSessionStatus;
@@ -19,6 +20,7 @@ import io.livekit.server.CanPublishData;
 import io.livekit.server.CanSubscribe;
 import io.livekit.server.RoomJoin;
 import io.livekit.server.RoomName;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -40,6 +42,16 @@ public class LiveViewService {
     private static final List<LiveSessionStatus> LISTABLE_STATUSES =
             List.of(LiveSessionStatus.SCHEDULED, LiveSessionStatus.LIVE);
 
+    /** F11.9 — LIVE lên đầu (đang xem được ngay), rồi SCHEDULED theo giờ dự kiến gần nhất. Trong
+     * cùng nhóm LIVE sắp theo `startedAt` (thường chỉ 1-2 phiên đồng thời, không quan trọng bằng
+     * việc SCHEDULED phải đúng thứ tự thời gian) — `nullsLast` phòng `scheduledAt` chưa nhập (field
+     * chỉ để hiển thị, không bắt buộc, xem {@code LiveSession#scheduledAt}). */
+    private static final Comparator<LiveSession> FEED_ORDER = Comparator
+            .comparing((LiveSession s) -> s.getStatus() == LiveSessionStatus.LIVE ? 0 : 1)
+            .thenComparing(
+                    s -> s.getStatus() == LiveSessionStatus.LIVE ? s.getStartedAt() : s.getScheduledAt(),
+                    Comparator.nullsLast(Comparator.naturalOrder()));
+
     private final LiveSessionRepository liveSessionRepository;
     private final UserRepository userRepository;
     private final EnrollmentRepository enrollmentRepository;
@@ -51,6 +63,35 @@ public class LiveViewService {
         return liveSessionRepository.findByCourse_IdAndStatusIn(courseId, LISTABLE_STATUSES).stream()
                 .filter(session -> canView(viewer, session))
                 .map(this::toSummary)
+                .toList();
+    }
+
+    /** F11.9 — tab "Công khai" của trang `/live`. Không lọc theo viewer — {@code PUBLIC} nghĩa là
+     * mọi phiên đều qua được {@link #canView}, kể cả Guest, nên truy vấn thẳng theo visibility. */
+    @Transactional(readOnly = true)
+    public List<FeedItemRes> listPublicFeed() {
+        return liveSessionRepository.findByVisibilityAndStatusIn(LiveVisibility.PUBLIC, LISTABLE_STATUSES).stream()
+                .sorted(FEED_ORDER)
+                .map(this::toFeedItem)
+                .toList();
+    }
+
+    /** F11.9 — tab "Khóa học của tôi". Bắt buộc {@code viewerEmail} khác {@code null} (FE không gọi
+     * endpoint này khi chưa đăng nhập — xem `SecurityConfig`, path này rơi vào
+     * {@code anyRequest().authenticated()} nên Guest không tới được đây). */
+    @Transactional(readOnly = true)
+    public List<FeedItemRes> listEnrolledFeed(String viewerEmail) {
+        List<Long> enrolledCourseIds = enrollmentRepository.findByUser_Email(viewerEmail).stream()
+                .map(enrollment -> enrollment.getCourse().getId())
+                .toList();
+        if (enrolledCourseIds.isEmpty()) {
+            return List.of();
+        }
+        return liveSessionRepository
+                .findByCourse_IdInAndVisibilityAndStatusIn(enrolledCourseIds, LiveVisibility.COURSE_ONLY, LISTABLE_STATUSES)
+                .stream()
+                .sorted(FEED_ORDER)
+                .map(this::toFeedItem)
                 .toList();
     }
 
@@ -129,5 +170,17 @@ public class LiveViewService {
     private SummaryRes toSummary(LiveSession session) {
         return new SummaryRes(session.getId(), session.getTitle(), session.getStatus(),
                 session.getScheduledAt(), session.getStartedAt());
+    }
+
+    private FeedItemRes toFeedItem(LiveSession session) {
+        // F11.9 mở rộng — giảng viên không bắt buộc tải ảnh riêng cho buổi live; fallback về ảnh
+        // bìa khóa học ngay ở đây để FE dùng thẳng, không cần biết "ảnh nào tới từ đâu".
+        String thumbnailUrl = session.getThumbnailUrl() != null
+                ? session.getThumbnailUrl() : session.getCourse().getThumbnailUrl();
+        return new FeedItemRes(
+                session.getId(), session.getTitle(), thumbnailUrl, session.getStatus(),
+                session.getScheduledAt(), session.getStartedAt(),
+                session.getCourse().getId(), session.getCourse().getTitle(), session.getCourse().getSlug(),
+                session.getInstructor().getFullName(), session.getSourceLanguage());
     }
 }

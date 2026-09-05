@@ -87,7 +87,14 @@ public class SecurityConfig {
             // Guest (BR-LIVE-06 chỉ giới hạn NGÔN NGỮ nào hợp lệ, không giới hạn AI XEM được badge
             // này); kích hoạt/rời (POST/DELETE cùng path) vẫn bắt buộc JWT vì không nằm trong
             // PUBLIC_GET_ENDPOINTS (chỉ áp dụng method GET, xem HttpMethod.GET bên dưới).
-            "/api/v1/live-sessions/*/language-tracks"
+            "/api/v1/live-sessions/*/language-tracks",
+            // F11.9 — tab "Công khai" trang /live, Guest xem được (BR-LIVE-01 PUBLIC). Path LITERAL
+            // "public" khác "/api/v1/live-sessions/{sessionId}/view" ở trên (khác số đoạn đường
+            // dẫn) và khác "/api/v1/live-sessions/{sessionId}" của LiveSessionController (đoạn
+            // literal luôn được Spring ưu tiên khớp trước {biến} cùng vị trí — không cần thêm gì
+            // để tránh 2 route đó "cắn" nhau). Tab "Khóa học của tôi" (endpoint /enrolled) CỐ TÌNH
+            // không liệt kê ở đây — bắt buộc JWT, rơi vào anyRequest().authenticated() mặc định.
+            "/api/v1/live-sessions/public"
             // /api/v1/discovery/** đã chuyển sang PUBLIC_ENDPOINTS vì discovery/chat là POST, không phải GET
     };
 

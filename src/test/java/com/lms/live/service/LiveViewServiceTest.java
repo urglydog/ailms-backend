@@ -7,13 +7,16 @@ import com.lms.common.config.LiveKitConfig;
 import com.lms.common.enums.Role;
 import com.lms.common.exception.AccessDeniedDomainException;
 import com.lms.common.exception.ResourceNotFoundException;
+import com.lms.enrollment.entity.Enrollment;
 import com.lms.enrollment.repository.EnrollmentRepository;
 import com.lms.live.dto.LiveViewDto.DetailRes;
+import com.lms.live.dto.LiveViewDto.FeedItemRes;
 import com.lms.live.dto.LiveViewDto.SummaryRes;
 import com.lms.live.entity.LiveSession;
 import com.lms.live.enums.LiveSessionStatus;
 import com.lms.live.enums.LiveVisibility;
 import com.lms.live.repository.LiveSessionRepository;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -79,6 +82,8 @@ class LiveViewServiceTest {
         course = new Course();
         course.setId(COURSE_ID);
         course.setTitle("Java co ban");
+        course.setSlug("java-co-ban");
+        course.setThumbnailUrl("https://cdn.example.com/thumbnails/course.jpg");
         course.setInstructor(instructor);
 
         lenient().when(userRepository.findByEmail(STUDENT_EMAIL)).thenReturn(Optional.of(student));
@@ -198,5 +203,83 @@ class LiveViewServiceTest {
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).id()).isEqualTo(SESSION_ID);
+    }
+
+    @Test
+    void listPublicFeed_LIVEDungTruocSCHEDULED_saoDuTinh() {
+        LiveSession scheduled = session(LiveVisibility.PUBLIC, LiveSessionStatus.SCHEDULED);
+        scheduled.setId(21L);
+        scheduled.setScheduledAt(LocalDateTime.now().plusHours(1));
+        LiveSession live = session(LiveVisibility.PUBLIC, LiveSessionStatus.LIVE);
+        live.setStartedAt(LocalDateTime.now());
+        when(liveSessionRepository.findByVisibilityAndStatusIn(LiveVisibility.PUBLIC,
+                List.of(LiveSessionStatus.SCHEDULED, LiveSessionStatus.LIVE)))
+                // Cố tình trả SCHEDULED trước trong danh sách gốc — verify service TỰ sắp lại,
+                // không phải trùng hợp đúng thứ tự nhờ thứ tự trả về của repository.
+                .thenReturn(List.of(scheduled, live));
+
+        List<FeedItemRes> result = liveViewService.listPublicFeed();
+
+        assertThat(result).hasSize(2);
+        assertThat(result.get(0).id()).isEqualTo(SESSION_ID); // live lên đầu
+        assertThat(result.get(0).status()).isEqualTo(LiveSessionStatus.LIVE);
+        assertThat(result.get(0).courseTitle()).isEqualTo("Java co ban");
+        assertThat(result.get(0).instructorName()).isEqualTo("Co Lan");
+        assertThat(result.get(1).id()).isEqualTo(21L);
+    }
+
+    @Test
+    void listPublicFeed_phienChuaTuTaiAnhRieng_fallbackVeAnhBiaKhoaHoc() {
+        LiveSession session = session(LiveVisibility.PUBLIC, LiveSessionStatus.LIVE);
+        session.setStartedAt(LocalDateTime.now());
+        // KHONG setThumbnailUrl — phien chua tu tai anh rieng.
+        when(liveSessionRepository.findByVisibilityAndStatusIn(LiveVisibility.PUBLIC,
+                List.of(LiveSessionStatus.SCHEDULED, LiveSessionStatus.LIVE)))
+                .thenReturn(List.of(session));
+
+        List<FeedItemRes> result = liveViewService.listPublicFeed();
+
+        assertThat(result.get(0).thumbnailUrl()).isEqualTo("https://cdn.example.com/thumbnails/course.jpg");
+    }
+
+    @Test
+    void listPublicFeed_phienDaTuTaiAnhRieng_uuTienAnhRieng() {
+        LiveSession session = session(LiveVisibility.PUBLIC, LiveSessionStatus.LIVE);
+        session.setStartedAt(LocalDateTime.now());
+        session.setThumbnailUrl("https://cdn.example.com/live-thumbnails/20/rieng.jpg");
+        when(liveSessionRepository.findByVisibilityAndStatusIn(LiveVisibility.PUBLIC,
+                List.of(LiveSessionStatus.SCHEDULED, LiveSessionStatus.LIVE)))
+                .thenReturn(List.of(session));
+
+        List<FeedItemRes> result = liveViewService.listPublicFeed();
+
+        assertThat(result.get(0).thumbnailUrl()).isEqualTo("https://cdn.example.com/live-thumbnails/20/rieng.jpg");
+    }
+
+    @Test
+    void listEnrolledFeed_chuaGhiDanhKhoaNao_traVeRong() {
+        when(enrollmentRepository.findByUser_Email(STUDENT_EMAIL)).thenReturn(List.of());
+
+        List<FeedItemRes> result = liveViewService.listEnrolledFeed(STUDENT_EMAIL);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void listEnrolledFeed_traVeDungPhienCuaKhoaDaGhiDanh() {
+        Enrollment enrollment = new Enrollment();
+        enrollment.setUser(student);
+        enrollment.setCourse(course);
+        when(enrollmentRepository.findByUser_Email(STUDENT_EMAIL)).thenReturn(List.of(enrollment));
+        LiveSession courseOnlySession = session(LiveVisibility.COURSE_ONLY, LiveSessionStatus.LIVE);
+        when(liveSessionRepository.findByCourse_IdInAndVisibilityAndStatusIn(
+                List.of(COURSE_ID), LiveVisibility.COURSE_ONLY, List.of(LiveSessionStatus.SCHEDULED, LiveSessionStatus.LIVE)))
+                .thenReturn(List.of(courseOnlySession));
+
+        List<FeedItemRes> result = liveViewService.listEnrolledFeed(STUDENT_EMAIL);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).id()).isEqualTo(SESSION_ID);
+        assertThat(result.get(0).courseId()).isEqualTo(COURSE_ID);
     }
 }

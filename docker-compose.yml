@@ -129,6 +129,8 @@ services:
       B2_KEY_ID: ${B2_KEY_ID:-}
       B2_APPLICATION_KEY: ${B2_APPLICATION_KEY:-}
       B2_ENDPOINT: ${B2_ENDPOINT:-}
+      # YouTube Data API v3 — YoutubeMetadataService (05/09/2026, thay yt-dlp bị chặn IP VPS)
+      YOUTUBE_API_KEY: ${YOUTUBE_API_KEY:-}
       # Cổng thanh toán (Sandbox)
       MOMO_PARTNER_CODE: ${MOMO_PARTNER_CODE:-}
       MOMO_ACCESS_KEY: ${MOMO_ACCESS_KEY:-}
