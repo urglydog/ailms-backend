@@ -3,7 +3,9 @@ package com.lms.chat.service;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
+import com.lms.catalog.entity.Course;
 import com.lms.catalog.entity.Lesson;
+import com.lms.catalog.repository.CourseRepository;
 import com.lms.catalog.repository.LessonRepository;
 import com.lms.chat.dto.TutorDto.AskReq;
 import com.lms.chat.dto.TutorDto.AskRes;
@@ -52,6 +54,14 @@ import org.springframework.web.client.RestTemplate;
  * <p>{@code be/} là nơi DUY NHẤT ghi {@link ChatMessage} — AI Worker chỉ tính toán câu
  * trả lời rồi trả về, không tự ghi MySQL (đúng nguyên tắc AI Worker không kết nối MySQL
  * trực tiếp).
+ *
+ * <p><b>06/09/2026 — phiên chat chuyển sang phạm vi KHÓA HỌC.</b> Trước đây mỗi bài học có
+ * danh sách lịch sử chat riêng, gây lỗi thực tế: học viên đổi bài trong CÙNG 1 khóa lại
+ * thấy danh sách lịch sử KHÁC hẳn. Giờ 1 (học viên, khóa học) dùng CHUNG 1 danh sách —
+ * bài học đang mở chỉ còn là 1 tham số truyền theo TỪNG LƯỢT HỎI ({@code currentLessonId}),
+ * dùng làm ngữ cảnh MẶC ĐỊNH cho AI Worker: học viên không nói rõ bài nào thì trả lời theo
+ * đúng bài đang mở; nói rõ tên/số 1 bài KHÁC trong khóa thì AI tự đổi ngữ cảnh sang bài đó
+ * (AI Worker tự phân loại bằng Gemini, xem {@code app/services/tutor_service.py}).
  */
 @Slf4j
 @Service
@@ -77,6 +87,7 @@ public class TutorService {
     private static final java.util.Set<String> ALLOWED_ATTACHMENT_EXACT_MIME = java.util.Set.of("text/plain", "application/pdf");
 
     private final UserRepository userRepository;
+    private final CourseRepository courseRepository;
     private final LessonRepository lessonRepository;
     private final EnrollmentSecurity enrollmentSecurity;
     private final TutorQuotaService tutorQuotaService;
@@ -95,10 +106,11 @@ public class TutorService {
     private long maxAttachmentSizeMb;
 
     @Transactional
-    public AskRes ask(String email, Long lessonId, AskReq req) {
-        User user = requireAccess(email, lessonId);
-        Lesson lesson = lessonRepository.findById(lessonId)
-                .orElseThrow(() -> new ResourceNotFoundException("Lesson", lessonId));
+    public AskRes ask(String email, Long courseId, AskReq req) {
+        User user = requireAccess(email, courseId);
+        Course course = courseRepository.findById(courseId)
+                .orElseThrow(() -> new ResourceNotFoundException("Course", courseId));
+        Lesson currentLesson = requireLessonInCourse(req.currentLessonId(), courseId);
 
         // BR-TUTOR-04
         tutorQuotaService.consume(user.getId());
@@ -106,12 +118,12 @@ public class TutorService {
         ChatSession session = req.sessionId() != null
                 // Kiem tra so huu — hoc vien A khong duoc gui sessionId cua hoc vien B de
                 // "chen" cau hoi vao phien chat nguoi khac.
-                ? loadOwnedSession(req.sessionId(), user.getId(), lessonId)
-                : chatSessionRepository.findFirstByUser_IdAndLesson_IdOrderByCreatedAtDesc(user.getId(), lessonId)
+                ? loadOwnedSession(req.sessionId(), user.getId(), courseId)
+                : chatSessionRepository.findFirstByUser_IdAndCourse_IdOrderByCreatedAtDesc(user.getId(), courseId)
                         .orElseGet(() -> {
                             ChatSession s = new ChatSession();
                             s.setUser(user);
-                            s.setLesson(lesson);
+                            s.setCourse(course);
                             return chatSessionRepository.save(s);
                         });
 
@@ -126,7 +138,7 @@ public class TutorService {
         Collections.reverse(history); // cu -> moi, dung thu tu hoi thoai that
 
         List<UploadedAttachment> uploaded = processAttachments(session.getId(), req.attachments());
-        AiWorkerAskRes aiRes = callAiWorker(lessonId, req.question(), history, uploaded);
+        AiWorkerAskRes aiRes = callAiWorker(courseId, currentLesson.getId(), req.question(), history, uploaded);
 
         ChatMessage userMsg = new ChatMessage();
         userMsg.setChatSession(session);
@@ -145,12 +157,20 @@ public class TutorService {
             chatMessageAttachmentRepository.save(entity);
         }
 
+        // contextLessonId AI Worker tra ve la bai hoc THAT SU dung lam ngu canh — mac dinh
+        // trung currentLesson, khac di neu hoc vien hoi ro ve 1 bai khac trong khoa.
+        Long contextLessonId = aiRes.contextLessonId() != null ? aiRes.contextLessonId() : currentLesson.getId();
+        Lesson contextLesson = contextLessonId.equals(currentLesson.getId())
+                ? currentLesson
+                : lessonRepository.findById(contextLessonId).orElse(currentLesson);
+
         ChatMessage aiMsg = new ChatMessage();
         aiMsg.setChatSession(session);
         aiMsg.setSender("AI");
         aiMsg.setContent(aiRes.answer());
         aiMsg.setCitedTimestamps(toJsonArray(aiRes.citedTimestamps()));
         aiMsg.setTokenUsed(aiRes.tokenUsed());
+        aiMsg.setContextLesson(contextLesson);
         chatMessageRepository.save(aiMsg);
 
         // UC30 mở rộng — chỉ tự đặt tên đúng 1 LẦN, ngay sau lượt hỏi ĐẦU TIÊN của 1 phiên MỚI
@@ -160,19 +180,20 @@ public class TutorService {
             trySetAiGeneratedTitle(session, req.question(), aiRes.answer());
         }
 
-        return new AskRes(session.getId(), aiRes.answer(), aiRes.citedTimestamps(), aiRes.tokenUsed());
+        return new AskRes(session.getId(), aiRes.answer(), aiRes.citedTimestamps(), aiRes.tokenUsed(), contextLesson.getId());
     }
 
     /**
-     * UC30 mở rộng — danh sách "lịch sử trò chuyện" kiểu ChatGPT cho (học viên, bài học) này:
-     * mục ĐÃ GHIM lên trước (mới ghim nhất trước), rồi tới mục còn lại sắp theo tin nhắn GẦN
-     * NHẤT (không phải lúc TẠO phiên — sửa đúng lỗi thực tế: 1 phiên cũ vừa nhắn tiếp vẫn phải
-     * nhảy lên đầu danh sách "chưa ghim", giống hành vi ChatGPT/Gemini).
+     * UC30 mở rộng — danh sách "lịch sử trò chuyện" kiểu ChatGPT cho (học viên, khóa học) này —
+     * DÙNG CHUNG cho mọi bài học trong khóa (06/09/2026): mục ĐÃ GHIM lên trước (mới ghim nhất
+     * trước), rồi tới mục còn lại sắp theo tin nhắn GẦN NHẤT (không phải lúc TẠO phiên — sửa
+     * đúng lỗi thực tế: 1 phiên cũ vừa nhắn tiếp vẫn phải nhảy lên đầu danh sách "chưa ghim",
+     * giống hành vi ChatGPT/Gemini).
      */
     @Transactional(readOnly = true)
-    public List<SessionRes> listSessions(String email, Long lessonId) {
-        User user = requireAccess(email, lessonId);
-        List<ChatSession> sessions = chatSessionRepository.findByUser_IdAndLesson_IdOrderByCreatedAtDesc(user.getId(), lessonId);
+    public List<SessionRes> listSessions(String email, Long courseId) {
+        User user = requireAccess(email, courseId);
+        List<ChatSession> sessions = chatSessionRepository.findByUser_IdAndCourse_IdOrderByCreatedAtDesc(user.getId(), courseId);
 
         record Summary(ChatSession session, String title, LocalDateTime lastActivityAt) {}
         List<Summary> summaries = sessions.stream()
@@ -208,9 +229,9 @@ public class TutorService {
     /** UC30 mở rộng — phục hồi lại TOÀN BỘ tin của 1 phiên cũ, cũ -> mới (đúng thứ tự hội thoại
      * thật) khi học viên bấm mở lại 1 cuộc trò chuyện trong danh sách lịch sử. */
     @Transactional(readOnly = true)
-    public List<MessageRes> getMessages(String email, Long lessonId, Long sessionId) {
-        User user = requireAccess(email, lessonId);
-        ChatSession session = loadOwnedSession(sessionId, user.getId(), lessonId);
+    public List<MessageRes> getMessages(String email, Long courseId, Long sessionId) {
+        User user = requireAccess(email, courseId);
+        ChatSession session = loadOwnedSession(sessionId, user.getId(), courseId);
         List<ChatMessage> messages = chatMessageRepository.findByChatSession_IdOrderByCreatedAtAsc(session.getId());
 
         // 1 truy van cho CA đoạn hội thoại thay vì 1 truy van/tin nhan (tranh N+1).
@@ -226,7 +247,8 @@ public class TutorService {
         return messages.stream()
                 .map(m -> new MessageRes(
                         m.getId(), m.getSender(), m.getContent(), fromJsonArray(m.getCitedTimestamps()),
-                        attachmentsByMessageId.getOrDefault(m.getId(), List.of())))
+                        attachmentsByMessageId.getOrDefault(m.getId(), List.of()),
+                        m.getContextLesson() != null ? m.getContextLesson().getId() : null))
                 .toList();
     }
 
@@ -237,13 +259,13 @@ public class TutorService {
      * nhánh `loadOwnedSession` của {@code ask()}, không rơi vào nhánh "tái sử dụng gần nhất" nữa.
      */
     @Transactional
-    public SessionRes startNewSession(String email, Long lessonId) {
-        User user = requireAccess(email, lessonId);
-        Lesson lesson = lessonRepository.findById(lessonId)
-                .orElseThrow(() -> new ResourceNotFoundException("Lesson", lessonId));
+    public SessionRes startNewSession(String email, Long courseId) {
+        User user = requireAccess(email, courseId);
+        Course course = courseRepository.findById(courseId)
+                .orElseThrow(() -> new ResourceNotFoundException("Course", courseId));
         ChatSession session = new ChatSession();
         session.setUser(user);
-        session.setLesson(lesson);
+        session.setCourse(course);
         ChatSession saved = chatSessionRepository.save(session);
         return new SessionRes(saved.getId(), "Cuộc trò chuyện mới", saved.getCreatedAt(), false);
     }
@@ -251,9 +273,9 @@ public class TutorService {
     /** UC30 mở rộng — đổi tên thủ công, ghi đè VĨNH VIỄN — {@code ask()} không bao giờ tự đặt
      * lại tên AI cho phiên đã có {@code title} khác null. */
     @Transactional
-    public void renameSession(String email, Long lessonId, Long sessionId, String newTitle) {
-        User user = requireAccess(email, lessonId);
-        ChatSession session = loadOwnedSession(sessionId, user.getId(), lessonId);
+    public void renameSession(String email, Long courseId, Long sessionId, String newTitle) {
+        User user = requireAccess(email, courseId);
+        ChatSession session = loadOwnedSession(sessionId, user.getId(), courseId);
         session.setTitle(newTitle.trim());
         chatSessionRepository.save(session);
     }
@@ -261,11 +283,11 @@ public class TutorService {
     /** UC30 mở rộng — ghim/bỏ ghim; tối đa {@link #MAX_PINNED_SESSIONS} mục ghim cùng lúc để
      * mục "đã ghim" không phình to mất tác dụng nổi bật. */
     @Transactional
-    public void pinSession(String email, Long lessonId, Long sessionId, boolean pinned) {
-        User user = requireAccess(email, lessonId);
-        ChatSession session = loadOwnedSession(sessionId, user.getId(), lessonId);
+    public void pinSession(String email, Long courseId, Long sessionId, boolean pinned) {
+        User user = requireAccess(email, courseId);
+        ChatSession session = loadOwnedSession(sessionId, user.getId(), courseId);
         if (pinned) {
-            long currentlyPinned = chatSessionRepository.findByUser_IdAndLesson_IdOrderByCreatedAtDesc(user.getId(), lessonId)
+            long currentlyPinned = chatSessionRepository.findByUser_IdAndCourse_IdOrderByCreatedAtDesc(user.getId(), courseId)
                     .stream().filter(s -> Boolean.TRUE.equals(s.getIsPinned())).count();
             if (currentlyPinned >= MAX_PINNED_SESSIONS && !Boolean.TRUE.equals(session.getIsPinned())) {
                 throw new BusinessRuleViolationException(
@@ -283,9 +305,9 @@ public class TutorService {
     /** UC30 mở rộng — xoá hẳn 1 cuộc trò chuyện. Phải xoá {@link ChatMessage} con trước vì FK
      * {@code fk_chat_messages_chat_session_id} không có {@code ON DELETE CASCADE}. */
     @Transactional
-    public void deleteSession(String email, Long lessonId, Long sessionId) {
-        User user = requireAccess(email, lessonId);
-        ChatSession session = loadOwnedSession(sessionId, user.getId(), lessonId);
+    public void deleteSession(String email, Long courseId, Long sessionId) {
+        User user = requireAccess(email, courseId);
+        ChatSession session = loadOwnedSession(sessionId, user.getId(), courseId);
         chatMessageRepository.deleteAll(chatMessageRepository.findByChatSession_IdOrderByCreatedAtAsc(session.getId()));
         chatSessionRepository.delete(session);
     }
@@ -340,22 +362,34 @@ public class TutorService {
      * tích, KHÔNG lưu xuống DB (chỉ `fileUrl` mới được lưu, xem {@link ChatMessageAttachment}). */
     private record UploadedAttachment(String fileName, String fileUrl, String mimeType, long fileSize, String dataBase64) {}
 
-    /** UC30 actor chỉ có Student, và chỉ hỏi được nội dung bài học ĐÃ sở hữu — không cho phép
-     * ở bài Preview (giống LessonProgressService: Preview không có quyền đầy đủ, BR-ENROLL-02). */
-    private User requireAccess(String email, Long lessonId) {
+    /** UC30 actor chỉ có Student, và chỉ hỏi được nội dung khóa học ĐÃ sở hữu — không cho phép
+     * chỉ vì có 1 bài Preview trong khóa (giống LessonProgressService, BR-ENROLL-02). */
+    private User requireAccess(String email, Long courseId) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("User", email));
-        if (!enrollmentSecurity.canAccessLesson(email, lessonId, false)) {
+        if (!enrollmentSecurity.canAccessCourse(email, courseId)) {
             throw new AccessDeniedDomainException("Bạn chưa sở hữu khóa học này (BR-ENROLL-02)");
         }
         return user;
     }
 
+    /** UC30 mở rộng (06/09/2026) — `currentLessonId` học viên gửi lên phải thuộc ĐÚNG khóa học
+     * đang hỏi (`courseId`), tránh 1 request lấy ngữ cảnh "bài đang mở" từ 1 khóa học KHÁC mà
+     * họ không hẳn có quyền truy cập nội dung (phòng thủ, dù FE luôn gửi đúng giá trị thật). */
+    private Lesson requireLessonInCourse(Long lessonId, Long courseId) {
+        Lesson lesson = lessonRepository.findById(lessonId)
+                .orElseThrow(() -> new ResourceNotFoundException("Lesson", lessonId));
+        if (!lesson.getChapter().getCourse().getId().equals(courseId)) {
+            throw new InvalidRequestException("Bài học đang mở không thuộc khóa học này");
+        }
+        return lesson;
+    }
+
     /** Chặn học viên A xem/hỏi tiếp vào phiên chat của học viên B chỉ bằng cách đoán `sessionId`. */
-    private ChatSession loadOwnedSession(Long sessionId, Long userId, Long lessonId) {
+    private ChatSession loadOwnedSession(Long sessionId, Long userId, Long courseId) {
         ChatSession session = chatSessionRepository.findById(sessionId)
                 .orElseThrow(() -> new ResourceNotFoundException("ChatSession", sessionId));
-        if (!session.getUser().getId().equals(userId) || !session.getLesson().getId().equals(lessonId)) {
+        if (!session.getUser().getId().equals(userId) || !session.getCourse().getId().equals(courseId)) {
             throw new AccessDeniedDomainException("Phiên trò chuyện này không thuộc về bạn");
         }
         return session;
@@ -408,9 +442,11 @@ public class TutorService {
                 .toList();
     }
 
-    private AiWorkerAskRes callAiWorker(Long lessonId, String question, List<ChatMessage> history, List<UploadedAttachment> attachments) {
+    private AiWorkerAskRes callAiWorker(
+            Long courseId, Long currentLessonId, String question, List<ChatMessage> history, List<UploadedAttachment> attachments) {
         Map<String, Object> payload = Map.of(
-                "lesson_id", lessonId,
+                "course_id", courseId,
+                "current_lesson_id", currentLessonId,
                 "question", question,
                 "history", history.stream()
                         .map(m -> Map.of("sender", m.getSender(), "content", m.getContent()))
@@ -429,7 +465,7 @@ public class TutorService {
             }
             return res;
         } catch (RestClientException exc) {
-            log.error("Goi AI Worker that bai cho Tutor (lesson {}): {}", lessonId, exc.getMessage());
+            log.error("Goi AI Worker that bai cho Tutor (course {}, lesson {}): {}", courseId, currentLessonId, exc.getMessage());
             throw new ExternalServiceException("Gia sư AI hiện không khả dụng, vui lòng thử lại sau.");
         }
     }
@@ -450,7 +486,8 @@ public class TutorService {
     private record AiWorkerAskRes(
             String answer,
             @JsonProperty("cited_timestamps") List<Integer> citedTimestamps,
-            @JsonProperty("token_used") Integer tokenUsed
+            @JsonProperty("token_used") Integer tokenUsed,
+            @JsonProperty("context_lesson_id") Long contextLessonId
     ) {}
 
     /** Khớp response của {@code POST /api/v1/tutor/title} bên AI Worker. */
