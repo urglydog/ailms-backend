@@ -35,6 +35,13 @@ public class Payment extends BaseEntity {
     @Column(name = "txn_ref", nullable = false, unique = true, length = 100)
     private String txnRef;
 
+    /** Giỏ hàng (06/09/2026, mở rộng ngoài đặc tả gốc) — các Payment tạo CÙNG 1 lần bấm
+     * "Proceed to Checkout" (gộp thanh toán nhiều khóa) chia sẻ chung giá trị này, để
+     * webhook cổng thanh toán xác nhận CẢ NHÓM cùng lúc (xem {@code PaymentService.
+     * processGatewayCallback}). NULL ở luồng mua 1 khóa trực tiếp (UC13/UC14, không đổi). */
+    @Column(name = "order_group_ref", length = 50)
+    private String orderGroupRef;
+
     /** Lấy từ giá server, KHÔNG nhận từ client (BR-PAY-02). */
     @Column(name = "amount", nullable = false, precision = 12, scale = 2)
     private BigDecimal amount;

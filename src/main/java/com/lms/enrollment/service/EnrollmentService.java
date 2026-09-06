@@ -13,6 +13,7 @@ import com.lms.common.exception.BusinessRuleViolationException;
 import com.lms.enrollment.repository.CourseReviewRepository;
 import com.lms.enrollment.repository.EnrollmentRepository;
 import com.lms.payment.entity.Payment;
+import com.lms.payment.repository.CartItemRepository;
 import java.time.LocalDateTime;
 import java.math.BigDecimal;
 import java.util.List;
@@ -34,6 +35,7 @@ public class EnrollmentService {
     private final CourseReviewRepository courseReviewRepository;
     private final CourseRepository courseRepository;
     private final LessonRepository lessonRepository;
+    private final CartItemRepository cartItemRepository;
 
     @Transactional(readOnly = true)
     public List<Res> getMyEnrollments(String email) {
@@ -93,6 +95,8 @@ public class EnrollmentService {
         enrollment.setEnrolledAt(LocalDateTime.now());
         enrollment.setProgressPct(BigDecimal.ZERO);
         enrollmentRepository.save(enrollment);
+        // Gio hang (06/09/2026, mo rong) — da so huu roi thi khong con ly do nam trong gio nua.
+        cartItemRepository.deleteByUser_IdAndCourse_Id(user.getId(), course.getId());
     }
 
     /**
@@ -111,5 +115,8 @@ public class EnrollmentService {
         enrollment.setEnrolledAt(LocalDateTime.now());
         enrollment.setProgressPct(BigDecimal.ZERO);
         enrollmentRepository.save(enrollment);
+        // Gio hang (06/09/2026, mo rong) — thanh toan xong (tu gio hang hoac mua truc tiep)
+        // thi xoa khoi gio hang neu co, tranh con nam lai o do sau khi da so huu.
+        cartItemRepository.deleteByUser_IdAndCourse_Id(payment.getUser().getId(), payment.getCourse().getId());
     }
 }

@@ -20,7 +20,11 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     Optional<Payment> findByTxnRef(String txnRef);
     List<Payment> findByUser_EmailOrderByCreatedAtDesc(String email);
     List<Payment> findByStatusAndCreatedAtBefore(PaymentStatus status, LocalDateTime before);
-    
+
+    /** Giỏ hàng (06/09/2026) — các Payment tạo cùng 1 lần gộp thanh toán chia sẻ chung giá
+     * trị này, xem {@code Payment.orderGroupRef}. */
+    List<Payment> findByOrderGroupRef(String orderGroupRef);
+
     @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"user", "course"})
     List<Payment> findAllByOrderByCreatedAtDesc();
 }

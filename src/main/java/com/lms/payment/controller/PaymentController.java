@@ -29,6 +29,16 @@ public class PaymentController {
         return ResponseEntity.ok(paymentService.createPayment(principal.getName(), req));
     }
 
+    /** Giỏ hàng (06/09/2026, mở rộng ngoài đặc tả gốc) — gộp thanh toán nhiều khóa học đã
+     * chọn (checkbox) trong 1 lần "Proceed to Checkout" từ trang giỏ hàng. */
+    @PostMapping("/create-batch")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
+    public ResponseEntity<PaymentDto.PaymentUrlRes> createBatchPayment(
+            Principal principal,
+            @Valid @RequestBody PaymentDto.CreateBatchReq req) {
+        return ResponseEntity.ok(paymentService.createBatchPayment(principal.getName(), req));
+    }
+
     /**
      * Endpoint IPN giả lập để test.
      * Trong thực tế, VNPAY sẽ gọi endpoint này dưới dạng GET với param đầy đủ,
