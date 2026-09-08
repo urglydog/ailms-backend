@@ -25,7 +25,8 @@ public class QuizAttemptDto {
             List<QuestionDto> questions,
             Boolean isProctored,
             Integer maxViolations,
-            Integer durationMinutes
+            Integer durationMinutes,
+            LocalDateTime startedAt
     ) {}
 
 
@@ -66,6 +67,7 @@ public class QuizAttemptDto {
             Integer correctCount,
             Integer totalQuestions,
             LocalDateTime submittedAt,
-            Long quizId
+            Long quizId,
+            String status
     ) {}
 }
