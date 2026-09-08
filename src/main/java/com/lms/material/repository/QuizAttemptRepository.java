@@ -15,4 +15,10 @@ import java.util.List;
 @Repository
 public interface QuizAttemptRepository extends JpaRepository<QuizAttempt, Long> {
     List<QuizAttempt> findByUser_EmailAndQuiz_IdOrderByScoreDesc(String email, Long quizId);
+    
+    // Đếm số lần làm bài đã nộp hoặc đang làm
+    List<QuizAttempt> findByUser_EmailAndQuiz_Id(String email, Long quizId);
+    
+    // Tìm attempt đang làm dở gần nhất
+    QuizAttempt findFirstByUser_EmailAndQuiz_IdAndStatusOrderByCreatedAtDesc(String email, Long quizId, String status);
 }

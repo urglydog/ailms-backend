@@ -142,9 +142,49 @@ public class QuizService {
             throw new AccessDeniedDomainException("Bai thi da ket thuc vao luc: " + quiz.getEndTime());
         }
         
+        // Tìm xem có attempt nào đang làm dở (IN_PROGRESS) không
+        QuizAttempt ongoingAttempt = quizAttemptRepository.findFirstByUser_EmailAndQuiz_IdAndStatusOrderByCreatedAtDesc(studentEmail, quiz.getId(), "IN_PROGRESS");
+        
+        if (ongoingAttempt != null) {
+            // Kiểm tra xem attempt này đã hết giờ chưa (dựa vào createdAt + duration)
+            if (quiz.getDurationMinutes() != null) {
+                LocalDateTime expireTime = ongoingAttempt.getCreatedAt().plusMinutes(quiz.getDurationMinutes());
+                if (now.isAfter(expireTime)) {
+                    // Đã hết giờ, tự động đánh dấu hoàn thành với điểm 0
+                    ongoingAttempt.setStatus("COMPLETED");
+                    ongoingAttempt.setSubmittedAt(now);
+                    quizAttemptRepository.save(ongoingAttempt);
+                    ongoingAttempt = null; // Bỏ qua, tiếp tục tạo attempt mới nếu còn lượt
+                }
+            }
+        }
+
+        // Nếu vẫn còn ongoingAttempt hợp lệ, trả về ngay để sinh viên làm tiếp
+        if (ongoingAttempt != null) {
+            List<QuizAttemptDto.QuestionDto> questionDtos = new ArrayList<>();
+            List<QuizAnswer> answers = quizAnswerRepository.findByQuizAttempt_Id(ongoingAttempt.getId());
+            for (QuizAnswer ans : answers) {
+                QuizQuestion q = ans.getQuizQuestion();
+                List<QuizOption> options = quizOptionRepository.findByQuizQuestion_Id(q.getId());
+                List<QuizAttemptDto.OptionDto> optionDtos = options.stream()
+                        .map(o -> new QuizAttemptDto.OptionDto(o.getId(), o.getContent()))
+                        .collect(Collectors.toList());
+                questionDtos.add(new QuizAttemptDto.QuestionDto(q.getId(), q.getContent(), q.getDisplayOrder(), optionDtos));
+            }
+            return new QuizAttemptDto.StartRes(
+                    ongoingAttempt.getId(), 
+                    quiz.getId(), 
+                    questionDtos,
+                    quiz.getIsProctored(),
+                    quiz.getMaxViolations(),
+                    quiz.getDurationMinutes(),
+                    ongoingAttempt.getCreatedAt()
+            );
+        }
+
         // Kiểm tra số lần thi
         if (quiz.getMaxAttempts() != null) {
-            long attemptCount = quizAttemptRepository.findByUser_EmailAndQuiz_IdOrderByScoreDesc(studentEmail, quiz.getId()).size();
+            long attemptCount = quizAttemptRepository.findByUser_EmailAndQuiz_Id(studentEmail, quiz.getId()).size();
             if (attemptCount >= quiz.getMaxAttempts()) {
                 throw new AccessDeniedDomainException("Ban da het so luot lam bai thi nay (" + quiz.getMaxAttempts() + " luot)");
             }
@@ -163,6 +203,7 @@ public class QuizService {
         attempt.setTotalQuestions(selectedQuestions.size());
         attempt.setCorrectCount(0);
         attempt.setSubmittedAt(LocalDateTime.now());
+        attempt.setStatus("IN_PROGRESS");
         attempt = quizAttemptRepository.save(attempt);
         
         List<QuizAttemptDto.QuestionDto> questionDtos = new ArrayList<>();
@@ -187,7 +228,8 @@ public class QuizService {
                 questionDtos,
                 quiz.getIsProctored(),
                 quiz.getMaxViolations(),
-                quiz.getDurationMinutes()
+                quiz.getDurationMinutes(),
+                attempt.getCreatedAt()
         );
     }
 
@@ -199,6 +241,10 @@ public class QuizService {
         
         if (!attempt.getUser().getEmail().equals(studentEmail)) {
             throw new AccessDeniedDomainException("Ban khong co quyen nop bai thi nay");
+        }
+        
+        if ("COMPLETED".equals(attempt.getStatus())) {
+            throw new AccessDeniedDomainException("Bai thi nay da duoc nop");
         }
         
         List<QuizAnswer> answers = quizAnswerRepository.findByQuizAttempt_Id(attemptId);
@@ -242,6 +288,7 @@ public class QuizService {
         attempt.setCorrectCount(correctCount);
         BigDecimal score = BigDecimal.valueOf((double) correctCount / attempt.getTotalQuestions() * 10.0);
         attempt.setScore(score);
+        attempt.setStatus("COMPLETED");
         attempt.setSubmittedAt(LocalDateTime.now());
         quizAttemptRepository.save(attempt);
         
@@ -288,7 +335,7 @@ public class QuizService {
                 .orElseThrow(() -> new ResourceNotFoundException("Khong tim thay bai Quiz chinh thuc nao cho khoa hoc", courseId));
         
         return quizAttemptRepository.findByUser_EmailAndQuiz_IdOrderByScoreDesc(studentEmail, quiz.getId()).stream()
-                .map(a -> new QuizAttemptDto.HistoryRes(a.getId(), a.getScore(), a.getCorrectCount(), a.getTotalQuestions(), a.getSubmittedAt(), a.getQuiz().getId()))
+                .map(a -> new QuizAttemptDto.HistoryRes(a.getId(), a.getScore(), a.getCorrectCount(), a.getTotalQuestions(), a.getSubmittedAt(), a.getQuiz().getId(), a.getStatus()))
                 .collect(Collectors.toList());
     }
 

@@ -37,6 +37,9 @@ public class QuizAttempt extends BaseEntity {
     @Column(name = "submitted_at", nullable = false)
     private LocalDateTime submittedAt;
 
+    @Column(name = "status", nullable = false)
+    private String status = "IN_PROGRESS";
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "quiz_id", nullable = false)
     private Quiz quiz;
