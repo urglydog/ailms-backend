@@ -330,9 +330,9 @@ public class QuizService {
 
 
     @Transactional(readOnly = true)
-    public List<QuizAttemptDto.HistoryRes> getAttemptHistory(String studentEmail, Long courseId) {
-        Quiz quiz = quizRepository.findFirstByMaterialGeneration_Course_IdAndIsOfficialTrueOrderByCreatedAtDesc(courseId)
-                .orElseThrow(() -> new ResourceNotFoundException("Khong tim thay bai Quiz chinh thuc nao cho khoa hoc", courseId));
+    public List<QuizAttemptDto.HistoryRes> getAttemptHistory(String studentEmail, Long quizId) {
+        Quiz quiz = quizRepository.findById(quizId)
+                .orElseThrow(() -> new ResourceNotFoundException("Quiz", quizId));
         
         return quizAttemptRepository.findByUser_EmailAndQuiz_IdOrderByScoreDesc(studentEmail, quiz.getId()).stream()
                 .map(a -> new QuizAttemptDto.HistoryRes(a.getId(), a.getScore(), a.getCorrectCount(), a.getTotalQuestions(), a.getSubmittedAt(), a.getQuiz().getId(), a.getStatus()))
