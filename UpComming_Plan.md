@@ -261,7 +261,25 @@ Có 3 nút riêng biệt (+ Sinh Mindmap, + Sinh Flashcard, + Sinh Quiz Thi Cử
 - Backend: `QuizService.startAttempt` (check max attempts).
 - Frontend: `exam/[quizId]/page.tsx` (timer + result screen + toast removal).
 
-**Trạng thái:** ❌ Chưa pass: chưa hiện lịch sử làm bài để xem lại đáp án mặc dù bài thi đó giảng viên đã set là cho phép xem lại lịch sử  bài làm
+**Trạng thái:** ✅ Hoàn thành (Lịch sử làm bài đã hiển thị chính xác)
+
+---
+
+## TASK 10 — Cải thiện Navigation & Breadcrumbs (State Tabs)
+
+**Vấn đề:**
+1. **Breadcrumbs:** Màn hình làm bài hiển thị "Khóa học của tôi / Unity / B1", nhưng chỉ có "Khóa học của tôi" là nhấn được, các phần còn lại chỉ là text.
+2. **State Navigation:** Đang ở tab "Học liệu" của một khóa học, nhấn vào bài kiểm tra, sau đó nhấn quay lại thì trang web trả về tab mặc định "Tổng quan" thay vì tab "Học liệu" như mong đợi.
+
+**Mức độ khả thi:** 🟢 Cao (Thuần Frontend)
+
+**Cách thực hiện:**
+1. **Breadcrumbs:** Bổ sung `href` vào các phần tử trung gian của component Breadcrumbs để có thể click được.
+2. **Tab State:** Đưa state của tab đang chọn (Tổng quan / Khóa học / Học liệu) lên URL thông qua search params (ví dụ: `?tab=materials`). Khi quay lại, component sẽ đọc URL để hiển thị đúng tab thay vì dùng state nội bộ mặc định.
+
+**Phạm vi thay đổi:** Frontend components (Breadcrumbs, Tab navigation).
+
+**Trạng thái:** ⬜ Chưa tiến hành
 
 ---
 
@@ -277,8 +295,9 @@ Có 3 nút riêng biệt (+ Sinh Mindmap, + Sinh Flashcard, + Sinh Quiz Thi Cử
 | 5B | Kéo thả Mindmap giảng viên (React Flow) | 🟡 Khó | FE AASS(lib mới) | 🟡 Dài hạn | ⬜ Chưa |
 | 6 | Sort/filter/rename kho học liệu | 🟢 Cao | FE (+BE nhỏ) | 🟠 TB | ⬜ Chưa |
 | 7 | Gom 3 nút sinh học liệu thành 1 | 🟢 Cao | FE only | 🟠 TB | ⬜ Chưa |
-| 8 | Navigation breadcrumb + fix 404 gradebook | 🟢 Cao | FE | 🔴 Cao | ❌ Chưa pass |
-| 9 | Fix Quiz: attempts + timer + result screen | 🟢 Cao | FE + BE | 🔴 Cao | ❌ Chưa pass |
+| 8 | Navigation breadcrumb + fix 404 gradebook | 🟢 Cao | FE | 🔴 Cao | ✅ Hoàn thành |
+| 9 | Fix Quiz: attempts + timer + result screen | 🟢 Cao | FE + BE | 🔴 Cao | ✅ Hoàn thành |
+| 10 | Fix Navigation Breadcrumbs & Tab State | 🟢 Cao | FE | 🟠 TB | ⬜ Chưa |
 
 ---
 
