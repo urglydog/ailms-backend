@@ -61,12 +61,13 @@ public class MaterialGenerationController {
     }
 
     @PatchMapping("/{id:\\d+}")
-    public ResponseEntity<Void> renameMaterial(
+    public ResponseEntity<Void> updateMaterial(
             Principal principal,
             @PathVariable Long id,
             @RequestBody java.util.Map<String, String> body) {
         String title = body.get("title");
-        materialGenerationService.renameMaterial(principal.getName(), id, title);
+        String mermaidCode = body.get("mermaidCode");
+        materialGenerationService.updateMaterial(principal.getName(), id, title, mermaidCode);
         return ResponseEntity.noContent().build();
     }
 
