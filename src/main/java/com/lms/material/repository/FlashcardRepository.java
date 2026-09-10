@@ -14,4 +14,5 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface FlashcardRepository extends JpaRepository<Flashcard, Long> {
     List<Flashcard> findByFlashcardDeck_Id(Long id);
+    void deleteByFlashcardDeck_Id(Long id);
 }

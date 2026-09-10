@@ -14,4 +14,5 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface QuizQuestionRepository extends JpaRepository<QuizQuestion, Long> {
     List<QuizQuestion> findByQuiz_IdOrderByDisplayOrderAsc(Long id);
+    void deleteByQuiz_Id(Long id);
 }

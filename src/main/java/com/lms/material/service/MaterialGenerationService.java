@@ -45,6 +45,7 @@ public class MaterialGenerationService {
     private final com.lms.material.repository.QuizRepository quizRepository;
     private final com.lms.material.repository.QuizQuestionRepository quizQuestionRepository;
     private final com.lms.material.repository.QuizOptionRepository quizOptionRepository;
+    private final com.lms.material.repository.QuizAttemptRepository quizAttemptRepository;
     private final com.lms.catalog.repository.ChapterRepository chapterRepository;
     private final com.lms.catalog.repository.LessonRepository lessonRepository;
     private final AudioTrackRepository audioTrackRepository;
@@ -281,6 +282,52 @@ public class MaterialGenerationService {
                 .stream()
                 .map(this::toDto)
                 .toList();
+    }
+
+    @Transactional
+    public void renameMaterial(String email, Long id, String title) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User", email));
+        MaterialGeneration generation = materialGenerationRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("MaterialGeneration", id));
+        if (!generation.isReusableBy(user)) {
+            throw new AccessDeniedDomainException("Học liệu này thuộc về người khác");
+        }
+        generation.setTitle(title);
+        materialGenerationRepository.save(generation);
+    }
+
+    @Transactional
+    public void deleteMaterial(String email, Long id) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User", email));
+        MaterialGeneration generation = materialGenerationRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("MaterialGeneration", id));
+        if (!generation.isReusableBy(user)) {
+            throw new AccessDeniedDomainException("Học liệu này thuộc về người khác");
+        }
+
+        if (generation.getMaterialType() == com.lms.common.enums.MaterialType.MINDMAP) {
+            mindmapRepository.findByMaterialGeneration_Id(generation.getId()).ifPresent(mindmapRepository::delete);
+        } else if (generation.getMaterialType() == com.lms.common.enums.MaterialType.FLASHCARD) {
+            flashcardDeckRepository.findByMaterialGeneration_Id(generation.getId()).ifPresent(deck -> {
+                flashcardReviewRepository.deleteByFlashcard_FlashcardDeck_Id(deck.getId());
+                flashcardRepository.deleteByFlashcardDeck_Id(deck.getId());
+                flashcardDeckRepository.delete(deck);
+            });
+        } else if (generation.getMaterialType() == com.lms.common.enums.MaterialType.QUIZ) {
+            quizRepository.findByMaterialGeneration_Id(generation.getId()).ifPresent(quiz -> {
+                quizAttemptRepository.deleteByQuiz_Id(quiz.getId());
+                
+                quizQuestionRepository.findByQuiz_IdOrderByDisplayOrderAsc(quiz.getId()).forEach(question -> {
+                    quizOptionRepository.deleteByQuizQuestion_Id(question.getId());
+                });
+                quizQuestionRepository.deleteByQuiz_Id(quiz.getId());
+                quizRepository.delete(quiz);
+            });
+        }
+        
+        materialGenerationRepository.delete(generation);
     }
 
     public MaterialGenerationRes toDto(MaterialGeneration generation) {
