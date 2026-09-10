@@ -170,7 +170,7 @@ Có 2 luồng cần xem xét riêng:
 - Backend: kiểm tra xem endpoint PATCH title đã có chưa; nếu chưa thêm action nhỏ vào `MaterialGenerationController`.
 - Đổi tên mặc định: sửa logic tạo tên trong `MaterialGenerationService`.
 
-**Trạng thái:** cần cải thiện trải nghiệm làm bài kiểm tra public do giáo viên đưa xuống
+**Trạng thái:** ✅ Hoàn thành (cần cải thiện thêm trải nghiệm làm bài kiểm tra public do giáo viên đưa xuống)
 
 ---
 
@@ -279,7 +279,7 @@ Có 3 nút riêng biệt (+ Sinh Mindmap, + Sinh Flashcard, + Sinh Quiz Thi Cử
 
 **Phạm vi thay đổi:** Frontend components (Breadcrumbs, Tab navigation).
 
-**Trạng thái:** ⬜ Chưa tiến hành
+**Trạng thái:** ✅ Hoàn thành
 
 ---
 
