@@ -53,8 +53,7 @@ AI Gia sư hiện đang giải thích đáp án sai bằng tiếng Việt mặc 
 - Backend: `QuizService.explainWrongAnswer(...)` — bổ sung `language` vào prompt gửi Gemini.
 - Không thay đổi schema DB, không thay đổi entity, không thay đổi endpoint.
 
-**Trạng thái:** ❌ Chưa pass
-
+**Trạng thái:** hoàn thành
 ---
 
 ## TASK 3 — Sửa màn hình Tiến độ học tập: redirect sai + thiếu tracking + thiếu tab
@@ -171,7 +170,7 @@ Có 2 luồng cần xem xét riêng:
 - Backend: kiểm tra xem endpoint PATCH title đã có chưa; nếu chưa thêm action nhỏ vào `MaterialGenerationController`.
 - Đổi tên mặc định: sửa logic tạo tên trong `MaterialGenerationService`.
 
-**Trạng thái:** ⬜ Chưa tiến hành
+**Trạng thái:** cần cải thiện trải nghiệm làm bài kiểm tra public do giáo viên đưa xuống
 
 ---
 
@@ -191,7 +190,7 @@ Có 3 nút riêng biệt (+ Sinh Mindmap, + Sinh Flashcard, + Sinh Quiz Thi Cử
 
 **Phạm vi thay đổi:** Frontend only — component popup sinh học liệu trong màn hình instructor materials.
 
-**Trạng thái:** ⬜ Chưa tiến hành
+**Trạng thái:** hoàn thành
 
 ---
 
@@ -213,7 +212,7 @@ Có 3 nút riêng biệt (+ Sinh Mindmap, + Sinh Flashcard, + Sinh Quiz Thi Cử
 
 **Phạm vi thay đổi:** Frontend — sidebar navigation, layout instructor, GradebookPage.
 
-**Trạng thái:** ❌ Chưa pass
+**Trạng thái:** hoàn thành
 
 ---
 
@@ -262,7 +261,7 @@ Có 3 nút riêng biệt (+ Sinh Mindmap, + Sinh Flashcard, + Sinh Quiz Thi Cử
 - Backend: `QuizService.startAttempt` (check max attempts).
 - Frontend: `exam/[quizId]/page.tsx` (timer + result screen + toast removal).
 
-**Trạng thái:** ❌ Chưa pass
+**Trạng thái:** ❌ Chưa pass: chưa hiện lịch sử làm bài để xem lại đáp án mặc dù bài thi đó giảng viên đã set là cho phép xem lại lịch sử  bài làm
 
 ---
 
@@ -275,7 +274,7 @@ Có 3 nút riêng biệt (+ Sinh Mindmap, + Sinh Flashcard, + Sinh Quiz Thi Cử
 | 3 | Tiến độ học tập: fix redirect + tracking | 🟡 TB | FE | 🟠 TB | ⬜ Chưa |
 | 4 | SRS Flashcard + WebSocket notification | 🟡 TB | BE + FE | 🟡 Dài hạn | ⬜ Chưa |
 | 5A | Học viên CRUD học liệu cá nhân | 🟢 Cao | FE | 🟠 TB | ⬜ Chưa |
-| 5B | Kéo thả Mindmap giảng viên (React Flow) | 🟡 Khó | FE (lib mới) | 🟡 Dài hạn | ⬜ Chưa |
+| 5B | Kéo thả Mindmap giảng viên (React Flow) | 🟡 Khó | FE AASS(lib mới) | 🟡 Dài hạn | ⬜ Chưa |
 | 6 | Sort/filter/rename kho học liệu | 🟢 Cao | FE (+BE nhỏ) | 🟠 TB | ⬜ Chưa |
 | 7 | Gom 3 nút sinh học liệu thành 1 | 🟢 Cao | FE only | 🟠 TB | ⬜ Chưa |
 | 8 | Navigation breadcrumb + fix 404 gradebook | 🟢 Cao | FE | 🔴 Cao | ❌ Chưa pass |
