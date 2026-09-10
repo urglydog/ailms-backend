@@ -67,7 +67,7 @@ public class MaterialGenerationController {
             @RequestBody java.util.Map<String, String> body) {
         String title = body.get("title");
         materialGenerationService.renameMaterial(principal.getName(), id, title);
-        return ResponseEntity.ok().build();
+        return ResponseEntity.noContent().build();
     }
 
     @DeleteMapping("/{id:\\d+}")
