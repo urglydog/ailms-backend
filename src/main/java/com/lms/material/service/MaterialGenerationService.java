@@ -285,7 +285,7 @@ public class MaterialGenerationService {
     }
 
     @Transactional
-    public void renameMaterial(String email, Long id, String title) {
+    public void updateMaterial(String email, Long id, String title, String mermaidCode) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("User", email));
         MaterialGeneration generation = materialGenerationRepository.findById(id)
@@ -293,7 +293,15 @@ public class MaterialGenerationService {
         if (!generation.isReusableBy(user)) {
             throw new AccessDeniedDomainException("Học liệu này thuộc về người khác");
         }
-        generation.setTitle(title);
+        if (title != null) {
+            generation.setTitle(title);
+        }
+        if (mermaidCode != null && generation.getMaterialType() == com.lms.common.enums.MaterialType.MINDMAP) {
+            mindmapRepository.findByMaterialGeneration_Id(generation.getId()).ifPresent(mindmap -> {
+                mindmap.setMermaidCode(mermaidCode);
+                mindmapRepository.save(mindmap);
+            });
+        }
         materialGenerationRepository.save(generation);
     }
 
