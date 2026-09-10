@@ -133,14 +133,8 @@ public class QuizService {
             throw new AccessDeniedDomainException("Ban can dang ky khoa hoc nay de lam bai Quiz");
         }
                 
-        // Kiểm tra khung giờ mở/đóng thi
+        // Kiểm tra khung giờ mở/đóng thi sẽ được dời xuống sau khi check ongoing attempt
         LocalDateTime now = LocalDateTime.now();
-        if (quiz.getStartTime() != null && now.isBefore(quiz.getStartTime())) {
-            throw new AccessDeniedDomainException("Bai thi chua mo. Thoi gian mo: " + quiz.getStartTime());
-        }
-        if (quiz.getEndTime() != null && now.isAfter(quiz.getEndTime())) {
-            throw new AccessDeniedDomainException("Bai thi da ket thuc vao luc: " + quiz.getEndTime());
-        }
         
         // Tìm xem có attempt nào đang làm dở (IN_PROGRESS) không
         QuizAttempt ongoingAttempt = quizAttemptRepository.findFirstByUser_EmailAndQuiz_IdAndStatusOrderByCreatedAtDesc(studentEmail, quiz.getId(), "IN_PROGRESS");
@@ -180,6 +174,14 @@ public class QuizService {
                     quiz.getDurationMinutes(),
                     ongoingAttempt.getCreatedAt()
             );
+        }
+
+        // BÂY GIỜ mới kiểm tra khung giờ mở/đóng thi cho attempt mới
+        if (quiz.getStartTime() != null && now.isBefore(quiz.getStartTime())) {
+            throw new AccessDeniedDomainException("Bai thi chua mo. Thoi gian mo: " + quiz.getStartTime());
+        }
+        if (quiz.getEndTime() != null && now.isAfter(quiz.getEndTime())) {
+            throw new AccessDeniedDomainException("Bai thi da ket thuc vao luc: " + quiz.getEndTime());
         }
 
         // Kiểm tra số lần thi
