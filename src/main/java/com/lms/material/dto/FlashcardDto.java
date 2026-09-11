@@ -25,4 +25,9 @@ public class FlashcardDto {
         java.math.BigDecimal easiness,
         boolean isDue // true if nextReviewAt <= today
     ) {}
+
+    public record UpdateReq(
+        String frontText,
+        String backText
+    ) {}
 }
