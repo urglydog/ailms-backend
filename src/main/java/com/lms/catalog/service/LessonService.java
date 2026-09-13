@@ -199,8 +199,18 @@ public class LessonService {
      * lần đầu (xem docblock {@link TranscriptExtractionService}). Đẩy Redis sau khi transaction
      * này COMMIT — AI Worker gọi callback đọc `Lesson` qua 1 transaction/kết nối KHÁC, đẩy job
      * trước khi commit có nguy cơ (dù hiếm) worker đọc phải dữ liệu videoUrl chưa kịp ghi.
+     *
+     * <p>{@code isSynchronizationActive()} false trong unit test thuần Mockito (không có
+     * transaction Spring thật bao quanh, {@code @Transactional} bị bỏ qua hoàn toàn khi gọi
+     * thẳng service không qua proxy) — {@code registerSynchronization()} sẽ ném
+     * {@code IllegalStateException} nếu gọi lúc đó. Rơi về gọi thẳng (không đợi commit) trong
+     * trường hợp này vẫn đúng: không có transaction nghĩa là không có gì để "đợi commit" cả.
      */
     private void requestTranscriptExtractionAfterCommit(Lesson lesson) {
+        if (!org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive()) {
+            transcriptExtractionService.requestExtraction(lesson);
+            return;
+        }
         org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
                 new org.springframework.transaction.support.TransactionSynchronization() {
                     @Override
