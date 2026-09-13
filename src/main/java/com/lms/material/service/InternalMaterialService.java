@@ -1,14 +1,20 @@
 package com.lms.material.service;
 
+import com.lms.catalog.entity.Lesson;
+import com.lms.catalog.repository.LessonRepository;
 import com.lms.common.enums.GenStatus;
 import com.lms.common.enums.MaterialType;
 import com.lms.common.enums.ScopeType;
 import com.lms.common.exception.ResourceNotFoundException;
+import com.lms.dubbing.dto.InternalDubbingDto.SegmentDto;
+import com.lms.dubbing.entity.Transcript;
 import com.lms.dubbing.entity.TranscriptSegment;
+import com.lms.dubbing.repository.TranscriptRepository;
 import com.lms.dubbing.repository.TranscriptSegmentRepository;
+import com.lms.dubbing.service.TranscriptPersistenceService;
 import com.lms.material.dto.InternalMaterialDto.FinishReq;
 import com.lms.material.dto.InternalMaterialDto.GenerationContextRes;
-import com.lms.material.dto.InternalMaterialDto.TranscriptSegmentDto;
+import com.lms.material.dto.InternalMaterialDto.LessonContextDto;
 import com.lms.material.dto.InternalMaterialDto.FlashcardDto;
 import com.lms.material.dto.InternalMaterialDto.QuizDto;
 import com.lms.material.entity.Flashcard;
@@ -25,7 +31,9 @@ import com.lms.material.repository.MindmapRepository;
 import com.lms.material.repository.QuizOptionRepository;
 import com.lms.material.repository.QuizQuestionRepository;
 import com.lms.material.repository.QuizRepository;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,7 +43,10 @@ import org.springframework.transaction.annotation.Transactional;
 public class InternalMaterialService {
 
     private final MaterialGenerationRepository materialGenerationRepository;
+    private final TranscriptRepository transcriptRepository;
     private final TranscriptSegmentRepository transcriptSegmentRepository;
+    private final LessonRepository lessonRepository;
+    private final TranscriptPersistenceService transcriptPersistenceService;
     private final MindmapRepository mindmapRepository;
     private final FlashcardDeckRepository flashcardDeckRepository;
     private final FlashcardRepository flashcardRepository;
@@ -49,28 +60,33 @@ public class InternalMaterialService {
         MaterialGeneration generation = materialGenerationRepository.findById(generationId)
                 .orElseThrow(() -> new ResourceNotFoundException("MaterialGeneration", generationId));
 
-        List<TranscriptSegment> segments;
+        List<TranscriptSegment> sourceSegments;
         if (generation.getScopeType() == ScopeType.WHOLE_COURSE) {
-            segments = transcriptSegmentRepository.findByCourseIdAndIsSourceTrue(generation.getCourse().getId());
+            sourceSegments = transcriptSegmentRepository.findByCourseIdAndIsSourceTrue(generation.getCourse().getId());
         } else if (generation.getScopeType() == ScopeType.CHAPTER) {
-            segments = transcriptSegmentRepository.findByChapterIdAndIsSourceTrue(generation.getScopeRefId());
+            sourceSegments = transcriptSegmentRepository.findByChapterIdAndIsSourceTrue(generation.getScopeRefId());
         } else if (generation.getScopeType() == ScopeType.CUSTOM_LESSONS && generation.getCustomLessonIds() != null && !generation.getCustomLessonIds().trim().isEmpty()) {
             List<Long> lessonIds = java.util.Arrays.stream(generation.getCustomLessonIds().replaceAll("[\\[\\]\"]", "").split(","))
                     .map(String::trim)
                     .filter(s -> !s.isEmpty())
                     .map(Long::parseLong)
                     .toList();
-            segments = transcriptSegmentRepository.findByLessonIdInAndIsSourceTrue(lessonIds);
+            sourceSegments = transcriptSegmentRepository.findByLessonIdInAndIsSourceTrue(lessonIds);
         } else {
-            segments = List.of(); // Should not happen based on BR-MAT-01
+            sourceSegments = List.of(); // Should not happen based on BR-MAT-01
         }
 
-        List<TranscriptSegmentDto> transcriptDtos = segments.stream()
-                .map(s -> TranscriptSegmentDto.builder()
-                        .text(s.getText())
-                        .startSec(s.getStartSec() != null ? s.getStartSec().doubleValue() : 0.0)
-                        .endSec(s.getEndSec() != null ? s.getEndSec().doubleValue() : 0.0)
-                        .build())
+        // Nhóm theo bài học — mỗi bài có thể ĐÃ có bản dịch sẵn cho đúng ngôn ngữ đích của yêu cầu
+        // này (do lồng tiếng hoặc lần sinh học liệu trước) hay chưa; AI Worker chỉ cần tự dịch
+        // (rồi báo lại để lưu) cho những bài CHƯA có, xem docblock {@code LessonContextDto}.
+        Map<Long, List<TranscriptSegment>> byLesson = new LinkedHashMap<>();
+        for (TranscriptSegment segment : sourceSegments) {
+            Long lessonId = segment.getTranscript().getLesson().getId();
+            byLesson.computeIfAbsent(lessonId, k -> new java.util.ArrayList<>()).add(segment);
+        }
+
+        List<LessonContextDto> lessonDtos = byLesson.entrySet().stream()
+                .map(entry -> toLessonContextDto(entry.getKey(), entry.getValue(), generation.getLanguage()))
                 .toList();
 
         return GenerationContextRes.builder()
@@ -83,8 +99,54 @@ public class InternalMaterialService {
                 .scopeRefId(generation.getScopeRefId())
                 .quantityLevel(generation.getQuantityLevel() != null ? generation.getQuantityLevel().name() : null)
                 .difficultyLevel(generation.getDifficultyLevel() != null ? generation.getDifficultyLevel().name() : null)
-                .transcripts(transcriptDtos)
+                .lessons(lessonDtos)
                 .build();
+    }
+
+    private LessonContextDto toLessonContextDto(Long lessonId, List<TranscriptSegment> sourceSegs, String targetLanguage) {
+        Lesson lesson = sourceSegs.get(0).getTranscript().getLesson();
+        java.util.Optional<Transcript> targetTranscript = transcriptRepository.findByLesson_IdAndLanguage(lessonId, targetLanguage);
+
+        if (targetTranscript.isPresent()) {
+            List<SegmentDto> targetDtos = transcriptSegmentRepository.findByTranscript_IdOrderBySeqAsc(targetTranscript.get().getId())
+                    .stream().map(this::toSegmentDto).toList();
+            return LessonContextDto.builder()
+                    .lessonId(lessonId)
+                    .sourceLanguage(lesson.getSourceLanguage())
+                    .targetTranscriptAvailable(true)
+                    .sourceSegments(List.of())
+                    .targetSegments(targetDtos)
+                    .build();
+        }
+
+        List<SegmentDto> sourceDtos = sourceSegs.stream()
+                .sorted(java.util.Comparator.comparing(TranscriptSegment::getSeq))
+                .map(this::toSegmentDto)
+                .toList();
+        return LessonContextDto.builder()
+                .lessonId(lessonId)
+                .sourceLanguage(lesson.getSourceLanguage())
+                .targetTranscriptAvailable(false)
+                .sourceSegments(sourceDtos)
+                .targetSegments(List.of())
+                .build();
+    }
+
+    private SegmentDto toSegmentDto(TranscriptSegment segment) {
+        return new SegmentDto(segment.getSeq(), segment.getStartSec(), segment.getEndSec(), segment.getText(),
+                segment.getSpeechRate(), segment.getWasSummarized());
+    }
+
+    /** UC24/25 — AI Worker tự dịch (khi {@code targetTranscriptAvailable=false}) rồi báo lại đây
+     * để lưu, tái sử dụng được cho lần lồng tiếng sau này (xem {@code InternalDubbingService}). */
+    @Transactional
+    public void saveTranslatedSegments(Long lessonId, String language, List<SegmentDto> segments) {
+        if (segments == null || segments.isEmpty()) {
+            return;
+        }
+        Lesson lesson = lessonRepository.findById(lessonId)
+                .orElseThrow(() -> new ResourceNotFoundException("Lesson", lessonId));
+        transcriptPersistenceService.saveTargetSegments(lesson, language, segments);
     }
 
     @Transactional
@@ -94,23 +156,23 @@ public class InternalMaterialService {
 
         if ("COMPLETED".equals(req.outcome())) {
             generation.setStatus(GenStatus.COMPLETED);
-            
+
             if (generation.getMaterialType() == MaterialType.MINDMAP) {
                 Mindmap mindmap = new Mindmap();
                 mindmap.setMaterialGeneration(generation);
                 mindmap.setMermaidCode(req.mermaidCode());
-                
+
                 // Count basic nodes (just an approximation by counting newlines)
                 int nodes = req.mermaidCode() != null ? req.mermaidCode().split("\n").length : 0;
                 mindmap.setNodeCount(nodes);
-                
+
                 mindmapRepository.save(mindmap);
             } else if (generation.getMaterialType() == MaterialType.FLASHCARD && req.flashcards() != null) {
                 FlashcardDeck deck = new FlashcardDeck();
                 deck.setMaterialGeneration(generation);
                 deck.setCardCount(req.flashcards().size());
                 deck = flashcardDeckRepository.save(deck);
-                
+
                 for (FlashcardDto dto : req.flashcards()) {
                     Flashcard fc = new Flashcard();
                     fc.setFlashcardDeck(deck);
@@ -123,7 +185,7 @@ public class InternalMaterialService {
                 quiz.setMaterialGeneration(generation);
                 quiz.setQuestionCount(req.quizzes().size());
                 quiz = quizRepository.save(quiz);
-                
+
                 int order = 1;
                 for (QuizDto dto : req.quizzes()) {
                     QuizQuestion q = new QuizQuestion();
@@ -131,7 +193,7 @@ public class InternalMaterialService {
                     q.setContent(dto.content());
                     q.setDisplayOrder(order++);
                     q = quizQuestionRepository.save(q);
-                    
+
                     if (dto.options() != null) {
                         for (String optText : dto.options()) {
                             QuizOption opt = new QuizOption();
@@ -152,18 +214,18 @@ public class InternalMaterialService {
             com.lms.common.entity.AiUsageLog usageLog = new com.lms.common.entity.AiUsageLog();
             usageLog.setUserId(generation.getUser().getId());
             usageLog.setFeatureType(generation.getMaterialType().name());
-            
+
             int promptTokens = req.usageMetadata().promptTokens() != null ? req.usageMetadata().promptTokens() : 0;
             int completionTokens = req.usageMetadata().completionTokens() != null ? req.usageMetadata().completionTokens() : 0;
-            
+
             usageLog.setPromptTokens(promptTokens);
             usageLog.setCompletionTokens(completionTokens);
             usageLog.setTotalTokens(promptTokens + completionTokens);
-            
+
             // Tạm tính cost: $1.5 / 1M prompt tokens, $2.0 / 1M completion tokens (Gemini Flash)
             double cost = (promptTokens / 1000000.0 * 1.5) + (completionTokens / 1000000.0 * 2.0);
             usageLog.setCostUsd(java.math.BigDecimal.valueOf(cost));
-            
+
             aiUsageLogRepository.save(usageLog);
         }
 

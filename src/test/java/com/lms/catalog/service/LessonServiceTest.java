@@ -16,6 +16,7 @@ import com.lms.common.exception.InvalidRequestException;
 import com.lms.common.media.FfprobeService;
 import com.lms.common.media.YoutubeMetadataService;
 import com.lms.common.storage.StorageService;
+import com.lms.dubbing.service.TranscriptExtractionService;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
@@ -50,6 +51,7 @@ class LessonServiceTest {
     @Mock private StorageService storageService;
     @Mock private FfprobeService ffprobeService;
     @Mock private YoutubeMetadataService youtubeMetadataService;
+    @Mock private TranscriptExtractionService transcriptExtractionService;
 
     @InjectMocks
     private LessonService lessonService;
@@ -116,6 +118,8 @@ class LessonServiceTest {
         assertThat(result.videoUrl()).isEqualTo("https://cdn.example.com/videos/30/x.mp4");
         assertThat(result.durationSec()).isEqualTo(300);
         assertThat(result.status()).isEqualTo("READY");
+        // UC34 mở rộng — script gốc phải được yêu cầu trích ngay, không đợi lồng tiếng.
+        verify(transcriptExtractionService).requestExtraction(lesson);
     }
 
     @Test
@@ -159,6 +163,7 @@ class LessonServiceTest {
         assertThat(result.youtubeId()).isEqualTo("abc12345678");
         assertThat(result.durationSec()).isEqualTo(600);
         assertThat(result.status()).isEqualTo("READY");
+        verify(transcriptExtractionService).requestExtraction(lesson);
     }
 
     @Test

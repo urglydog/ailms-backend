@@ -55,6 +55,7 @@ public class InternalDubbingService {
     private final VoiceMappingRepository voiceMappingRepository;
     private final DubbingLockService dubbingLockService;
     private final NotificationService notificationService;
+    private final TranscriptPersistenceService transcriptPersistenceService;
 
     /**
      * BR-DUB-01 chỉ cho phép bỏ qua bước ASR khi Transcript gốc đã PHỦ GẦN HẾT video — dung sai
@@ -86,7 +87,21 @@ public class InternalDubbingService {
         // phần Transcript dở dang đó) sẽ bị hiểu nhầm là "khoảng lặng" và giữ nguyên audio GỐC
         // (chưa dịch) — sai lệch âm thầm, job vẫn báo COMPLETED. Coi Transcript dở dang này như
         // CHƯA CÓ để AI Worker chạy lại ASR từ đầu, an toàn hơn nhiều so với dùng nhầm dữ liệu cũ.
-        boolean sourceTranscriptComplete = isSourceTranscriptComplete(sourceSegments, lesson.getDurationSec());
+        boolean sourceTranscriptComplete = isTranscriptComplete(sourceSegments, lesson.getDurationSec());
+
+        // Bản dịch của đúng ngôn ngữ đích này có thể ĐÃ tồn tại — do học viên/giảng viên tạo
+        // Mindmap/Flashcard/Quiz ngôn ngữ này trước khi ai bấm lồng tiếng (UC24/25 giờ cũng dịch
+        // và lưu qua TranscriptPersistenceService). Nếu có, AI Worker bỏ qua hẳn bước dịch Gemini
+        // (BR-DUB-02), đi thẳng vào Adaptive Speech Rate + TTS — tiết kiệm 2 lượt gọi Gemini/chunk.
+        // Áp dụng NGUYÊN tắc "coi dở dang như chưa có" giống Transcript gốc ở trên, lý do y hệt.
+        Optional<Transcript> targetTranscript = transcriptRepository.findByLesson_IdAndLanguage(lesson.getId(), job.getTargetLanguage());
+        List<SegmentDto> targetSegments = targetTranscript
+                .map(t -> transcriptSegmentRepository.findByTranscript_IdOrderBySeqAsc(t.getId()))
+                .orElse(List.of())
+                .stream()
+                .map(this::toSegmentDto)
+                .toList();
+        boolean targetTranscriptComplete = isTranscriptComplete(targetSegments, lesson.getDurationSec());
 
         return new JobContextRes(
                 job.getId(),
@@ -98,11 +113,13 @@ public class InternalDubbingService {
                 job.getTargetLanguage(),
                 voiceName,
                 sourceTranscriptComplete,
-                sourceTranscriptComplete ? sourceSegments : List.of()
+                sourceTranscriptComplete ? sourceSegments : List.of(),
+                targetTranscriptComplete,
+                targetTranscriptComplete ? targetSegments : List.of()
         );
     }
 
-    private boolean isSourceTranscriptComplete(List<SegmentDto> segments, Integer durationSec) {
+    private boolean isTranscriptComplete(List<SegmentDto> segments, Integer durationSec) {
         if (segments.isEmpty() || durationSec == null || durationSec <= 0) {
             return false;
         }
@@ -148,10 +165,10 @@ public class InternalDubbingService {
         }
 
         if (req.sourceSegments() != null && !req.sourceSegments().isEmpty()) {
-            saveSourceSegments(job.getLesson(), req.detectedSourceLanguage(), req.sourceSegments());
+            transcriptPersistenceService.saveSourceSegments(job.getLesson(), req.detectedSourceLanguage(), req.sourceSegments());
         }
         if (req.targetSegments() != null && !req.targetSegments().isEmpty()) {
-            saveTargetSegments(job.getLesson(), job.getTargetLanguage(), req.targetSegments());
+            transcriptPersistenceService.saveTargetSegments(job.getLesson(), job.getTargetLanguage(), req.targetSegments());
         }
         if (req.audioFileUrl() != null) {
             saveAudioChunk(job, chunkIndex, req.startSec(), req.endSec(), req.audioFileUrl());
@@ -227,60 +244,6 @@ public class InternalDubbingService {
         }
         String linkUrl = "/learn/" + job.getLesson().getId();
         notificationService.notify(requester.getId(), type, title, content, linkUrl);
-    }
-
-    /** BR-DUB-01 — lần đầu bài học được bóc băng: lưu Transcript(isSource=true) + điền Lesson.sourceLanguage. */
-    private void saveSourceSegments(Lesson lesson, String detectedLanguage, List<SegmentDto> segments) {
-        if (detectedLanguage == null || detectedLanguage.isBlank()) {
-            throw new InvalidRequestException("detectedSourceLanguage bat buoc khi gui sourceSegments");
-        }
-        Transcript transcript = transcriptRepository.findByLesson_IdAndIsSourceTrue(lesson.getId())
-                .orElseGet(() -> {
-                    Transcript t = new Transcript();
-                    t.setLesson(lesson);
-                    t.setIsSource(true);
-                    t.setLanguage(detectedLanguage);
-                    return t;
-                });
-        appendSegments(transcript, segments);
-
-        if (lesson.getSourceLanguage() == null) {
-            lesson.setSourceLanguage(detectedLanguage);
-            lessonRepository.save(lesson);
-        }
-    }
-
-    private void saveTargetSegments(Lesson lesson, String targetLanguage, List<SegmentDto> segments) {
-        Transcript transcript = transcriptRepository.findByLesson_IdAndLanguage(lesson.getId(), targetLanguage)
-                .orElseGet(() -> {
-                    Transcript t = new Transcript();
-                    t.setLesson(lesson);
-                    t.setIsSource(false);
-                    t.setLanguage(targetLanguage);
-                    return t;
-                });
-        appendSegments(transcript, segments);
-    }
-
-    private void appendSegments(Transcript transcript, List<SegmentDto> segments) {
-        Transcript saved = transcriptRepository.save(transcript);
-        StringBuilder appendedText = new StringBuilder();
-        for (SegmentDto dto : segments) {
-            TranscriptSegment segment = new TranscriptSegment();
-            segment.setTranscript(saved);
-            segment.setSeq(dto.seq());
-            segment.setStartSec(dto.startSec());
-            segment.setEndSec(dto.endSec());
-            segment.setText(dto.text());
-            segment.setSpeechRate(dto.speechRate());
-            if (dto.wasSummarized() != null) {
-                segment.setWasSummarized(dto.wasSummarized());
-            }
-            transcriptSegmentRepository.save(segment);
-            appendedText.append(dto.text()).append(' ');
-        }
-        saved.setFullText((saved.getFullText() == null ? "" : saved.getFullText() + " ") + appendedText.toString().trim());
-        transcriptRepository.save(saved);
     }
 
     /** BR-CHUNK-03: chunk đầu tiên xong là AudioTrack đã ở trạng thái PARTIAL, học viên vào học được. */

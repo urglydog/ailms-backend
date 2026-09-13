@@ -35,7 +35,11 @@ public class InternalDubbingDto {
             String voiceName,
             /** BR-DUB-01 — true nếu bài học đã có bản ghi âm gốc, AI Worker bỏ qua bước ASR. */
             boolean sourceTranscriptAvailable,
-            List<SegmentDto> sourceSegments
+            List<SegmentDto> sourceSegments,
+            /** true nếu ngôn ngữ đích ĐÃ có bản dịch sẵn (thường do UC24/25 sinh học liệu tạo
+             * trước) — AI Worker bỏ qua hẳn bước dịch Gemini (BR-DUB-02), dùng thẳng bản dịch này. */
+            boolean targetTranscriptAvailable,
+            List<SegmentDto> targetSegments
     ) {}
 
     public record StartReq(
