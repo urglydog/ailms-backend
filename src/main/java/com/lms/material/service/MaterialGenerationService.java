@@ -15,7 +15,9 @@ import com.lms.material.dto.MaterialGenerationReq;
 import com.lms.material.dto.MaterialGenerationRes;
 import com.lms.material.entity.MaterialGeneration;
 import com.lms.material.repository.MaterialGenerationRepository;
-import com.lms.dubbing.repository.AudioTrackRepository;
+import com.lms.material.dto.LanguageAvailabilityRes;
+import com.lms.dubbing.repository.TranscriptRepository;
+import com.lms.dubbing.repository.VoiceMappingRepository;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
@@ -48,7 +50,8 @@ public class MaterialGenerationService {
     private final com.lms.material.repository.QuizAttemptRepository quizAttemptRepository;
     private final com.lms.catalog.repository.ChapterRepository chapterRepository;
     private final com.lms.catalog.repository.LessonRepository lessonRepository;
-    private final AudioTrackRepository audioTrackRepository;
+    private final TranscriptRepository transcriptRepository;
+    private final VoiceMappingRepository voiceMappingRepository;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
 
@@ -85,16 +88,20 @@ public class MaterialGenerationService {
         }
 
 
-        // Validate Language: Hỗ trợ linh hoạt mã ngôn ngữ (vi, vi-VN, en, en-US) hoặc bản lồng tiếng
-        java.util.List<String> availableLangs = getAvailableLanguages(course.getId());
+        // BR-DUB-07 — ngôn ngữ đích phải nằm trong danh sách Admin đang bật, CÙNG nguồn với dropdown
+        // lồng tiếng (UC47) để 2 nơi luôn khớp nhau. KHÔNG còn đòi hỏi "đã lồng tiếng ngôn ngữ này
+        // chưa" như trước — BR-MAT-01 cho chọn ngôn ngữ đầu ra tự do.
         String reqLang = req.language();
-        boolean langSupported = availableLangs.stream().anyMatch(l -> 
-            l.equalsIgnoreCase(reqLang) || 
-            l.startsWith(reqLang) || 
-            reqLang.startsWith(l)
-        );
-        if (!langSupported && !availableLangs.isEmpty()) {
-            throw new BusinessRuleViolationException("Khóa học chưa hỗ trợ sinh học liệu bằng ngôn ngữ " + reqLang + ". Vui lòng lồng tiếng trước.");
+        if (voiceMappingRepository.findByLanguageAndIsActiveTrue(reqLang).isEmpty()) {
+            throw new BusinessRuleViolationException("Ngôn ngữ này chưa được hệ thống hỗ trợ (BR-DUB-07)");
+        }
+
+        // BR-MAT-01 — điều kiện DUY NHẤT còn lại: phạm vi được chọn phải có ít nhất 1 bài đã có
+        // transcript gốc (WhisperX/Groq chạy ngay lúc nạp video — xem TranscriptExtractionService).
+        if (!hasSourceTranscriptInScope(course.getId(), req)) {
+            throw new BusinessRuleViolationException(
+                    "Phạm vi này chưa có bài giảng nào sẵn sàng — transcript gốc có thể đang được "
+                            + "trích xuất sau khi nạp video, vui lòng thử lại sau ít phút");
         }
 
         int nextVersion = materialGenerationRepository.findTopByUser_IdAndCourse_IdOrderByVersionNoDesc(user.getId(), course.getId())
@@ -352,51 +359,58 @@ public class MaterialGenerationService {
                 .build();
     }
 
-    public java.util.List<String> getAvailableLanguages(Long courseId) {
-        java.util.List<String> langs = new java.util.ArrayList<>(audioTrackRepository.findAvailableLanguagesByCourse(courseId));
-        if (langs.isEmpty()) {
-            langs.add("vi-VN");
-            langs.add("en-US");
-        }
-        return langs;
+    /** UC24 — danh sách ngôn ngữ cho FE chọn, CÙNG nguồn với dropdown lồng tiếng (BR-DUB-07),
+     * kèm gợi ý "đã có bản dịch sẵn" (dấu tích) hay chưa (dấu chấm) — xem {@link LanguageAvailabilityRes}. */
+    public java.util.List<LanguageAvailabilityRes> getAvailableLanguages(Long courseId) {
+        java.util.Set<String> translated = new java.util.HashSet<>(
+                transcriptRepository.findTranslatedLanguagesByCourseId(courseId));
+        return voiceMappingRepository.findByIsActiveTrue().stream()
+                .map(com.lms.dubbing.entity.VoiceMapping::getLanguage)
+                .distinct()
+                .map(code -> new LanguageAvailabilityRes(code, displayLabel(code), translated.contains(code)))
+                .toList();
     }
 
+    private String displayLabel(String languageCode) {
+        return java.util.Locale.forLanguageTag(languageCode).getDisplayName(java.util.Locale.forLanguageTag("vi-VN"));
+    }
+
+    /** BR-MAT-01 — phạm vi được chọn phải có ít nhất 1 bài đã có transcript gốc. */
+    private boolean hasSourceTranscriptInScope(Long courseId, com.lms.material.dto.MaterialGenerationReq req) {
+        return switch (req.scopeType()) {
+            case WHOLE_COURSE -> transcriptRepository.existsSourceTranscriptByCourseId(courseId);
+            case CHAPTER -> req.scopeRefId() != null && transcriptRepository.existsSourceTranscriptByChapterId(req.scopeRefId());
+            case CUSTOM_LESSONS -> req.customLessonIds() != null && !req.customLessonIds().isEmpty()
+                    && transcriptRepository.existsSourceTranscriptByLessonIdIn(req.customLessonIds());
+            default -> false;
+        };
+    }
+
+    /** UC24 — chọn phạm vi Chương/Bài tuỳ chọn: chỉ hiện bài ĐÃ có transcript gốc (sẵn sàng sinh
+     * học liệu ở BẤT KỲ ngôn ngữ nào — BR-MAT-01), không còn lọc theo "đã lồng tiếng ngôn ngữ X". */
     public java.util.List<com.lms.catalog.dto.ChapterDto.Res> getCourseChapters(Long courseId, String language) {
         if (!courseRepository.existsById(courseId)) {
             throw new ResourceNotFoundException("Course", courseId);
         }
-        
-        java.util.List<com.lms.dubbing.entity.AudioTrack> tracks = audioTrackRepository.findCompletedByCourse(courseId);
-        java.util.Map<Long, java.util.Set<String>> lessonLanguageMap = new java.util.HashMap<>();
-        for (com.lms.dubbing.entity.AudioTrack track : tracks) {
-            lessonLanguageMap.computeIfAbsent(track.getLesson().getId(), k -> new java.util.HashSet<>()).add(track.getLanguage());
-        }
+
+        java.util.Set<Long> readyLessonIds = new java.util.HashSet<>(
+                transcriptRepository.findLessonIdsWithSourceTranscriptByCourseId(courseId));
 
         return chapterRepository.findByCourseIdOrderByDisplayOrderAsc(courseId).stream()
                 .map(chapter -> {
                     java.util.List<com.lms.catalog.dto.LessonDto.Res> filteredLessons = lessonRepository.findByChapterIdOrderByDisplayOrderAsc(chapter.getId()).stream()
-                            .filter(lesson -> {
-                                java.util.Set<String> langs = lessonLanguageMap.get(lesson.getId());
-                                if (langs == null || langs.isEmpty()) return false;
-                                if (language != null && !language.isEmpty() && !langs.contains(language)) return false;
-                                return true;
-                            })
-                            .map(lesson -> {
-                                java.util.Set<String> langs = lessonLanguageMap.get(lesson.getId());
-                                String langDisplay = langs != null ? String.join(", ", langs) : "";
-                                String titleWithLangs = lesson.getTitle() + " (" + langDisplay + ")";
-                                return new com.lms.catalog.dto.LessonDto.Res(
-                                        lesson.getId(),
-                                        titleWithLangs,
-                                        lesson.getDisplayOrder(),
-                                        lesson.getIsPreview(),
-                                        lesson.getStatus(),
-                                        lesson.getVideoSource(),
-                                        lesson.getVideoUrl(),
-                                        lesson.getYoutubeId(),
-                                        lesson.getDurationSec()
-                                );
-                            })
+                            .filter(lesson -> readyLessonIds.contains(lesson.getId()))
+                            .map(lesson -> new com.lms.catalog.dto.LessonDto.Res(
+                                    lesson.getId(),
+                                    lesson.getTitle(),
+                                    lesson.getDisplayOrder(),
+                                    lesson.getIsPreview(),
+                                    lesson.getStatus(),
+                                    lesson.getVideoSource(),
+                                    lesson.getVideoUrl(),
+                                    lesson.getYoutubeId(),
+                                    lesson.getDurationSec()
+                            ))
                             .toList();
                     return new com.lms.catalog.dto.ChapterDto.Res(
                             chapter.getId(),

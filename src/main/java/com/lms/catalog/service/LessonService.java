@@ -15,6 +15,7 @@ import com.lms.common.enums.CourseStatus;
 import com.lms.common.media.FfprobeService;
 import com.lms.common.media.YoutubeMetadataService;
 import com.lms.common.storage.StorageService;
+import com.lms.dubbing.service.TranscriptExtractionService;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -47,6 +48,7 @@ public class LessonService {
     private final StorageService storageService;
     private final FfprobeService ffprobeService;
     private final YoutubeMetadataService youtubeMetadataService;
+    private final TranscriptExtractionService transcriptExtractionService;
 
     @Transactional
     public Res create(String instructorEmail, Long chapterId, CreateReq req) {
@@ -155,7 +157,9 @@ public class LessonService {
             lesson.setYoutubeId(null);
             lesson.setDurationSec(durationSec);
             lesson.setStatus("READY");
-            return mapToRes(lessonRepository.save(lesson));
+            Lesson saved = lessonRepository.save(lesson);
+            requestTranscriptExtractionAfterCommit(saved);
+            return mapToRes(saved);
         } catch (IOException e) {
             throw new InvalidRequestException("Không tải được video lên kho lưu trữ: " + e.getMessage());
         } finally {
@@ -185,7 +189,26 @@ public class LessonService {
         lesson.setYoutubeId(videoId);
         lesson.setDurationSec(durationSec);
         lesson.setStatus("READY");
-        return mapToRes(lessonRepository.save(lesson));
+        Lesson saved = lessonRepository.save(lesson);
+        requestTranscriptExtractionAfterCommit(saved);
+        return mapToRes(saved);
+    }
+
+    /**
+     * UC34 mở rộng — trích script gốc (ASR) ngay khi có video, không đợi ai bấm "Lồng tiếng AI"
+     * lần đầu (xem docblock {@link TranscriptExtractionService}). Đẩy Redis sau khi transaction
+     * này COMMIT — AI Worker gọi callback đọc `Lesson` qua 1 transaction/kết nối KHÁC, đẩy job
+     * trước khi commit có nguy cơ (dù hiếm) worker đọc phải dữ liệu videoUrl chưa kịp ghi.
+     */
+    private void requestTranscriptExtractionAfterCommit(Lesson lesson) {
+        org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                new org.springframework.transaction.support.TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        transcriptExtractionService.requestExtraction(lesson);
+                    }
+                }
+        );
     }
 
     /**

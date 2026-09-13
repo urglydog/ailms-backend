@@ -149,6 +149,8 @@ lms:
     dub-lock-prefix: "lock:dub:"        # lock:dub:{lessonId}:{lang} — BR-DUB-05
     login-fail-prefix: "login_fail:"    # BR-AUTH-03
     discovery-rate-prefix: "discovery_rate:" # BR-DISCOVERY-01
+    transcript-queue: "lms:transcript:jobs"     # trích script gốc lúc nạp video (UC34 mở rộng)
+    transcript-lock-prefix: "lock:transcript:"  # lock:transcript:{lessonId}
   dub-lock-ttl-seconds: ${DUB_LOCK_TTL_SECONDS:1800}   # BR-DUB-05 (30 phút)
 
 ai:

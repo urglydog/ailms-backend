@@ -49,7 +49,7 @@ public class MaterialGenerationController {
     }
 
     @GetMapping("/available-languages")
-    public ResponseEntity<List<String>> getAvailableLanguages(@RequestParam Long courseId) {
+    public ResponseEntity<List<com.lms.material.dto.LanguageAvailabilityRes>> getAvailableLanguages(@RequestParam Long courseId) {
         return ResponseEntity.ok(materialGenerationService.getAvailableLanguages(courseId));
     }
 

@@ -108,9 +108,14 @@ public class LessonPlayerService {
     }
 
     /**
-     * Phụ đề gốc/dịch không có gì để hiện khi bài học chưa từng qua pipeline lồng tiếng
-     * (Transcript gốc chỉ tạo ở lần dịch đầu tiên) hoặc ngôn ngữ đó chưa lồng tiếng xong —
-     * cả 2 trường hợp trả danh sách rỗng, KHÔNG lỗi.
+     * Phụ đề GỐC có ngay sau khi giảng viên nạp video — {@code TranscriptExtractionService}
+     * (UC34 mở rộng) tự chạy ASR nền ngay lúc upload, không cần chờ ai bấm "Lồng tiếng AI" nữa.
+     * Trước khi job nền đó chạy xong (vài chục giây tới vài phút tuỳ độ dài video), hoặc nếu job
+     * lỗi, hàm này vẫn AN TOÀN — trả danh sách rỗng, KHÔNG lỗi, học viên chỉ đơn giản là chưa
+     * thấy nút "Gốc" khả dụng, thử lại sau khi tải lại trang.
+     *
+     * <p>Phụ đề DỊCH (ngôn ngữ khác) thì vẫn phụ thuộc đã có bản dịch cho đúng ngôn ngữ đó chưa
+     * (do lồng tiếng HOẶC sinh học liệu tạo ra — xem {@code TranscriptPersistenceService}).
      */
     private List<SubtitleSegmentRes> loadSubtitles(Optional<Transcript> transcriptOpt) {
         return transcriptOpt
