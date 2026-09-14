@@ -41,4 +41,13 @@ public class FlashcardController {
             @PathVariable Long deckId) {
         return ResponseEntity.ok(flashcardService.getDeckCardsWithReview(principal.getName(), deckId));
     }
+
+    /** Add a new flashcard to a deck. */
+    @PostMapping("/deck/{deckId}")
+    public ResponseEntity<FlashcardDto.CardWithReview> addFlashcard(
+            Principal principal,
+            @PathVariable Long deckId,
+            @RequestBody FlashcardDto.AddReq req) {
+        return ResponseEntity.ok(flashcardService.addFlashcard(principal.getName(), deckId, req));
+    }
 }
