@@ -14,7 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -68,7 +68,7 @@ public class FlashcardService {
         Map<Long, FlashcardReview> reviewMap = reviews.stream()
                 .collect(Collectors.toMap(r -> r.getFlashcard().getId(), Function.identity()));
 
-        LocalDate today = LocalDate.now();
+        LocalDateTime today = LocalDateTime.now();
 
         return cards.stream().map(card -> {
             FlashcardReview review = reviewMap.get(card.getId());
@@ -104,7 +104,7 @@ public class FlashcardService {
                     newReview.setEasiness(new BigDecimal("2.50"));
                     newReview.setIntervalDays(0);
                     newReview.setRepetitions(0);
-                    newReview.setNextReviewAt(LocalDate.now());
+                    newReview.setNextReviewAt(LocalDateTime.now());
                     return newReview;
                 });
 
@@ -116,19 +116,21 @@ public class FlashcardService {
         int repetitions = review.getRepetitions();
         BigDecimal easiness = review.getEasiness();
         int intervalDays = review.getIntervalDays();
+        int intervalMinutes = 0;
 
         if (q >= 3) {
             if (repetitions == 0) {
-                intervalDays = 1;
+                intervalMinutes = q == 5 ? 3 * 24 * 60 : 10;
             } else if (repetitions == 1) {
-                intervalDays = 6;
+                intervalMinutes = 6 * 24 * 60;
             } else {
-                intervalDays = Math.max(1, (int) Math.round(intervalDays * easiness.doubleValue()));
+                int days = Math.max(1, (int) Math.round(Math.max(1, intervalDays) * easiness.doubleValue()));
+                intervalMinutes = days * 24 * 60;
             }
             repetitions++;
         } else {
             repetitions = 0;
-            intervalDays = 1;
+            intervalMinutes = q == 2 ? 6 : 1;
         }
 
         // EF' = EF + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02))
@@ -137,8 +139,8 @@ public class FlashcardService {
         
         review.setEasiness(BigDecimal.valueOf(newEasiness).setScale(2, RoundingMode.HALF_UP));
         review.setRepetitions(repetitions);
-        review.setIntervalDays(intervalDays);
-        review.setNextReviewAt(LocalDate.now().plusDays(intervalDays));
+        review.setIntervalDays(Math.max(0, intervalMinutes / (24 * 60)));
+        review.setNextReviewAt(LocalDateTime.now().plusMinutes(intervalMinutes));
 
         review = reviewRepository.save(review);
 

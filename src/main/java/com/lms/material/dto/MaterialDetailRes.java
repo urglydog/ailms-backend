@@ -24,7 +24,7 @@ public record MaterialDetailRes(
             Long id,
             String frontText,
             String backText,
-            java.time.LocalDate nextReviewAt,
+            LocalDateTime nextReviewAt,
             Integer intervalDays,
             Integer repetitions,
             java.math.BigDecimal easiness,

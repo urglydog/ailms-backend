@@ -10,7 +10,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -31,11 +31,11 @@ public class FlashcardNotificationJob {
     @Transactional(readOnly = true)
     public void notifySpacedRepetition() {
         log.info("Starting SRS Notification Job...");
-        LocalDate today = LocalDate.now();
+        LocalDateTime now = LocalDateTime.now();
         
         // Tìm tất cả các review cần ôn tập hôm nay (hoặc đã quá hạn)
         List<FlashcardReview> dueReviews = reviewRepository.findAll().stream()
-                .filter(r -> r.getNextReviewAt() != null && !r.getNextReviewAt().isAfter(today))
+                .filter(r -> r.getNextReviewAt() != null && !r.getNextReviewAt().isAfter(now))
                 .toList();
 
         // Nhóm theo người dùng
@@ -45,10 +45,9 @@ public class FlashcardNotificationJob {
         // Gửi qua WebSocket
         userDueCount.forEach((user, count) -> {
             String message = String.format("Bạn có %d thẻ Flashcard cần ôn tập hôm nay để duy trì chuỗi nhớ!", count);
-            // Gửi tới topic private của user (STOMP WebSocket)
-            messagingTemplate.convertAndSendToUser(
-                    user.getEmail(),
-                    "/queue/notifications",
+            // Gửi tới topic của user
+            messagingTemplate.convertAndSend(
+                    "/topic/notifications/" + user.getEmail(),
                     Map.of(
                             "type", "SRS_REMINDER",
                             "message", message,

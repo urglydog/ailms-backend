@@ -177,7 +177,7 @@ public class MaterialGenerationService {
                         .map(card -> {
                             com.lms.material.entity.FlashcardReview r = reviewMap.get(card.getId());
                             if (r != null) {
-                                boolean isDue = r.getNextReviewAt() == null || !r.getNextReviewAt().isAfter(java.time.LocalDate.now());
+                                boolean isDue = r.getNextReviewAt() == null || !r.getNextReviewAt().isAfter(java.time.LocalDateTime.now());
                                 return com.lms.material.dto.MaterialDetailRes.FlashcardDto.builder()
                                         .id(card.getId())
                                         .frontText(card.getFrontText())
@@ -193,7 +193,7 @@ public class MaterialGenerationService {
                                         .id(card.getId())
                                         .frontText(card.getFrontText())
                                         .backText(card.getBackText())
-                                        .nextReviewAt(java.time.LocalDate.now())
+                                        .nextReviewAt(java.time.LocalDateTime.now())
                                         .intervalDays(0)
                                         .repetitions(0)
                                         .easiness(new java.math.BigDecimal("2.50"))
