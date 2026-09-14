@@ -9,6 +9,8 @@ import com.lms.material.entity.FlashcardReview;
 import com.lms.material.repository.FlashcardRepository;
 import com.lms.material.repository.FlashcardReviewRepository;
 import lombok.RequiredArgsConstructor;
+import com.lms.material.repository.FlashcardDeckRepository;
+import com.lms.material.entity.FlashcardDeck;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,6 +28,7 @@ import java.util.stream.Collectors;
 public class FlashcardService {
 
     private final FlashcardRepository flashcardRepository;
+    private final FlashcardDeckRepository flashcardDeckRepository;
     private final FlashcardReviewRepository reviewRepository;
     private final UserRepository userRepository;
 
@@ -50,6 +53,30 @@ public class FlashcardService {
             flashcard.setBackText(req.backText().trim());
         }
         flashcardRepository.save(flashcard);
+    }
+
+    /**
+     * Add a new flashcard to a deck. Only owner can add.
+     */
+    @Transactional
+    public FlashcardDto.CardWithReview addFlashcard(String userEmail, Long deckId, FlashcardDto.AddReq req) {
+        FlashcardDeck deck = flashcardDeckRepository.findById(deckId)
+                .orElseThrow(() -> new ResourceNotFoundException("FlashcardDeck", deckId));
+
+        if (!deck.getMaterialGeneration().getUser().getEmail().equals(userEmail)) {
+            throw new IllegalArgumentException("Bạn không có quyền thêm flashcard vào bộ này.");
+        }
+
+        Flashcard flashcard = new Flashcard();
+        flashcard.setFlashcardDeck(deck);
+        flashcard.setFrontText(req.frontText().trim());
+        flashcard.setBackText(req.backText().trim());
+        flashcard = flashcardRepository.save(flashcard);
+
+        return new FlashcardDto.CardWithReview(
+                flashcard.getId(), flashcard.getFrontText(), flashcard.getBackText(),
+                null, 0, 0, new BigDecimal("2.50"), true
+        );
     }
 
     /**

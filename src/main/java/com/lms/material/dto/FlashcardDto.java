@@ -30,4 +30,9 @@ public class FlashcardDto {
         String frontText,
         String backText
     ) {}
+
+    public record AddReq(
+        String frontText,
+        String backText
+    ) {}
 }
