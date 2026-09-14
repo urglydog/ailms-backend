@@ -57,4 +57,16 @@ public class User extends BaseEntity {
      */
     @Column(name = "is_ai_locked", nullable = false)
     private Boolean isAiLocked = false;
+
+    /**
+     * "View public profile" kiểu Udemy (14/09/2026, mở rộng ngoài đặc tả gốc) — cho phép
+     * người khác xem danh sách khóa học đã học / wishlist của mình. 2 công tắc TÁCH RIÊNG
+     * (không dùng chung 1 cờ) vì học viên có thể muốn khoe khóa đã học nhưng giấu wishlist
+     * (tránh lộ ý định mua sắp tới), hoặc ngược lại.
+     */
+    @Column(name = "courses_public", nullable = false)
+    private Boolean coursesPublic = true;
+
+    @Column(name = "wishlist_public", nullable = false)
+    private Boolean wishlistPublic = true;
 }

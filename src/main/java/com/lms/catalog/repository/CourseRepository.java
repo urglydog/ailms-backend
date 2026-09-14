@@ -38,16 +38,29 @@ public interface CourseRepository extends JpaRepository<Course, Long> {
     /**
      * UC09 — tìm kiếm công khai. Mọi filter đều optional qua {@code :param IS NULL OR ...}
      * để tránh tổ hợp bùng nổ số lượng derived-query method. Chỉ trả khóa PUBLISHED (BR-ROLE-03).
+     *
+     * <p>{@code minDurationSec}/{@code maxDurationSec} (14/09/2026, mở rộng — bộ lọc "Video
+     * Duration" kiểu Udemy): tổng thời lượng KHÔNG phải cột trên {@code Course}, phải cộng dồn
+     * {@code Lesson.durationSec} qua subquery tương quan (correlated subquery) — chấp nhận được
+     * ở quy mô hiện tại (danh mục mẫu nhỏ), cần đánh index/denormalize nếu catalog lớn hơn nhiều.
      */
     @Query("SELECT c FROM Course c WHERE c.status = com.lms.common.enums.CourseStatus.PUBLISHED "
             + "AND (:keyword IS NULL OR LOWER(c.title) LIKE LOWER(CONCAT('%', :keyword, '%'))) "
             + "AND (:categorySlug IS NULL OR c.category.slug = :categorySlug) "
             + "AND (:level IS NULL OR c.level = :level) "
-            + "AND (:isFree IS NULL OR c.isFree = :isFree)")
+            + "AND (:isFree IS NULL OR c.isFree = :isFree) "
+            + "AND (:minRating IS NULL OR c.avgRating >= :minRating) "
+            + "AND (:minDurationSec IS NULL OR "
+            + "     (SELECT COALESCE(SUM(l.durationSec), 0) FROM Lesson l WHERE l.chapter.course = c) >= :minDurationSec) "
+            + "AND (:maxDurationSec IS NULL OR "
+            + "     (SELECT COALESCE(SUM(l.durationSec), 0) FROM Lesson l WHERE l.chapter.course = c) <= :maxDurationSec)")
     Page<Course> searchPublic(
             @Param("keyword") String keyword,
             @Param("categorySlug") String categorySlug,
             @Param("level") String level,
             @Param("isFree") Boolean isFree,
+            @Param("minRating") java.math.BigDecimal minRating,
+            @Param("minDurationSec") Integer minDurationSec,
+            @Param("maxDurationSec") Integer maxDurationSec,
             Pageable pageable);
 }

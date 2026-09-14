@@ -5,7 +5,9 @@ import com.lms.auth.repository.UserRepository;
 import com.lms.catalog.entity.Course;
 import com.lms.catalog.repository.CourseRepository;
 import com.lms.common.enums.CourseStatus;
+import com.lms.catalog.repository.LessonRepository;
 import com.lms.common.exception.BusinessRuleViolationException;
+import com.lms.enrollment.repository.CourseReviewRepository;
 import com.lms.enrollment.repository.EnrollmentRepository;
 import com.lms.payment.dto.CartDto.ItemRes;
 import com.lms.payment.entity.CartItem;
@@ -43,6 +45,8 @@ class CartServiceTest {
     @Mock private UserRepository userRepository;
     @Mock private CourseRepository courseRepository;
     @Mock private EnrollmentRepository enrollmentRepository;
+    @Mock private LessonRepository lessonRepository;
+    @Mock private CourseReviewRepository courseReviewRepository;
 
     @InjectMocks
     private CartService cartService;
