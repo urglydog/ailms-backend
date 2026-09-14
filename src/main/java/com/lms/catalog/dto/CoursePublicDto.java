@@ -1,6 +1,7 @@
 package com.lms.catalog.dto;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -23,6 +24,8 @@ public class CoursePublicDto {
             BigDecimal avgRating,
             Long reviewCount,
             Integer totalLessons,
+            /** UC09 mở rộng (14/09/2026) — tổng giây video, dùng cho bộ lọc "Video Duration" kiểu Udemy. */
+            Integer totalDurationSec,
             String categorySlug,
             String categoryName
     ) {}
@@ -39,9 +42,17 @@ public class CoursePublicDto {
             Boolean isFree,
             BigDecimal avgRating,
             Long reviewCount,
+            Integer totalDurationSec,
             String categorySlug,
             String categoryName,
-            List<ChapterRes> chapters
+            List<ChapterRes> chapters,
+            /** UC10 mở rộng (14/09/2026) — vùng "hero" nền đen kiểu Udemy ở trang chi tiết khóa. */
+            LocalDateTime updatedAt,
+            /** Nhãn hiển thị (vd "Tiếng Anh"), sinh từ mã ngôn ngữ qua {@code Locale}, không hardcode danh sách. Null nếu chưa bài nào có transcript. */
+            String sourceLanguage,
+            /** Ngôn ngữ đã lồng tiếng XONG (ít nhất 1 bài, {@code AudioTrack.status = COMPLETED}) — rỗng nếu chưa có. */
+            List<String> dubbedLanguages,
+            Long learnerCount
     ) {}
 
     public record ChapterRes(

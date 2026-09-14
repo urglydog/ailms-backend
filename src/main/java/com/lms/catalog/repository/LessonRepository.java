@@ -4,6 +4,8 @@ import com.lms.catalog.entity.Lesson;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -24,4 +26,15 @@ public interface LessonRepository extends JpaRepository<Lesson, Long> {
 
     /** "Học ngay" (my-courses) — bài học đầu tiên của khoá theo đúng thứ tự chương rồi bài. */
     Optional<Lesson> findFirstByChapter_CourseIdOrderByChapter_DisplayOrderAscDisplayOrderAsc(Long courseId);
+
+    /** UC09 mở rộng (14/09/2026) — tổng thời lượng video của khóa, dùng cho bộ lọc "Video Duration". */
+    @Query("SELECT COALESCE(SUM(l.durationSec), 0) FROM Lesson l WHERE l.chapter.course.id = :courseId")
+    int sumDurationSecByCourseId(@Param("courseId") Long courseId);
+
+    /**
+     * UC10 mở rộng (14/09/2026) — "ngôn ngữ gốc" hiển thị ở trang chi tiết khóa kiểu Udemy.
+     * {@code sourceLanguage} tự điền sau lần bóc băng đầu tiên của MỖI bài (BR-DUB-09), nên lấy
+     * bài đầu tiên (theo đúng thứ tự chương-bài) đã có giá trị này làm đại diện cho cả khóa.
+     */
+    Optional<Lesson> findFirstByChapter_CourseIdAndSourceLanguageIsNotNullOrderByChapter_DisplayOrderAscDisplayOrderAsc(Long courseId);
 }

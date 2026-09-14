@@ -16,7 +16,13 @@ public class CartDto {
             String thumbnailUrl,
             String instructorName,
             BigDecimal price,
-            LocalDateTime addedAt
+            LocalDateTime addedAt,
+            /** (14/09/2026, mở rộng) — hiển thị đủ thông tin trên mỗi dòng giỏ hàng kiểu Udemy, không cần gọi thêm API chi tiết khóa. */
+            BigDecimal avgRating,
+            Long reviewCount,
+            Integer totalDurationSec,
+            Integer totalLessons,
+            String level
     ) {}
 
     public record AddReq(@NotNull Long courseId) {}

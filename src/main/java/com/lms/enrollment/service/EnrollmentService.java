@@ -12,6 +12,7 @@ import com.lms.common.enums.CourseStatus;
 import com.lms.common.exception.BusinessRuleViolationException;
 import com.lms.enrollment.repository.CourseReviewRepository;
 import com.lms.enrollment.repository.EnrollmentRepository;
+import com.lms.enrollment.repository.LessonProgressRepository;
 import com.lms.payment.entity.Payment;
 import com.lms.payment.repository.CartItemRepository;
 import java.time.LocalDateTime;
@@ -35,6 +36,7 @@ public class EnrollmentService {
     private final CourseReviewRepository courseReviewRepository;
     private final CourseRepository courseRepository;
     private final LessonRepository lessonRepository;
+    private final LessonProgressRepository lessonProgressRepository;
     private final CartItemRepository cartItemRepository;
 
     @Transactional(readOnly = true)
@@ -49,12 +51,17 @@ public class EnrollmentService {
     private Res mapToRes(User user, Enrollment enrollment) {
         Course course = enrollment.getCourse();
         boolean alreadyReviewed = courseReviewRepository.existsByUser_IdAndCourse_Id(user.getId(), course.getId());
+        Integer myRating = courseReviewRepository.findByUser_IdAndCourse_Id(user.getId(), course.getId())
+                .map(review -> review.getRating())
+                .orElse(null);
         // "Học ngay" phải vào thẳng bài học, không phải trang chi tiết khoá — bấm vào bài đầu
         // tiên theo đúng thứ tự chương/bài (BR-COURSE-01 đảm bảo khoá đã publish có ≥1 bài).
         Long firstLessonId = lessonRepository
                 .findFirstByChapter_CourseIdOrderByChapter_DisplayOrderAscDisplayOrderAsc(course.getId())
                 .map(lesson -> lesson.getId())
                 .orElse(null);
+        LocalDateTime lastAccessedAt = lessonProgressRepository
+                .findLastAccessedAtByUserIdAndCourseId(user.getId(), course.getId());
         return new Res(
                 course.getId(),
                 course.getTitle(),
@@ -68,7 +75,11 @@ public class EnrollmentService {
                 enrollment.getCompletedAt(),
                 // BR-PROGRESS-04: Quiz thật làm ở Giai đoạn 7 — để null an toàn ở đây.
                 null,
-                firstLessonId
+                firstLessonId,
+                course.getInstructor().getFullName(),
+                myRating,
+                enrollment.getEnrolledAt(),
+                lastAccessedAt
         );
     }
 

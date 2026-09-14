@@ -10,7 +10,9 @@ import com.lms.catalog.repository.LessonRepository;
 import com.lms.common.enums.CourseStatus;
 import com.lms.common.exception.AccessDeniedDomainException;
 import com.lms.common.exception.ResourceNotFoundException;
+import com.lms.dubbing.repository.AudioTrackRepository;
 import com.lms.enrollment.repository.CourseReviewRepository;
+import com.lms.enrollment.repository.EnrollmentRepository;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
@@ -35,10 +37,13 @@ public class CoursePublicService {
     private final ChapterRepository chapterRepository;
     private final LessonRepository lessonRepository;
     private final CourseReviewRepository courseReviewRepository;
+    private final AudioTrackRepository audioTrackRepository;
+    private final EnrollmentRepository enrollmentRepository;
 
     @Transactional(readOnly = true)
     public Page<SummaryRes> search(
-            String keyword, String categorySlug, String level, String priceType, String sortBy, Pageable pageable) {
+            String keyword, String categorySlug, String level, String priceType, Double minRating,
+            String durationBucket, String sortBy, Pageable pageable) {
         Boolean isFree = switch (priceType == null ? "" : priceType) {
             case "free" -> Boolean.TRUE;
             case "paid" -> Boolean.FALSE;
@@ -46,6 +51,8 @@ public class CoursePublicService {
         };
         String normalizedKeyword = (keyword == null || keyword.isBlank()) ? null : keyword.trim();
         String normalizedLevel = (level == null || level.isBlank()) ? null : level.toUpperCase(Locale.ROOT);
+        java.math.BigDecimal minRatingDecimal = minRating == null ? null : java.math.BigDecimal.valueOf(minRating);
+        DurationRange durationRange = resolveDurationRange(durationBucket);
 
         // `pageable` vẫn giữ nguyên sort mặc định (createdAt DESC, xem @PageableDefault ở
         // Controller) — đúng cho "Mới nhất". 3 lựa chọn còn lại (rating/reviews/relevance) không
@@ -53,7 +60,9 @@ public class CoursePublicService {
         // được sắp lại bằng Comparator ngay trên trang đã fetch. Chỉ đúng ở quy mô hiện tại (fetch
         // 1 trang lớn duy nhất, chưa có phân trang thật) — cần viết lại bằng subquery SQL nếu
         // catalog lớn tới mức cần phân trang thật.
-        Page<Course> page = courseRepository.searchPublic(normalizedKeyword, categorySlug, normalizedLevel, isFree, pageable);
+        Page<Course> page = courseRepository.searchPublic(
+                normalizedKeyword, categorySlug, normalizedLevel, isFree, minRatingDecimal,
+                durationRange.minSec(), durationRange.maxSec(), pageable);
         List<SummaryRes> content = page.getContent().stream().map(this::mapToSummaryRes).collect(Collectors.toList());
 
         Comparator<SummaryRes> comparator = resolveComparator(sortBy, normalizedKeyword);
@@ -62,6 +71,23 @@ public class CoursePublicService {
         }
 
         return new PageImpl<>(content, pageable, page.getTotalElements());
+    }
+
+    private record DurationRange(Integer minSec, Integer maxSec) {}
+
+    /**
+     * Bộ lọc "Video Duration" kiểu Udemy (14/09/2026, mở rộng) — 5 khoảng cố định giống ảnh
+     * tham khảo. Giá trị lạ/không khớp bucket nào coi như không lọc (an toàn, không ném lỗi).
+     */
+    private DurationRange resolveDurationRange(String durationBucket) {
+        return switch (durationBucket == null ? "" : durationBucket) {
+            case "0-1" -> new DurationRange(null, 3600);
+            case "1-3" -> new DurationRange(3600, 10800);
+            case "3-6" -> new DurationRange(10800, 21600);
+            case "6-17" -> new DurationRange(21600, 61200);
+            case "17+" -> new DurationRange(61200, null);
+            default -> new DurationRange(null, null);
+        };
     }
 
     /** {@code null} = giữ nguyên thứ tự DB đã trả (mặc định "Mới nhất"). */
@@ -143,6 +169,7 @@ public class CoursePublicService {
                 course.getAvgRating(),
                 courseReviewRepository.countByCourse_IdAndIsHiddenFalse(course.getId()),
                 (int) lessonRepository.countByChapter_CourseId(course.getId()),
+                lessonRepository.sumDurationSecByCourseId(course.getId()),
                 course.getCategory().getSlug(),
                 course.getCategory().getName()
         );
@@ -167,6 +194,15 @@ public class CoursePublicService {
                 ))
                 .toList();
 
+        String sourceLanguage = lessonRepository
+                .findFirstByChapter_CourseIdAndSourceLanguageIsNotNullOrderByChapter_DisplayOrderAscDisplayOrderAsc(course.getId())
+                .map(lesson -> displayLabel(lesson.getSourceLanguage()))
+                .orElse(null);
+        List<String> dubbedLanguages = audioTrackRepository.findAvailableLanguagesByCourse(course.getId()).stream()
+                .map(this::displayLabel)
+                .toList();
+        long learnerCount = enrollmentRepository.countByCourseId(course.getId());
+
         return new DetailRes(
                 course.getId(),
                 course.getTitle(),
@@ -179,9 +215,19 @@ public class CoursePublicService {
                 course.getIsFree(),
                 course.getAvgRating(),
                 courseReviewRepository.countByCourse_IdAndIsHiddenFalse(course.getId()),
+                lessonRepository.sumDurationSecByCourseId(course.getId()),
                 course.getCategory().getSlug(),
                 course.getCategory().getName(),
-                chapterResList
+                chapterResList,
+                course.getUpdatedAt(),
+                sourceLanguage,
+                dubbedLanguages,
+                learnerCount
         );
+    }
+
+    /** Nhãn hiển thị sinh từ mã ngôn ngữ — KHÔNG hardcode danh sách (BR-DUB-07), giống {@code LessonPlayerService}. */
+    private String displayLabel(String languageCode) {
+        return Locale.forLanguageTag(languageCode).getDisplayName(Locale.forLanguageTag("vi-VN"));
     }
 }
