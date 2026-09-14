@@ -1,6 +1,6 @@
 package com.lms.material.dto;
 
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 public class FlashcardDto {
     public record ReviewReq(
@@ -9,7 +9,7 @@ public class FlashcardDto {
 
     public record ReviewRes(
         Long flashcardId,
-        LocalDate nextReviewAt,
+        LocalDateTime nextReviewAt,
         Integer intervalDays,
         Integer repetitions,
         java.math.BigDecimal easiness
@@ -19,7 +19,7 @@ public class FlashcardDto {
         Long id,
         String frontText,
         String backText,
-        LocalDate nextReviewAt,
+        LocalDateTime nextReviewAt,
         Integer intervalDays,
         Integer repetitions,
         java.math.BigDecimal easiness,
