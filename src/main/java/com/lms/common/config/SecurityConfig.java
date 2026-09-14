@@ -78,6 +78,11 @@ public class SecurityConfig {
             // UC20 mở rộng — danh mục ngôn ngữ/giọng đọc đang hỗ trợ, dữ liệu tham chiếu công khai
             // giống courses/categories, không gắn với 1 bài học hay tài khoản cụ thể nào.
             "/api/v1/voice-options",
+            // "View public profile" (14/09/2026, mở rộng) — hồ sơ công khai xem được không cần
+            // đăng nhập, giống cách khách vãng lai xem chi tiết khóa học (UC10). "/me/**" và các
+            // path 1-đoạn khác dưới "/api/v1/users" KHÔNG khớp "/*/public-profile" (đúng 1 đoạn
+            // biến duy nhất) nên vẫn bắt buộc JWT như cũ.
+            "/api/v1/users/*/public-profile",
             // Giai đoạn 11 (F11.2, UC51) — Guest xem được live PUBIC (BR-LIVE-01); quyền xem THẬT
             // lọc ở LiveViewService, endpoint này chỉ mở cửa Spring Security, không phải "ai xem
             // gì cũng được". "/api/v1/courses/{id}/live-sessions" đã nằm dưới "/api/v1/courses/**"

@@ -2,17 +2,21 @@ package com.lms.auth.controller;
 
 import com.lms.auth.dto.AuthRequestDto.ChangePasswordReq;
 import com.lms.auth.dto.AuthResponseDto.MessageRes;
+import com.lms.auth.dto.UserDto.PublicProfileRes;
 import com.lms.auth.dto.UserDto.UpdateMyProfileReq;
+import com.lms.auth.dto.UserDto.UpdatePrivacyReq;
 import com.lms.auth.dto.UserDto.UpdateUserReq;
 import com.lms.auth.dto.UserDto.UserRes;
 import com.lms.auth.security.CustomUserDetails;
 import com.lms.auth.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -62,6 +66,35 @@ public class UserController {
             @Valid @RequestBody UpdateMyProfileReq req) {
         UserRes result = userService.updateMyProfile(principal.getName(), req);
         return ResponseEntity.ok(result);
+    }
+
+    /**
+     * Đổi ảnh đại diện cho người dùng hiện tại (14/09/2026, mở rộng ngoài đặc tả gốc) —
+     * cùng khuôn với {@code CourseController.uploadThumbnail}.
+     */
+    @PostMapping(value = "/me/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<UserRes> uploadMyAvatar(
+            java.security.Principal principal, @RequestPart("file") MultipartFile file) {
+        return ResponseEntity.ok(userService.uploadAvatar(principal.getName(), file));
+    }
+
+    /**
+     * "View public profile" (14/09/2026, mở rộng) — bật/tắt hiển thị công khai khóa học đã
+     * học / wishlist của người dùng hiện tại.
+     */
+    @PutMapping("/me/privacy")
+    public ResponseEntity<UserRes> updateMyPrivacy(
+            java.security.Principal principal, @Valid @RequestBody UpdatePrivacyReq req) {
+        return ResponseEntity.ok(userService.updatePrivacy(principal.getName(), req));
+    }
+
+    /**
+     * "View public profile" (14/09/2026, mở rộng) — hồ sơ công khai của 1 người dùng bất kỳ,
+     * xem được KHÔNG cần đăng nhập (nằm trong {@code PUBLIC_GET_ENDPOINTS} của SecurityConfig).
+     */
+    @GetMapping("/{id}/public-profile")
+    public ResponseEntity<PublicProfileRes> getPublicProfile(@PathVariable Long id) {
+        return ResponseEntity.ok(userService.getPublicProfile(id));
     }
 
     /**

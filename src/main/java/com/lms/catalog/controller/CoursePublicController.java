@@ -32,9 +32,12 @@ public class CoursePublicController {
             @RequestParam(required = false) String categorySlug,
             @RequestParam(required = false) String level,
             @RequestParam(required = false) String priceType,
+            @RequestParam(required = false) Double minRating,
+            @RequestParam(required = false) String durationBucket,
             @RequestParam(required = false) String sortBy,
             @PageableDefault(size = 24, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
-        return ResponseEntity.ok(coursePublicService.search(keyword, categorySlug, level, priceType, sortBy, pageable));
+        return ResponseEntity.ok(coursePublicService.search(
+                keyword, categorySlug, level, priceType, minRating, durationBucket, sortBy, pageable));
     }
 
     @GetMapping("/{slug}")

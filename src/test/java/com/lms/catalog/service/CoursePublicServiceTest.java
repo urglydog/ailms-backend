@@ -12,7 +12,9 @@ import com.lms.catalog.repository.LessonRepository;
 import com.lms.common.enums.CourseStatus;
 import com.lms.common.exception.AccessDeniedDomainException;
 import com.lms.common.exception.ResourceNotFoundException;
+import com.lms.dubbing.repository.AudioTrackRepository;
 import com.lms.enrollment.repository.CourseReviewRepository;
+import com.lms.enrollment.repository.EnrollmentRepository;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
@@ -42,6 +44,8 @@ class CoursePublicServiceTest {
     @Mock private ChapterRepository chapterRepository;
     @Mock private LessonRepository lessonRepository;
     @Mock private CourseReviewRepository courseReviewRepository;
+    @Mock private AudioTrackRepository audioTrackRepository;
+    @Mock private EnrollmentRepository enrollmentRepository;
 
     @InjectMocks
     private CoursePublicService coursePublicService;
@@ -78,6 +82,7 @@ class CoursePublicServiceTest {
                 .thenReturn(Optional.of(course));
         lenient().when(chapterRepository.findByCourseIdOrderByDisplayOrderAsc(5L)).thenReturn(List.of());
         lenient().when(courseReviewRepository.countByCourse_IdAndIsHiddenFalse(5L)).thenReturn(2L);
+        lenient().when(audioTrackRepository.findAvailableLanguagesByCourse(5L)).thenReturn(List.of());
 
         DetailRes result = coursePublicService.getBySlug("khoa-hoc-test");
 
@@ -88,36 +93,63 @@ class CoursePublicServiceTest {
 
     @Test
     void search_mapsPriceTypeFreeToIsFreeTrue() {
-        when(courseRepository.searchPublic(any(), any(), any(), any(), any()))
+        when(courseRepository.searchPublic(any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(org.springframework.data.domain.Page.empty());
 
-        coursePublicService.search(null, null, null, "free", null, PageRequest.of(0, 10));
+        coursePublicService.search(null, null, null, "free", null, null, null, PageRequest.of(0, 10));
 
         ArgumentCaptor<Boolean> isFreeCaptor = ArgumentCaptor.forClass(Boolean.class);
-        verify(courseRepository).searchPublic(isNull(), isNull(), isNull(), isFreeCaptor.capture(), any(Pageable.class));
+        verify(courseRepository).searchPublic(
+                isNull(), isNull(), isNull(), isFreeCaptor.capture(), isNull(), isNull(), isNull(), any(Pageable.class));
         assertThat(isFreeCaptor.getValue()).isTrue();
     }
 
     @Test
     void search_mapsPriceTypePaidToIsFreeFalse() {
-        when(courseRepository.searchPublic(any(), any(), any(), any(), any()))
+        when(courseRepository.searchPublic(any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(org.springframework.data.domain.Page.empty());
 
-        coursePublicService.search(null, null, null, "paid", null, PageRequest.of(0, 10));
+        coursePublicService.search(null, null, null, "paid", null, null, null, PageRequest.of(0, 10));
 
         ArgumentCaptor<Boolean> isFreeCaptor = ArgumentCaptor.forClass(Boolean.class);
-        verify(courseRepository).searchPublic(isNull(), isNull(), isNull(), isFreeCaptor.capture(), any(Pageable.class));
+        verify(courseRepository).searchPublic(
+                isNull(), isNull(), isNull(), isFreeCaptor.capture(), isNull(), isNull(), isNull(), any(Pageable.class));
         assertThat(isFreeCaptor.getValue()).isFalse();
     }
 
     @Test
     void search_mapsPriceTypeAllToNullIsFree() {
-        when(courseRepository.searchPublic(any(), any(), any(), any(), any()))
+        when(courseRepository.searchPublic(any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(org.springframework.data.domain.Page.empty());
 
-        coursePublicService.search("react", "lap-trinh-web", "beginner", "all", null, PageRequest.of(0, 10));
+        coursePublicService.search("react", "lap-trinh-web", "beginner", "all", null, null, null, PageRequest.of(0, 10));
 
-        verify(courseRepository).searchPublic(eq("react"), eq("lap-trinh-web"), eq("BEGINNER"), isNull(), any(Pageable.class));
+        verify(courseRepository).searchPublic(
+                eq("react"), eq("lap-trinh-web"), eq("BEGINNER"), isNull(), isNull(), isNull(), isNull(), any(Pageable.class));
+    }
+
+    @Test
+    void search_mapsMinRating_toBigDecimal() {
+        when(courseRepository.searchPublic(any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(org.springframework.data.domain.Page.empty());
+
+        coursePublicService.search(null, null, null, null, 4.5, null, null, PageRequest.of(0, 10));
+
+        ArgumentCaptor<BigDecimal> minRatingCaptor = ArgumentCaptor.forClass(BigDecimal.class);
+        verify(courseRepository).searchPublic(
+                isNull(), isNull(), isNull(), isNull(), minRatingCaptor.capture(), isNull(), isNull(), any(Pageable.class));
+        assertThat(minRatingCaptor.getValue()).isEqualByComparingTo("4.5");
+    }
+
+    @Test
+    void search_mapsDurationBucket_toSecondsRange() {
+        when(courseRepository.searchPublic(any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(org.springframework.data.domain.Page.empty());
+
+        coursePublicService.search(null, null, null, null, null, "1-3", null, PageRequest.of(0, 10));
+
+        verify(courseRepository).searchPublic(
+                isNull(), isNull(), isNull(), isNull(), isNull(), eq(3600), eq(10800), any(Pageable.class));
     }
 
     private Course courseWithRatingAndTitle(long id, String title, double avgRating) {
@@ -141,10 +173,10 @@ class CoursePublicServiceTest {
     void search_sortByRating_ordersHighestFirst() {
         Course low = courseWithRatingAndTitle(1L, "Khoa A", 3.0);
         Course high = courseWithRatingAndTitle(2L, "Khoa B", 4.8);
-        when(courseRepository.searchPublic(any(), any(), any(), any(), any()))
+        when(courseRepository.searchPublic(any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(low, high)));
 
-        var result = coursePublicService.search(null, null, null, null, "rating", PageRequest.of(0, 10));
+        var result = coursePublicService.search(null, null, null, null, null, null, "rating", PageRequest.of(0, 10));
 
         assertThat(result.getContent()).extracting("id").containsExactly(2L, 1L);
     }
@@ -153,12 +185,12 @@ class CoursePublicServiceTest {
     void search_sortByReviews_ordersMostReviewedFirst() {
         Course fewReviews = courseWithRatingAndTitle(1L, "Khoa A", 4.0);
         Course manyReviews = courseWithRatingAndTitle(2L, "Khoa B", 4.0);
-        when(courseRepository.searchPublic(any(), any(), any(), any(), any()))
+        when(courseRepository.searchPublic(any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(fewReviews, manyReviews)));
         lenient().when(courseReviewRepository.countByCourse_IdAndIsHiddenFalse(1L)).thenReturn(1L);
         lenient().when(courseReviewRepository.countByCourse_IdAndIsHiddenFalse(2L)).thenReturn(9L);
 
-        var result = coursePublicService.search(null, null, null, null, "reviews", PageRequest.of(0, 10));
+        var result = coursePublicService.search(null, null, null, null, null, null, "reviews", PageRequest.of(0, 10));
 
         assertThat(result.getContent()).extracting("id").containsExactly(2L, 1L);
     }
@@ -167,10 +199,10 @@ class CoursePublicServiceTest {
     void search_sortByRelevance_prefixMatchRanksAboveMiddleMatch() {
         Course middleMatch = courseWithRatingAndTitle(1L, "Nhap mon React co ban", 4.0);
         Course prefixMatch = courseWithRatingAndTitle(2L, "React nang cao", 4.0);
-        when(courseRepository.searchPublic(any(), any(), any(), any(), any()))
+        when(courseRepository.searchPublic(any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(middleMatch, prefixMatch)));
 
-        var result = coursePublicService.search("react", null, null, null, "relevance", PageRequest.of(0, 10));
+        var result = coursePublicService.search("react", null, null, null, null, null, "relevance", PageRequest.of(0, 10));
 
         assertThat(result.getContent()).extracting("id").containsExactly(2L, 1L);
     }

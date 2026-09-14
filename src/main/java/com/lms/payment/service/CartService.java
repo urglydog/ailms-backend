@@ -4,9 +4,11 @@ import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
 import com.lms.catalog.entity.Course;
 import com.lms.catalog.repository.CourseRepository;
+import com.lms.catalog.repository.LessonRepository;
 import com.lms.common.enums.CourseStatus;
 import com.lms.common.exception.BusinessRuleViolationException;
 import com.lms.common.exception.ResourceNotFoundException;
+import com.lms.enrollment.repository.CourseReviewRepository;
 import com.lms.enrollment.repository.EnrollmentRepository;
 import com.lms.payment.dto.CartDto;
 import com.lms.payment.entity.CartItem;
@@ -37,12 +39,14 @@ public class CartService {
     private final UserRepository userRepository;
     private final CourseRepository courseRepository;
     private final EnrollmentRepository enrollmentRepository;
+    private final LessonRepository lessonRepository;
+    private final CourseReviewRepository courseReviewRepository;
 
     @Transactional(readOnly = true)
     public List<CartDto.ItemRes> getMyCart(String email) {
         User user = requireUser(email);
         return cartItemRepository.findByUser_IdOrderByCreatedAtDesc(user.getId()).stream()
-                .map(CartService::toRes)
+                .map(this::toRes)
                 .toList();
     }
 
@@ -85,10 +89,14 @@ public class CartService {
                 .orElseThrow(() -> new ResourceNotFoundException("User", email));
     }
 
-    private static CartDto.ItemRes toRes(CartItem item) {
+    private CartDto.ItemRes toRes(CartItem item) {
         Course c = item.getCourse();
+        long reviewCount = courseReviewRepository.countByCourse_IdAndIsHiddenFalse(c.getId());
+        int totalLessons = (int) lessonRepository.countByChapter_CourseId(c.getId());
+        int totalDurationSec = lessonRepository.sumDurationSecByCourseId(c.getId());
         return new CartDto.ItemRes(
                 c.getId(), c.getTitle(), c.getSlug(), c.getThumbnailUrl(),
-                c.getInstructor().getFullName(), c.getPrice(), item.getCreatedAt());
+                c.getInstructor().getFullName(), c.getPrice(), item.getCreatedAt(),
+                c.getAvgRating(), reviewCount, totalDurationSec, totalLessons, c.getLevel());
     }
 }
