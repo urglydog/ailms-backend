@@ -26,12 +26,12 @@ public class FlashcardController {
 
     /** Update flashcard content (frontText/backText). Only owner can edit. */
     @PatchMapping("/{id}")
-    public ResponseEntity<Void> updateFlashcard(
+    public ResponseEntity<java.util.Map<String, String>> updateFlashcard(
             Principal principal,
             @PathVariable Long id,
             @RequestBody FlashcardDto.UpdateReq req) {
         flashcardService.updateFlashcard(principal.getName(), id, req);
-        return ResponseEntity.ok().build();
+        return ResponseEntity.ok(java.util.Map.of("message", "Updated successfully"));
     }
 
     /** Get all cards in a deck with SRS review state for study mode. */
@@ -42,12 +42,12 @@ public class FlashcardController {
         return ResponseEntity.ok(flashcardService.getDeckCardsWithReview(principal.getName(), deckId));
     }
 
-    /** Add a new flashcard to a deck. */
-    @PostMapping("/deck/{deckId}")
+    /** Add a new flashcard to a deck by MaterialGeneration ID. */
+    @PostMapping("/deck/{generationId}")
     public ResponseEntity<FlashcardDto.CardWithReview> addFlashcard(
             Principal principal,
-            @PathVariable Long deckId,
+            @PathVariable Long generationId,
             @RequestBody FlashcardDto.AddReq req) {
-        return ResponseEntity.ok(flashcardService.addFlashcard(principal.getName(), deckId, req));
+        return ResponseEntity.ok(flashcardService.addFlashcard(principal.getName(), generationId, req));
     }
 }

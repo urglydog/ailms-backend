@@ -59,9 +59,9 @@ public class FlashcardService {
      * Add a new flashcard to a deck. Only owner can add.
      */
     @Transactional
-    public FlashcardDto.CardWithReview addFlashcard(String userEmail, Long deckId, FlashcardDto.AddReq req) {
-        FlashcardDeck deck = flashcardDeckRepository.findById(deckId)
-                .orElseThrow(() -> new ResourceNotFoundException("FlashcardDeck", deckId));
+    public FlashcardDto.CardWithReview addFlashcard(String userEmail, Long generationId, FlashcardDto.AddReq req) {
+        FlashcardDeck deck = flashcardDeckRepository.findByMaterialGeneration_Id(generationId)
+                .orElseThrow(() -> new ResourceNotFoundException("FlashcardDeck (by gen id)", generationId));
 
         if (!deck.getMaterialGeneration().getUser().getEmail().equals(userEmail)) {
             throw new IllegalArgumentException("Bạn không có quyền thêm flashcard vào bộ này.");

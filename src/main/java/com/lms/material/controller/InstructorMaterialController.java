@@ -6,6 +6,9 @@ import com.lms.material.entity.FlashcardDeck;
 import com.lms.material.entity.Mindmap;
 import com.lms.material.repository.FlashcardDeckRepository;
 import com.lms.material.repository.MindmapRepository;
+import com.lms.common.service.NotificationService;
+import com.lms.enrollment.repository.EnrollmentRepository;
+import com.lms.enrollment.entity.Enrollment;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -24,6 +27,8 @@ public class InstructorMaterialController {
     private final com.lms.material.repository.MaterialGenerationRepository materialGenerationRepository;
     private final com.lms.material.repository.QuizRepository quizRepository;
     private final com.lms.material.repository.QuizAttemptRepository quizAttemptRepository;
+    private final NotificationService notificationService;
+    private final EnrollmentRepository enrollmentRepository;
 
     @PutMapping("/mindmaps/{id}/set-official")
     @PreAuthorize("hasRole('INSTRUCTOR')")
@@ -36,6 +41,17 @@ public class InstructorMaterialController {
         }
         mindmap.setIsOfficial(isOfficial);
         mindmapRepository.save(mindmap);
+
+        if (isOfficial) {
+            String title = "Học liệu mới: " + (mindmap.getMaterialGeneration().getTitle() != null ? mindmap.getMaterialGeneration().getTitle() : "Sơ đồ tư duy");
+            String content = "Giảng viên vừa công bố một Sơ đồ tư duy mới cho khóa học của bạn.";
+            String linkUrl = "/materials/" + mindmap.getMaterialGeneration().getId();
+            java.util.List<Enrollment> enrollments = enrollmentRepository.findByCourseId(mindmap.getMaterialGeneration().getCourse().getId());
+            for (Enrollment e : enrollments) {
+                notificationService.notify(e.getUser().getId(), "NEW_OFFICIAL_MATERIAL", title, content, linkUrl);
+            }
+        }
+
         return ResponseEntity.ok(java.util.Map.of("message", isOfficial ? "Đã đặt làm học liệu chính thức" : "Đã hủy học liệu chính thức"));
     }
 
@@ -50,6 +66,17 @@ public class InstructorMaterialController {
         }
         deck.setIsOfficial(isOfficial);
         flashcardDeckRepository.save(deck);
+
+        if (isOfficial) {
+            String title = "Học liệu mới: " + (deck.getMaterialGeneration().getTitle() != null ? deck.getMaterialGeneration().getTitle() : "Bộ Flashcard");
+            String content = "Giảng viên vừa công bố một Bộ thẻ Flashcard mới cho khóa học của bạn.";
+            String linkUrl = "/materials/" + deck.getMaterialGeneration().getId();
+            java.util.List<Enrollment> enrollments = enrollmentRepository.findByCourseId(deck.getMaterialGeneration().getCourse().getId());
+            for (Enrollment e : enrollments) {
+                notificationService.notify(e.getUser().getId(), "NEW_OFFICIAL_MATERIAL", title, content, linkUrl);
+            }
+        }
+
         return ResponseEntity.ok(java.util.Map.of("message", isOfficial ? "Đã đặt làm học liệu chính thức" : "Đã hủy học liệu chính thức"));
     }
 
