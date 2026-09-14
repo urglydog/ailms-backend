@@ -46,7 +46,7 @@ public class InstructorMaterialController {
             String title = "Học liệu mới: " + (mindmap.getMaterialGeneration().getTitle() != null ? mindmap.getMaterialGeneration().getTitle() : "Sơ đồ tư duy");
             String content = "Giảng viên vừa công bố một Sơ đồ tư duy mới cho khóa học của bạn.";
             String linkUrl = "/materials/" + mindmap.getMaterialGeneration().getId();
-            java.util.List<Enrollment> enrollments = enrollmentRepository.findByCourse_Id(mindmap.getMaterialGeneration().getCourse().getId());
+            java.util.List<Enrollment> enrollments = enrollmentRepository.findByCourseId(mindmap.getMaterialGeneration().getCourse().getId());
             for (Enrollment e : enrollments) {
                 notificationService.notify(e.getUser().getId(), "NEW_OFFICIAL_MATERIAL", title, content, linkUrl);
             }
@@ -71,7 +71,7 @@ public class InstructorMaterialController {
             String title = "Học liệu mới: " + (deck.getMaterialGeneration().getTitle() != null ? deck.getMaterialGeneration().getTitle() : "Bộ Flashcard");
             String content = "Giảng viên vừa công bố một Bộ thẻ Flashcard mới cho khóa học của bạn.";
             String linkUrl = "/materials/" + deck.getMaterialGeneration().getId();
-            java.util.List<Enrollment> enrollments = enrollmentRepository.findByCourse_Id(deck.getMaterialGeneration().getCourse().getId());
+            java.util.List<Enrollment> enrollments = enrollmentRepository.findByCourseId(deck.getMaterialGeneration().getCourse().getId());
             for (Enrollment e : enrollments) {
                 notificationService.notify(e.getUser().getId(), "NEW_OFFICIAL_MATERIAL", title, content, linkUrl);
             }
