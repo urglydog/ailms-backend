@@ -188,9 +188,9 @@ public class QuizService {
     }
 
     @Transactional
-    public void addPersonalQuestion(String userEmail, Long quizId, com.lms.material.dto.QuizDto.QuestionUpdateReq req) {
-        Quiz quiz = quizRepository.findById(quizId)
-                .orElseThrow(() -> new ResourceNotFoundException("Quiz", quizId));
+    public void addPersonalQuestion(String userEmail, Long materialId, com.lms.material.dto.QuizDto.QuestionUpdateReq req) {
+        Quiz quiz = quizRepository.findByMaterialGeneration_Id(materialId)
+                .orElseThrow(() -> new ResourceNotFoundException("Quiz", materialId));
         if (!quiz.getMaterialGeneration().getUser().getEmail().equals(userEmail)) {
             throw new AccessDeniedDomainException("Ban khong co quyen");
         }
@@ -198,7 +198,7 @@ public class QuizService {
             throw new AccessDeniedDomainException("Khong the them cau hoi vao hoc lieu Official");
         }
 
-        long maxOrder = quizQuestionRepository.findByQuiz_IdOrderByDisplayOrderAsc(quizId)
+        long maxOrder = quizQuestionRepository.findByQuiz_IdOrderByDisplayOrderAsc(quiz.getId())
                 .stream()
                 .mapToLong(QuizQuestion::getDisplayOrder)
                 .max()
