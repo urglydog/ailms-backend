@@ -165,7 +165,7 @@ public class QuizService {
         if (!question.getQuiz().getMaterialGeneration().getUser().getEmail().equals(userEmail)) {
             throw new AccessDeniedDomainException("Ban khong co quyen");
         }
-        if (question.getQuiz().getMaterialGeneration().getIsOfficial() != null && question.getQuiz().getMaterialGeneration().getIsOfficial()) {
+        if (question.getQuiz().getIsOfficial() != null && question.getQuiz().getIsOfficial()) {
             throw new AccessDeniedDomainException("Khong the sua cau hoi cua hoc lieu Official");
         }
         
@@ -194,7 +194,7 @@ public class QuizService {
         if (!quiz.getMaterialGeneration().getUser().getEmail().equals(userEmail)) {
             throw new AccessDeniedDomainException("Ban khong co quyen");
         }
-        if (quiz.getMaterialGeneration().getIsOfficial() != null && quiz.getMaterialGeneration().getIsOfficial()) {
+        if (quiz.getIsOfficial() != null && quiz.getIsOfficial()) {
             throw new AccessDeniedDomainException("Khong the them cau hoi vao hoc lieu Official");
         }
 
@@ -236,7 +236,7 @@ public class QuizService {
         if (!question.getQuiz().getMaterialGeneration().getUser().getEmail().equals(userEmail)) {
             throw new AccessDeniedDomainException("Ban khong co quyen");
         }
-        if (question.getQuiz().getMaterialGeneration().getIsOfficial() != null && question.getQuiz().getMaterialGeneration().getIsOfficial()) {
+        if (question.getQuiz().getIsOfficial() != null && question.getQuiz().getIsOfficial()) {
             throw new AccessDeniedDomainException("Khong the xoa cau hoi cua hoc lieu Official");
         }
         
