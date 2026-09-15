@@ -159,6 +159,100 @@ public class QuizService {
     }
 
     @Transactional
+    public void updatePersonalQuestion(String userEmail, Long questionId, com.lms.material.dto.QuizDto.QuestionUpdateReq req) {
+        QuizQuestion question = quizQuestionRepository.findById(questionId)
+                .orElseThrow(() -> new ResourceNotFoundException("QuizQuestion", questionId));
+        if (!question.getQuiz().getMaterialGeneration().getUser().getEmail().equals(userEmail)) {
+            throw new AccessDeniedDomainException("Ban khong co quyen");
+        }
+        if (question.getQuiz().getMaterialGeneration().getIsOfficial() != null && question.getQuiz().getMaterialGeneration().getIsOfficial()) {
+            throw new AccessDeniedDomainException("Khong the sua cau hoi cua hoc lieu Official");
+        }
+        
+        question.setContent(req.content());
+        question.setIsMultipleChoice(req.isMultipleChoice() != null ? req.isMultipleChoice() : false);
+        quizQuestionRepository.save(question);
+        
+        List<QuizOption> existingOptions = quizOptionRepository.findByQuizQuestion_Id(questionId);
+        quizOptionRepository.deleteAll(existingOptions);
+        
+        if (req.options() != null) {
+            for (var optReq : req.options()) {
+                QuizOption opt = new QuizOption();
+                opt.setQuizQuestion(question);
+                opt.setContent(optReq.content());
+                opt.setIsCorrect(optReq.isCorrect());
+                quizOptionRepository.save(opt);
+            }
+        }
+    }
+
+    @Transactional
+    public void addPersonalQuestion(String userEmail, Long quizId, com.lms.material.dto.QuizDto.QuestionUpdateReq req) {
+        Quiz quiz = quizRepository.findById(quizId)
+                .orElseThrow(() -> new ResourceNotFoundException("Quiz", quizId));
+        if (!quiz.getMaterialGeneration().getUser().getEmail().equals(userEmail)) {
+            throw new AccessDeniedDomainException("Ban khong co quyen");
+        }
+        if (quiz.getMaterialGeneration().getIsOfficial() != null && quiz.getMaterialGeneration().getIsOfficial()) {
+            throw new AccessDeniedDomainException("Khong the them cau hoi vao hoc lieu Official");
+        }
+
+        long maxOrder = quizQuestionRepository.findByQuiz_IdOrderByDisplayOrderAsc(quizId)
+                .stream()
+                .mapToLong(QuizQuestion::getDisplayOrder)
+                .max()
+                .orElse(0);
+
+        QuizQuestion question = new QuizQuestion();
+        question.setQuiz(quiz);
+        question.setContent(req.content());
+        question.setIsMultipleChoice(req.isMultipleChoice() != null ? req.isMultipleChoice() : false);
+        question.setDisplayOrder((int) maxOrder + 1);
+        quizQuestionRepository.save(question);
+
+        if (req.options() != null) {
+            for (var optReq : req.options()) {
+                QuizOption opt = new QuizOption();
+                opt.setQuizQuestion(question);
+                opt.setContent(optReq.content());
+                opt.setIsCorrect(optReq.isCorrect());
+                quizOptionRepository.save(opt);
+            }
+        }
+
+        if (quiz.getQuestionCount() != null) {
+            quiz.setQuestionCount(quiz.getQuestionCount() + 1);
+        } else {
+            quiz.setQuestionCount(1);
+        }
+        quizRepository.save(quiz);
+    }
+
+    @Transactional
+    public void deletePersonalQuestion(String userEmail, Long questionId) {
+        QuizQuestion question = quizQuestionRepository.findById(questionId)
+                .orElseThrow(() -> new ResourceNotFoundException("QuizQuestion", questionId));
+        if (!question.getQuiz().getMaterialGeneration().getUser().getEmail().equals(userEmail)) {
+            throw new AccessDeniedDomainException("Ban khong co quyen");
+        }
+        if (question.getQuiz().getMaterialGeneration().getIsOfficial() != null && question.getQuiz().getMaterialGeneration().getIsOfficial()) {
+            throw new AccessDeniedDomainException("Khong the xoa cau hoi cua hoc lieu Official");
+        }
+        
+        Quiz quiz = question.getQuiz();
+        
+        List<QuizOption> options = quizOptionRepository.findByQuizQuestion_Id(questionId);
+        quizOptionRepository.deleteAll(options);
+        quizQuestionRepository.delete(question);
+        
+        if (quiz.getQuestionCount() != null && quiz.getQuestionCount() > 0) {
+            quiz.setQuestionCount(quiz.getQuestionCount() - 1);
+            quizRepository.save(quiz);
+        }
+    }
+
+    @Transactional
     public QuizAttemptDto.StartRes startAttempt(String studentEmail, Long quizId) {
         User student = userRepository.findByEmail(studentEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("User", studentEmail));

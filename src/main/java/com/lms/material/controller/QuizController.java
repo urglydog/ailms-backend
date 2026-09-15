@@ -63,6 +63,35 @@ public class QuizController {
         quizService.deleteQuestion(principal.getName(), questionId);
         return ResponseEntity.ok(Map.of("message", "Xóa câu hỏi thành công"));
     }
+    @PutMapping("/quizzes/questions/{questionId}")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
+    public ResponseEntity<Map<String, String>> updatePersonalQuestion(
+            Principal principal,
+            @PathVariable Long questionId,
+            @RequestBody com.lms.material.dto.QuizDto.QuestionUpdateReq req) {
+        quizService.updatePersonalQuestion(principal.getName(), questionId, req);
+        return ResponseEntity.ok(Map.of("message", "Cập nhật câu hỏi thành công"));
+    }
+
+    @PostMapping("/quizzes/{quizId}/questions")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
+    public ResponseEntity<Map<String, String>> addPersonalQuestion(
+            Principal principal,
+            @PathVariable Long quizId,
+            @RequestBody com.lms.material.dto.QuizDto.QuestionUpdateReq req) {
+        quizService.addPersonalQuestion(principal.getName(), quizId, req);
+        return ResponseEntity.ok(Map.of("message", "Thêm câu hỏi thành công"));
+    }
+
+    @DeleteMapping("/quizzes/questions/{questionId}")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
+    public ResponseEntity<Map<String, String>> deletePersonalQuestion(
+            Principal principal,
+            @PathVariable Long questionId) {
+        quizService.deletePersonalQuestion(principal.getName(), questionId);
+        return ResponseEntity.ok(Map.of("message", "Xóa câu hỏi thành công"));
+    }
+
 
     @GetMapping("/quizzes/{quizId}/start-attempt")
     @PreAuthorize("hasRole('STUDENT')")
