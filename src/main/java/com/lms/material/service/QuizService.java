@@ -368,6 +368,8 @@ public class QuizService {
             if (answer.getSelectedOptionIds() != null && !answer.getSelectedOptionIds().isEmpty()) {
                 selectedIds = java.util.Arrays.stream(answer.getSelectedOptionIds().split(","))
                         .map(Long::parseLong).toList();
+            } else if (answer.getSelectedOption() != null) {
+                selectedIds.add(answer.getSelectedOption().getId());
             }
                     
             List<QuizAttemptDto.OptionDto> options = quizOptionRepository.findByQuizQuestion_Id(answer.getQuizQuestion().getId())
