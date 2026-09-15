@@ -59,9 +59,9 @@
 
 ---
 
-## TASK 3: Tối Ưu Luồng Làm Bài Quiz Official (Theo chuẩn mô tả)
+## TASK 3: Tối Ưu Luồng Làm Bài Quiz Official [PASSED]
 
-### 3A & 3B. Layout Sidebar, Phân Trang & Ma Trận 2 Chiều Cố Định
+### 3A & 3B. Layout Sidebar, Phân Trang & Ma Trận 2 Chiều Cố Định [PASSED]
 - **Layout Cố Định (Sticky):** Các thành phần bên cột phải (đồng hồ đếm ngược, camera giám sát, nút nộp bài, ma trận 2 chiều) **tuyệt đối không bị xê dịch** khi người dùng cuộn màn hình để làm các câu hỏi khác. 
 - **Vị trí Ma Trận:** Ma trận 2 chiều phải nằm **BÊN DƯỚI** nút nộp bài, hoặc ở vị trí `absolute` góc phải phía dưới cùng (nơi còn trống).
 - **Phân trang:** Hiển thị tối đa 5 câu hỏi/trang, sử dụng nút mũi tên `< >` để chuyển đổi qua lại giữa các trang.
@@ -69,11 +69,11 @@
   - Ô vuông chia tỉ lệ: 70% phía trên hiển thị số thứ tự câu hỏi, 30% phía dưới hiển thị dấu tích nền xanh (đã làm) và dấu `x` nền đỏ (chưa làm).
   - Khi nhấn vào câu nào trên ma trận, màn hình sẽ tự động forward về đúng câu đó (bất kể đang ở trang nào).
 
-### 3C. Tích hợp Ma Trận vào Lịch Sử Làm Bài
+### 3C. Tích hợp Ma Trận vào Lịch Sử Làm Bài [PASSED]
 - Màn hình lịch sử / xem chi tiết bài làm hiện đang dồn toàn bộ đáp án vào một trang cuộn dọc rất dài (có thể lên tới hàng trăm câu).
 - **Yêu cầu:** Bắt buộc bổ sung Ma Trận 2 chiều vào màn hình Lịch sử này để học viên có thể click vào ma trận và nhảy ngay đến câu hỏi cần xem, thay vì phải cuộn dọc liên tục.
 
-### 3D. Quy Trình Nộp Bài 2 Chốt Chặn
+### 3D. Quy Trình Nộp Bài 2 Chốt Chặn [PASSED]
 - **Chốt 1 (Nút Nộp bài ngoài bài thi):** Nếu phát hiện có câu hỏi chưa làm, hệ thống KHÔNG cần đếm chính xác số câu, mà chỉ hiện thông báo nhắc nhở chung: *"Vui lòng hoàn thành toàn bộ câu hỏi trước khi nộp"* (Mục đích: Gọi nhớ người dùng tự nhìn vào ma trận để xem câu nào còn thiếu).
 - **Chốt 2 (Màn hình Review Confirm):**
   - Hiển thị danh sách TỪNG CÂU HỎI dọc từ trên xuống dưới.
@@ -81,7 +81,7 @@
   - KHÔNG sử dụng ma trận hay dạng rút gọn ở bước này.
   - Người dùng **bắt buộc phải cuộn xuống tận cùng** của danh sách này mới thấy được 2 nút: **[Xác nhận nộp bài]** và **[Quay lại bài thi]**.
 
-### 3E. Câu Hỏi Chọn Nhiều Đáp Án (Multi-choice)
+### 3E. Câu Hỏi Chọn Nhiều Đáp Án (Multi-choice) [PASSED]
 - **Giao diện:** Chuyển từ thẻ radio (chỉ chọn 1) sang dạng ô **Checkbox** để học viên có thể check chọn nhiều đáp án.
 - **Nhắc nhở:** Tự động bổ sung ghi chú dòng chữ `(Chọn nhiều đáp án)` dưới tiêu đề của các câu hỏi thuộc loại này.
 - **Logic Tính Điểm Mới:** Đảm bảo đúng chuẩn: Sinh viên phải chọn **ĐÚNG VÀ ĐỦ TẤT CẢ** các đáp án đúng được set sẵn mới được tính điểm câu đó. Chọn thiếu hoặc dư đáp án sai đều bị 0 điểm.
@@ -131,12 +131,12 @@
 | # | Task | Lý do | Ước lượng |
 |---|---|---|---|
 | 1 | **2F — Fix UX giảng viên** | Đã hoàn thành (PASSED) | 0h |
-| 2 | **3D — 2 chốt chặn nộp bài** | Academic integrity | 3-4h |
+| 2 | **3D — 2 chốt chặn nộp bài** | Đã hoàn thành (PASSED) | 0h |
 | 3 | **2A+2B — Flashcard xóa + Export + SRS Official** | Hoàn thiện trải nghiệm học | 4-5h |
-| 4 | **3B+3C — Ma trận 2 chiều + History** | UX bài thi nhiều câu | 3-4h |
+| 4 | **3B+3C — Ma trận 2 chiều + History** | Đã hoàn thành (PASSED) | 0h |
 | 5 | **2D — Mindmap readOnly** | Đã hoàn thành (PASSED) | 0h |
 | 6 | **2G — Curriculum Structure (Mới)** | Task kiến trúc nặng, phân tách 2 loại Quiz | 8-10h |
-| 7 | **3E — Multi-choice + tính điểm mới** | Schema lớn, cần plan kỹ | 8-10h |
+| 7 | **3E — Multi-choice + tính điểm mới** | Đã hoàn thành (PASSED) | 0h |
 | 8 | **11B — Instructor Onboarding (Mới)** | Lọc spam, hồ sơ chuyên nghiệp | 3-4h |
 | 9 | **11A — Auto rate-limit AI + Dashboard** | Bỏ thủ công, tự động hóa | 8-10h |
 | 10| **11C — 2FA + Quên mật khẩu** | Nền tảng bảo mật | 6-8h |
