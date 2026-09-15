@@ -45,6 +45,16 @@ public class QuizController {
         return ResponseEntity.ok(Map.of("message", "Cập nhật câu hỏi thành công"));
     }
 
+    @PostMapping("/instructor/quizzes/{quizId}/questions")
+    @PreAuthorize("hasRole('INSTRUCTOR')")
+    public ResponseEntity<Map<String, String>> addQuestion(
+            Principal principal,
+            @PathVariable Long quizId,
+            @RequestBody com.lms.material.dto.QuizDto.QuestionUpdateReq req) {
+        quizService.addQuestion(principal.getName(), quizId, req);
+        return ResponseEntity.ok(Map.of("message", "Thêm câu hỏi thành công"));
+    }
+
     @DeleteMapping("/instructor/quizzes/questions/{questionId}")
     @PreAuthorize("hasRole('INSTRUCTOR')")
     public ResponseEntity<Map<String, String>> deleteQuestion(
