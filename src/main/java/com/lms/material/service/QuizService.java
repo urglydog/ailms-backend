@@ -79,6 +79,7 @@ public class QuizService {
         }
         
         question.setContent(req.content());
+        question.setIsMultipleChoice(req.isMultipleChoice() != null ? req.isMultipleChoice() : false);
         quizQuestionRepository.save(question);
         
         List<QuizOption> existingOptions = quizOptionRepository.findByQuizQuestion_Id(questionId);
@@ -114,6 +115,7 @@ public class QuizService {
         QuizQuestion question = new QuizQuestion();
         question.setQuiz(quiz);
         question.setContent(req.content());
+        question.setIsMultipleChoice(req.isMultipleChoice() != null ? req.isMultipleChoice() : false);
         question.setDisplayOrder((int) maxOrder + 1);
         quizQuestionRepository.save(question);
 
