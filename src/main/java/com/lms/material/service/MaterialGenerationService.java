@@ -152,6 +152,8 @@ public class MaterialGenerationService {
         boolean isOfficial = false;
         
         String mermaidCode = null;
+        Long lessonId = generation.getLesson() != null ? generation.getLesson().getId() : null;
+        String quizType = "OFFICIAL_EXAM";
         java.util.List<com.lms.material.dto.MaterialDetailRes.FlashcardDto> flashcards = null;
         java.util.List<com.lms.material.dto.MaterialDetailRes.QuizQuestionDto> quizQuestions = null;
         
@@ -208,6 +210,7 @@ public class MaterialGenerationService {
             if (quizOpt.isPresent()) {
                 com.lms.material.entity.Quiz quiz = quizOpt.get();
                 isOfficial = quiz.getIsOfficial() != null ? quiz.getIsOfficial() : false;
+                quizType = quiz.getQuizType() != null ? quiz.getQuizType().name() : "OFFICIAL_EXAM";
                 
                 quizQuestions = quizQuestionRepository.findByQuiz_IdOrderByDisplayOrderAsc(quiz.getId())
                         .stream()
@@ -236,9 +239,11 @@ public class MaterialGenerationService {
                 .id(generation.getId())
                 .materialType(generation.getMaterialType())
                 .language(generation.getLanguage())
-                .title(generation.getTitle())
+                .title(generation.getTitle() != null ? generation.getTitle() : "")
                 .versionNo(generation.getVersionNo())
                 .status(generation.getStatus())
+                .lessonId(lessonId)
+                .quizType(quizType)
                 .createdAt(generation.getCreatedAt())
                 .mermaidCode(mermaidCode)
                 .flashcards(flashcards)

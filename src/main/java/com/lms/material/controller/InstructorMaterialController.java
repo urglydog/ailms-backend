@@ -33,6 +33,27 @@ public class InstructorMaterialController {
     private final EnrollmentRepository enrollmentRepository;
     private final CourseRepository courseRepository;
 
+    @PutMapping("/{id}/attach-lesson")
+    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @Transactional
+    public ResponseEntity<java.util.Map<String, String>> attachToLesson(Principal principal, @PathVariable Long id, @RequestBody java.util.Map<String, Long> payload) {
+        com.lms.material.entity.MaterialGeneration gen = materialGenerationRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("MaterialGeneration", id));
+        if (!gen.getCourse().getInstructor().getEmail().equals(principal.getName())) {
+            throw new AccessDeniedDomainException("Ban khong co quyen");
+        }
+        Long lessonId = payload.get("lessonId");
+        if (lessonId == null) {
+            gen.setLesson(null);
+        } else {
+            com.lms.catalog.entity.Lesson lesson = new com.lms.catalog.entity.Lesson();
+            lesson.setId(lessonId);
+            gen.setLesson(lesson);
+        }
+        materialGenerationRepository.save(gen);
+        return ResponseEntity.ok(java.util.Map.of("message", "Đã cập nhật bài học đính kèm"));
+    }
+
     @PutMapping("/mindmaps/{id}/set-official")
     @PreAuthorize("hasRole('INSTRUCTOR')")
     @Transactional
@@ -112,6 +133,9 @@ public class InstructorMaterialController {
         generation.setScopeType(com.lms.common.enums.ScopeType.WHOLE_COURSE);
         generation.setVersionNo(nextVersion);
         generation.setStatus(com.lms.common.enums.GenStatus.COMPLETED); // Completed immediately since manual
+
+        String quizTypeStr = payload.get("quizType");
+        
         materialGenerationRepository.save(generation);
 
         Long materialId = null;
@@ -121,6 +145,11 @@ public class InstructorMaterialController {
             quiz.setMaterialGeneration(generation);
             quiz.setQuestionCount(0);
             quiz.setIsOfficial(false);
+            if (quizTypeStr != null && quizTypeStr.equals("LECTURE_QUIZ")) {
+                quiz.setQuizType(com.lms.common.enums.QuizType.LECTURE_QUIZ);
+            } else {
+                quiz.setQuizType(com.lms.common.enums.QuizType.OFFICIAL_EXAM);
+            }
             quiz = quizRepository.save(quiz);
             materialId = quiz.getId();
         } else if (materialType == com.lms.common.enums.MaterialType.FLASHCARD) {
@@ -157,6 +186,8 @@ public class InstructorMaterialController {
             
             boolean isOfficial = false;
             Long materialId = null;
+            Long lessonId = gen.getLesson() != null ? gen.getLesson().getId() : null;
+            String quizType = "OFFICIAL_EXAM";
             Integer questionCount = 0;
             Integer randomPickCount = null;
             Boolean allowReview = true;
@@ -185,6 +216,7 @@ public class InstructorMaterialController {
                     if (q != null) {
                         materialId = q.getId();
                         isOfficial = q.getIsOfficial();
+                        quizType = q.getQuizType() != null ? q.getQuizType().name() : "OFFICIAL_EXAM";
                         questionCount = q.getQuestionCount();
                         randomPickCount = q.getRandomPickCount();
                         allowReview = q.getAllowReview();
@@ -215,6 +247,8 @@ public class InstructorMaterialController {
                         java.util.Map.entry("status", gen.getStatus().name()),
                         java.util.Map.entry("isOfficial", isOfficial),
                         java.util.Map.entry("versionNo", gen.getVersionNo()),
+                        java.util.Map.entry("lessonId", lessonId != null ? lessonId : ""),
+                        java.util.Map.entry("quizType", quizType),
                         java.util.Map.entry("materialId", materialId != null ? materialId : ""),
                         java.util.Map.entry("questionCount", questionCount != null ? questionCount : 0),
                         java.util.Map.entry("randomPickCount", randomPickCount != null ? randomPickCount : ""),

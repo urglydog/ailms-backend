@@ -14,6 +14,8 @@ public record MaterialDetailRes(
         String title,
         Integer versionNo,
         GenStatus status,
+        Long lessonId,
+        String quizType,
         LocalDateTime createdAt,
         String mermaidCode, // Only populated for MINDMAP
         List<FlashcardDto> flashcards, // Only populated for FLASHCARD

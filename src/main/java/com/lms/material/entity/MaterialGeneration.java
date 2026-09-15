@@ -3,6 +3,7 @@ package com.lms.material.entity;
 import com.lms.common.entity.BaseEntity;
 import com.lms.auth.entity.User;
 import com.lms.catalog.entity.Course;
+import com.lms.catalog.entity.Lesson;
 import com.lms.common.enums.DifficultyLevel;
 import com.lms.common.enums.GenStatus;
 import com.lms.common.enums.MaterialType;
@@ -84,10 +85,14 @@ public class MaterialGeneration extends BaseEntity {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    /** Hoc lieu o CAP KHOA HOC, khong phai cap bai hoc (BR-MAT-01). */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "course_id", nullable = false)
     private Course course;
+
+    /** Nếu khác null, học liệu này được đính kèm vào tab Resource của Bài học này. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "lesson_id")
+    private Lesson lesson;
 
     /** BR-MAT-01: Cho phép người tạo hoặc Giảng viên sở hữu khóa học được xem/sử dụng học liệu. */
     public boolean isReusableBy(User other) {
