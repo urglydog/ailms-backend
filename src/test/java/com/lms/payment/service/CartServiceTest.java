@@ -7,6 +7,8 @@ import com.lms.catalog.repository.CourseRepository;
 import com.lms.common.enums.CourseStatus;
 import com.lms.catalog.repository.LessonRepository;
 import com.lms.common.exception.BusinessRuleViolationException;
+import com.lms.coupon.dto.CouponDto.PriceRes;
+import com.lms.coupon.service.CouponService;
 import com.lms.enrollment.repository.CourseReviewRepository;
 import com.lms.enrollment.repository.EnrollmentRepository;
 import com.lms.payment.dto.CartDto.ItemRes;
@@ -47,6 +49,7 @@ class CartServiceTest {
     @Mock private EnrollmentRepository enrollmentRepository;
     @Mock private LessonRepository lessonRepository;
     @Mock private CourseReviewRepository courseReviewRepository;
+    @Mock private CouponService couponService;
 
     @InjectMocks
     private CartService cartService;
@@ -80,6 +83,12 @@ class CartServiceTest {
             CartItem item = inv.getArgument(0);
             item.setId(500L);
             return item;
+        });
+        // Coupon (15/09/2026, mở rộng) — mặc định KHÔNG có coupon nào áp dụng, giữ đúng hành
+        // vi các test hiện có (giá hiển thị = giá gốc); có test riêng cho coupon ở CouponServiceTest.
+        lenient().when(couponService.getDisplayPrice(any(Course.class))).thenAnswer(inv -> {
+            Course c = inv.getArgument(0);
+            return new PriceRes(c.getPrice(), c.getPrice(), null, null, true);
         });
     }
 

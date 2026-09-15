@@ -4,6 +4,7 @@ import com.lms.common.entity.BaseEntity;
 import com.lms.auth.entity.User;
 import com.lms.catalog.entity.Course;
 import com.lms.common.enums.PaymentStatus;
+import com.lms.coupon.entity.Coupon;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import jakarta.persistence.*;
@@ -42,9 +43,23 @@ public class Payment extends BaseEntity {
     @Column(name = "order_group_ref", length = 50)
     private String orderGroupRef;
 
-    /** Lấy từ giá server, KHÔNG nhận từ client (BR-PAY-02). */
+    /** Lấy từ giá server, KHÔNG nhận từ client (BR-PAY-02). Là giá THỰC THU, đã trừ giảm giá
+     * nếu có coupon áp dụng (15/09/2026, mở rộng) — BR-PAY-05 (30/70) tính trên field này. */
     @Column(name = "amount", nullable = false, precision = 12, scale = 2)
     private BigDecimal amount;
+
+    /** Giá khóa học TRƯỚC khi trừ coupon — NULL nếu không áp coupon nào (15/09/2026, mở rộng). */
+    @Column(name = "original_amount", precision = 12, scale = 2)
+    private BigDecimal originalAmount;
+
+    /** = originalAmount - amount, mặc định 0 nếu không có coupon (15/09/2026, mở rộng). */
+    @Column(name = "discount_amount", nullable = false, precision = 12, scale = 2)
+    private BigDecimal discountAmount = BigDecimal.ZERO;
+
+    /** Coupon đã áp dụng cho giao dịch này — NULL nếu không dùng coupon (15/09/2026, mở rộng). */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "coupon_id")
+    private Coupon coupon;
 
     /** = amount x 30%, chốt cứng lúc PAID (BR-PAY-05). */
     @Column(name = "platform_fee", nullable = false, precision = 12, scale = 2)

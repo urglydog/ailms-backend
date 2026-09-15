@@ -8,6 +8,8 @@ import com.lms.catalog.repository.LessonRepository;
 import com.lms.common.enums.CourseStatus;
 import com.lms.common.exception.BusinessRuleViolationException;
 import com.lms.common.exception.ResourceNotFoundException;
+import com.lms.coupon.dto.CouponDto.PriceRes;
+import com.lms.coupon.service.CouponService;
 import com.lms.enrollment.repository.CourseReviewRepository;
 import com.lms.enrollment.repository.EnrollmentRepository;
 import com.lms.payment.dto.CartDto;
@@ -41,6 +43,7 @@ public class CartService {
     private final EnrollmentRepository enrollmentRepository;
     private final LessonRepository lessonRepository;
     private final CourseReviewRepository courseReviewRepository;
+    private final CouponService couponService;
 
     @Transactional(readOnly = true)
     public List<CartDto.ItemRes> getMyCart(String email) {
@@ -94,9 +97,11 @@ public class CartService {
         long reviewCount = courseReviewRepository.countByCourse_IdAndIsHiddenFalse(c.getId());
         int totalLessons = (int) lessonRepository.countByChapter_CourseId(c.getId());
         int totalDurationSec = lessonRepository.sumDurationSecByCourseId(c.getId());
+        PriceRes price = couponService.getDisplayPrice(c);
         return new CartDto.ItemRes(
                 c.getId(), c.getTitle(), c.getSlug(), c.getThumbnailUrl(),
                 c.getInstructor().getFullName(), c.getPrice(), item.getCreatedAt(),
-                c.getAvgRating(), reviewCount, totalDurationSec, totalLessons, c.getLevel());
+                c.getAvgRating(), reviewCount, totalDurationSec, totalLessons, c.getLevel(),
+                price.finalPrice(), price.discountPercent());
     }
 }

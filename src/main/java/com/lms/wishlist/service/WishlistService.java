@@ -7,6 +7,8 @@ import com.lms.catalog.repository.CourseRepository;
 import com.lms.common.enums.CourseStatus;
 import com.lms.common.exception.BusinessRuleViolationException;
 import com.lms.common.exception.ResourceNotFoundException;
+import com.lms.coupon.dto.CouponDto.PriceRes;
+import com.lms.coupon.service.CouponService;
 import com.lms.enrollment.repository.CourseReviewRepository;
 import com.lms.enrollment.repository.EnrollmentRepository;
 import com.lms.wishlist.dto.WishlistDto;
@@ -41,6 +43,7 @@ public class WishlistService {
     private final CourseRepository courseRepository;
     private final EnrollmentRepository enrollmentRepository;
     private final CourseReviewRepository courseReviewRepository;
+    private final CouponService couponService;
 
     @Transactional(readOnly = true)
     public List<WishlistDto.ItemRes> getMyWishlist(String email) {
@@ -89,9 +92,13 @@ public class WishlistService {
     private WishlistDto.ItemRes toRes(WishlistItem item) {
         Course c = item.getCourse();
         long reviewCount = courseReviewRepository.countByCourse_IdAndIsHiddenFalse(c.getId());
+        PriceRes price = Boolean.TRUE.equals(c.getIsFree())
+                ? new PriceRes(c.getPrice(), c.getPrice(), null, null, true)
+                : couponService.getDisplayPrice(c);
         return new WishlistDto.ItemRes(
                 c.getId(), c.getTitle(), c.getSlug(), c.getThumbnailUrl(),
                 c.getInstructor().getFullName(), c.getPrice(), c.getIsFree(),
-                c.getAvgRating(), reviewCount, item.getCreatedAt());
+                c.getAvgRating(), reviewCount, item.getCreatedAt(),
+                price.finalPrice(), price.discountPercent());
     }
 }

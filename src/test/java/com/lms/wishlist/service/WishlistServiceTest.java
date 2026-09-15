@@ -6,6 +6,8 @@ import com.lms.catalog.entity.Course;
 import com.lms.catalog.repository.CourseRepository;
 import com.lms.common.enums.CourseStatus;
 import com.lms.common.exception.BusinessRuleViolationException;
+import com.lms.coupon.dto.CouponDto.PriceRes;
+import com.lms.coupon.service.CouponService;
 import com.lms.enrollment.repository.CourseReviewRepository;
 import com.lms.enrollment.repository.EnrollmentRepository;
 import com.lms.wishlist.dto.WishlistDto.ItemRes;
@@ -46,6 +48,7 @@ class WishlistServiceTest {
     @Mock private CourseRepository courseRepository;
     @Mock private EnrollmentRepository enrollmentRepository;
     @Mock private CourseReviewRepository courseReviewRepository;
+    @Mock private CouponService couponService;
 
     @InjectMocks
     private WishlistService wishlistService;
@@ -79,6 +82,12 @@ class WishlistServiceTest {
             WishlistItem item = inv.getArgument(0);
             item.setId(500L);
             return item;
+        });
+        // Coupon (15/09/2026, mở rộng) — mặc định KHÔNG có coupon áp dụng cho khóa TRẢ PHÍ
+        // (khóa miễn phí không gọi tới hàm này, xem nhánh isFree trong WishlistService.toRes).
+        lenient().when(couponService.getDisplayPrice(any(Course.class))).thenAnswer(inv -> {
+            Course c = inv.getArgument(0);
+            return new PriceRes(c.getPrice(), c.getPrice(), null, null, true);
         });
     }
 

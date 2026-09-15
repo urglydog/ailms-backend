@@ -8,6 +8,7 @@ import com.lms.common.enums.CourseStatus;
 import com.lms.common.enums.PaymentStatus;
 import com.lms.common.exception.BusinessRuleViolationException;
 import com.lms.common.exception.ResourceNotFoundException;
+import com.lms.coupon.service.CouponService;
 import com.lms.enrollment.repository.EnrollmentRepository;
 import com.lms.enrollment.service.EnrollmentService;
 import com.lms.payment.dto.PaymentDto.CreateBatchReq;
@@ -56,6 +57,7 @@ class PaymentServiceTest {
     @Mock private EnrollmentService enrollmentService;
     @Mock private PayOS payOS;
     @Mock private PaymentRequestsService paymentRequestsService;
+    @Mock private CouponService couponService;
 
     @InjectMocks
     private PaymentService paymentService;
@@ -90,6 +92,12 @@ class PaymentServiceTest {
         lenient().when(enrollmentRepository.existsByUser_IdAndCourse_Id(1L, 10L)).thenReturn(false);
         lenient().when(enrollmentRepository.existsByUser_IdAndCourse_Id(1L, 20L)).thenReturn(false);
         lenient().when(paymentRepository.save(any(Payment.class))).thenAnswer(inv -> inv.getArgument(0));
+        // Coupon (15/09/2026, mở rộng) — mặc định KHÔNG có coupon nào áp dụng, giữ đúng amount
+        // = giá gốc cho các test hiện có; có test riêng cho coupon ở CouponServiceTest.
+        lenient().when(couponService.resolveBestPrice(any(Course.class), any(), any())).thenAnswer(inv -> {
+            Course c = inv.getArgument(0);
+            return new CouponService.PricingResult(c.getPrice(), c.getPrice(), null, true);
+        });
 
         ReflectionTestUtils.setField(paymentService, "vnpTmnCode", "TEST_TMN");
         ReflectionTestUtils.setField(paymentService, "vnpHashSecret", "test-secret");
@@ -121,7 +129,7 @@ class PaymentServiceTest {
                         .build());
 
         var result = paymentService.createBatchPayment(
-                EMAIL, new CreateBatchReq(List.of(10L, 20L), "PAYOS", "Nguyen Van A", "0900000000"));
+                EMAIL, new CreateBatchReq(List.of(10L, 20L), "PAYOS", "Nguyen Van A", "0900000000", null));
 
         assertThat(result.paymentUrl()).isEqualTo("https://payos.example/checkout/abc");
 
@@ -142,7 +150,7 @@ class PaymentServiceTest {
         courseB.setIsFree(true);
 
         assertThatThrownBy(() -> paymentService.createBatchPayment(
-                EMAIL, new CreateBatchReq(List.of(10L, 20L), "PAYOS", null, null)))
+                EMAIL, new CreateBatchReq(List.of(10L, 20L), "PAYOS", null, null, null)))
                 .isInstanceOf(BusinessRuleViolationException.class);
 
         verify(paymentRepository, never()).save(any());
@@ -153,7 +161,7 @@ class PaymentServiceTest {
         when(enrollmentRepository.existsByUser_IdAndCourse_Id(1L, 20L)).thenReturn(true);
 
         assertThatThrownBy(() -> paymentService.createBatchPayment(
-                EMAIL, new CreateBatchReq(List.of(10L, 20L), "PAYOS", null, null)))
+                EMAIL, new CreateBatchReq(List.of(10L, 20L), "PAYOS", null, null, null)))
                 .isInstanceOf(BusinessRuleViolationException.class);
 
         verify(paymentRepository, never()).save(any());
@@ -161,14 +169,14 @@ class PaymentServiceTest {
 
     @Test
     void createBatchPayment_emptyCourseList_throws() {
-        assertThatThrownBy(() -> paymentService.createBatchPayment(EMAIL, new CreateBatchReq(List.of(), "PAYOS", null, null)))
+        assertThatThrownBy(() -> paymentService.createBatchPayment(EMAIL, new CreateBatchReq(List.of(), "PAYOS", null, null, null)))
                 .isInstanceOf(BusinessRuleViolationException.class);
     }
 
     @Test
     void createBatchPayment_vnpay_returnsBuiltUrlForTotalAmount() {
         var result = paymentService.createBatchPayment(
-                EMAIL, new CreateBatchReq(List.of(10L, 20L), "VNPAY", null, null));
+                EMAIL, new CreateBatchReq(List.of(10L, 20L), "VNPAY", null, null, null));
 
         assertThat(result.paymentUrl()).startsWith("https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?");
         assertThat(result.paymentUrl()).contains("vnp_Amount=50000000"); // (200000+300000) * 100

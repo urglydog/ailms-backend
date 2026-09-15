@@ -22,7 +22,10 @@ public class CartDto {
             Long reviewCount,
             Integer totalDurationSec,
             Integer totalLessons,
-            String level
+            String level,
+            /** UC57 mở rộng (15/09/2026) — giá sau coupon autoApply tốt nhất; bằng {@code price} nếu không có coupon áp dụng được. */
+            BigDecimal finalPrice,
+            Integer discountPercent
     ) {}
 
     public record AddReq(@NotNull Long courseId) {}

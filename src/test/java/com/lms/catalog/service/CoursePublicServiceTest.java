@@ -12,6 +12,7 @@ import com.lms.catalog.repository.LessonRepository;
 import com.lms.common.enums.CourseStatus;
 import com.lms.common.exception.AccessDeniedDomainException;
 import com.lms.common.exception.ResourceNotFoundException;
+import com.lms.coupon.service.CouponService;
 import com.lms.dubbing.repository.AudioTrackRepository;
 import com.lms.enrollment.repository.CourseReviewRepository;
 import com.lms.enrollment.repository.EnrollmentRepository;
@@ -46,6 +47,7 @@ class CoursePublicServiceTest {
     @Mock private CourseReviewRepository courseReviewRepository;
     @Mock private AudioTrackRepository audioTrackRepository;
     @Mock private EnrollmentRepository enrollmentRepository;
+    @Mock private CouponService couponService;
 
     @InjectMocks
     private CoursePublicService coursePublicService;

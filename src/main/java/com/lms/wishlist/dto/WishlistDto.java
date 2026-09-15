@@ -19,7 +19,10 @@ public class WishlistDto {
             /** Cache sẵn trên {@code Course} (không tính lại mỗi lần) — hiển thị sao trên thẻ card kiểu Udemy. */
             BigDecimal avgRating,
             Long reviewCount,
-            LocalDateTime addedAt
+            LocalDateTime addedAt,
+            /** UC57 mở rộng (15/09/2026) — giá sau coupon autoApply tốt nhất; bằng {@code price} nếu không có coupon áp dụng được (luôn = price khi isFree). */
+            BigDecimal finalPrice,
+            Integer discountPercent
     ) {}
 
     public record AddReq(@NotNull Long courseId) {}
