@@ -96,6 +96,46 @@ public class QuizService {
     }
 
     @Transactional
+    public void addQuestion(String instructorEmail, Long quizId, com.lms.material.dto.QuizDto.QuestionUpdateReq req) {
+        Quiz quiz = quizRepository.findById(quizId)
+                .orElseThrow(() -> new ResourceNotFoundException("Quiz", quizId));
+        Course course = quiz.getMaterialGeneration().getCourse();
+        if (!course.getInstructor().getEmail().equals(instructorEmail)) {
+            throw new AccessDeniedDomainException("Ban khong co quyen");
+        }
+
+        // Determine the next displayOrder
+        long maxOrder = quizQuestionRepository.findByQuiz_IdOrderByDisplayOrderAsc(quizId)
+                .stream()
+                .mapToLong(QuizQuestion::getDisplayOrder)
+                .max()
+                .orElse(0);
+
+        QuizQuestion question = new QuizQuestion();
+        question.setQuiz(quiz);
+        question.setContent(req.content());
+        question.setDisplayOrder((int) maxOrder + 1);
+        quizQuestionRepository.save(question);
+
+        if (req.options() != null) {
+            for (var optReq : req.options()) {
+                QuizOption opt = new QuizOption();
+                opt.setQuizQuestion(question);
+                opt.setContent(optReq.content());
+                opt.setIsCorrect(optReq.isCorrect());
+                quizOptionRepository.save(opt);
+            }
+        }
+
+        if (quiz.getQuestionCount() != null) {
+            quiz.setQuestionCount(quiz.getQuestionCount() + 1);
+        } else {
+            quiz.setQuestionCount(1);
+        }
+        quizRepository.save(quiz);
+    }
+
+    @Transactional
     public void deleteQuestion(String instructorEmail, Long questionId) {
         QuizQuestion question = quizQuestionRepository.findById(questionId)
                 .orElseThrow(() -> new ResourceNotFoundException("QuizQuestion", questionId));

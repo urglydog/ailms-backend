@@ -9,6 +9,8 @@ import com.lms.material.repository.MindmapRepository;
 import com.lms.common.service.NotificationService;
 import com.lms.enrollment.repository.EnrollmentRepository;
 import com.lms.enrollment.entity.Enrollment;
+import com.lms.catalog.entity.Course;
+import com.lms.catalog.repository.CourseRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -29,6 +31,7 @@ public class InstructorMaterialController {
     private final com.lms.material.repository.QuizAttemptRepository quizAttemptRepository;
     private final NotificationService notificationService;
     private final EnrollmentRepository enrollmentRepository;
+    private final CourseRepository courseRepository;
 
     @PutMapping("/mindmaps/{id}/set-official")
     @PreAuthorize("hasRole('INSTRUCTOR')")
@@ -78,6 +81,66 @@ public class InstructorMaterialController {
         }
 
         return ResponseEntity.ok(java.util.Map.of("message", isOfficial ? "Đã đặt làm học liệu chính thức" : "Đã hủy học liệu chính thức"));
+    }
+
+    @PostMapping("/courses/{courseId}/manual")
+    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @Transactional
+    public ResponseEntity<java.util.Map<String, Object>> createManualMaterial(Principal principal, @PathVariable Long courseId, @RequestBody java.util.Map<String, String> payload) {
+        Course course = courseRepository.findById(courseId)
+                .orElseThrow(() -> new ResourceNotFoundException("Course", courseId));
+        if (!course.getInstructor().getEmail().equals(principal.getName())) {
+            throw new AccessDeniedDomainException("Ban khong co quyen");
+        }
+
+        String materialTypeStr = payload.get("materialType");
+        String language = payload.get("language");
+        String title = payload.get("title");
+
+        com.lms.common.enums.MaterialType materialType = com.lms.common.enums.MaterialType.valueOf(materialTypeStr);
+
+        int nextVersion = materialGenerationRepository.findTopByUser_IdAndCourse_IdOrderByVersionNoDesc(course.getInstructor().getId(), course.getId())
+                .map(mg -> mg.getVersionNo() + 1)
+                .orElse(1);
+
+        com.lms.material.entity.MaterialGeneration generation = new com.lms.material.entity.MaterialGeneration();
+        generation.setUser(course.getInstructor());
+        generation.setCourse(course);
+        generation.setMaterialType(materialType);
+        generation.setLanguage(language);
+        generation.setTitle(title);
+        generation.setScopeType(com.lms.common.enums.ScopeType.WHOLE_COURSE);
+        generation.setVersionNo(nextVersion);
+        generation.setStatus(com.lms.common.enums.GenStatus.COMPLETED); // Completed immediately since manual
+        materialGenerationRepository.save(generation);
+
+        Long materialId = null;
+
+        if (materialType == com.lms.common.enums.MaterialType.QUIZ) {
+            com.lms.material.entity.Quiz quiz = new com.lms.material.entity.Quiz();
+            quiz.setMaterialGeneration(generation);
+            quiz.setQuestionCount(0);
+            quiz.setIsOfficial(true);
+            quiz = quizRepository.save(quiz);
+            materialId = quiz.getId();
+        } else if (materialType == com.lms.common.enums.MaterialType.FLASHCARD) {
+            FlashcardDeck deck = new FlashcardDeck();
+            deck.setMaterialGeneration(generation);
+            deck.setCardCount(0);
+            deck.setIsOfficial(true);
+            deck = flashcardDeckRepository.save(deck);
+            materialId = deck.getId();
+        } else if (materialType == com.lms.common.enums.MaterialType.MINDMAP) {
+            Mindmap mindmap = new Mindmap();
+            mindmap.setMaterialGeneration(generation);
+            mindmap.setNodeCount(0);
+            mindmap.setMermaidCode("mindmap\n  root((\"Tâm điểm\"))\n    Nhánh 1\n    Nhánh 2");
+            mindmap.setIsOfficial(true);
+            mindmap = mindmapRepository.save(mindmap);
+            materialId = mindmap.getId();
+        }
+
+        return ResponseEntity.ok(java.util.Map.of("id", generation.getId(), "materialId", materialId));
     }
 
     @GetMapping("/courses/{courseId}")

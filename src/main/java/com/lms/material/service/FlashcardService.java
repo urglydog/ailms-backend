@@ -56,6 +56,23 @@ public class FlashcardService {
     }
 
     /**
+     * Delete flashcard. Only owner of personal material can delete.
+     */
+    @Transactional
+    public void deleteFlashcard(String userEmail, Long flashcardId) {
+        Flashcard flashcard = flashcardRepository.findById(flashcardId)
+                .orElseThrow(() -> new ResourceNotFoundException("Flashcard", flashcardId));
+
+        var matGen = flashcard.getFlashcardDeck().getMaterialGeneration();
+        if (!matGen.getUser().getEmail().equals(userEmail)) {
+            throw new IllegalArgumentException("Bạn không có quyền xóa flashcard này.");
+        }
+
+        reviewRepository.deleteByFlashcard_Id(flashcardId);
+        flashcardRepository.delete(flashcard);
+    }
+
+    /**
      * Add a new flashcard to a deck. Only owner can add.
      */
     @Transactional

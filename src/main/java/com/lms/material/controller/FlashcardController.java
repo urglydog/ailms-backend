@@ -34,6 +34,15 @@ public class FlashcardController {
         return ResponseEntity.ok(java.util.Map.of("message", "Updated successfully"));
     }
 
+    /** Delete flashcard. Only owner can delete. */
+    @DeleteMapping("/{id}")
+    public ResponseEntity<java.util.Map<String, String>> deleteFlashcard(
+            Principal principal,
+            @PathVariable Long id) {
+        flashcardService.deleteFlashcard(principal.getName(), id);
+        return ResponseEntity.ok(java.util.Map.of("message", "Deleted successfully"));
+    }
+
     /** Get all cards in a deck with SRS review state for study mode. */
     @GetMapping("/deck/{deckId}/study")
     public ResponseEntity<List<FlashcardDto.CardWithReview>> getDeckStudyCards(
