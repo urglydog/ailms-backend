@@ -8,6 +8,8 @@ import com.lms.common.enums.CourseStatus;
 import com.lms.common.enums.PaymentStatus;
 import com.lms.common.exception.BusinessRuleViolationException;
 import com.lms.common.exception.ResourceNotFoundException;
+import com.lms.coupon.entity.Coupon;
+import com.lms.coupon.service.CouponService;
 import com.lms.enrollment.repository.EnrollmentRepository;
 import com.lms.enrollment.service.EnrollmentService;
 import com.lms.payment.dto.PaymentDto;
@@ -41,6 +43,7 @@ public class PaymentService {
     private final CourseRepository courseRepository;
     private final EnrollmentRepository enrollmentRepository;
     private final EnrollmentService enrollmentService;
+    private final CouponService couponService;
     private final PayOS payOS;
 
     @Value("${payment.vnpay.tmnCode:}")
@@ -78,14 +81,18 @@ public class PaymentService {
             throw new BusinessRuleViolationException("BR-ENROLL-01: Bạn đã sở hữu khóa học này.");
         }
 
-        // BR-PAY-02: Lấy giá từ server
-        BigDecimal amount = course.getPrice();
+        // BR-PAY-02: Lấy giá từ server. UC57 mở rộng (15/09/2026) — áp coupon tốt nhất
+        // (autoApply + mã tự nhập nếu có, BR-COUPON-01 không cộng dồn) TRƯỚC khi chốt amount,
+        // để BR-PAY-05 (30/70) tính đúng trên giá THỰC THU.
+        CouponService.PricingResult pricing = couponService.resolveBestPrice(course, user, req.couponCode());
+        BigDecimal amount = pricing.finalPrice();
 
         Payment payment = new Payment();
         // Giới hạn txnRef 8 kí tự để test dễ nhìn hơn, thực tế nên dùng UUID đầy đủ hoặc logic format hóa đơn
         String txnRef = UUID.randomUUID().toString().substring(0, 8);
         payment.setTxnRef(txnRef);
         payment.setAmount(amount);
+        applyCouponToPayment(payment, pricing);
         payment.setPaymentMethod(req.paymentMethod());
         payment.setStatus(PaymentStatus.PENDING);
         payment.setUser(user);
@@ -157,13 +164,23 @@ public class PaymentService {
             }
         }
 
+        // UC57 mở rộng (15/09/2026) — BR-COUPON-05: mỗi khóa tự kiểm tra coupon tốt nhất RIÊNG
+        // (cùng 1 mã học viên nhập cho cả giỏ, nhưng khóa nào mã không áp dụng được vẫn tính
+        // giá gốc/coupon autoApply của chính khóa đó, không ảnh hưởng các khóa khác).
+        List<CouponService.PricingResult> pricingResults = courses.stream()
+                .map(course -> couponService.resolveBestPrice(course, user, req.couponCode()))
+                .toList();
+
         String orderGroupRef = String.valueOf(System.currentTimeMillis() % 1000000000L);
         BigDecimal totalAmount = BigDecimal.ZERO;
-        for (Course course : courses) {
+        for (int i = 0; i < courses.size(); i++) {
+            Course course = courses.get(i);
+            CouponService.PricingResult pricing = pricingResults.get(i);
             Payment payment = new Payment();
             payment.setTxnRef(UUID.randomUUID().toString().substring(0, 8));
             payment.setOrderGroupRef(orderGroupRef);
-            payment.setAmount(course.getPrice());
+            payment.setAmount(pricing.finalPrice());
+            applyCouponToPayment(payment, pricing);
             payment.setPaymentMethod(req.paymentMethod());
             payment.setStatus(PaymentStatus.PENDING);
             payment.setUser(user);
@@ -171,14 +188,19 @@ public class PaymentService {
             payment.setBillingName(req.billingName());
             payment.setBillingPhone(req.billingPhone());
             paymentRepository.save(payment);
-            totalAmount = totalAmount.add(course.getPrice());
+            totalAmount = totalAmount.add(pricing.finalPrice());
         }
 
         if ("PAYOS".equalsIgnoreCase(req.paymentMethod())) {
             long orderCode = Long.parseLong(orderGroupRef);
-            List<PaymentLinkItem> items = courses.stream()
-                    .map(c -> PaymentLinkItem.builder().name("Khóa học: " + c.getTitle()).price(c.getPrice().longValue()).quantity(1).build())
-                    .toList();
+            List<PaymentLinkItem> items = new ArrayList<>();
+            for (int i = 0; i < courses.size(); i++) {
+                items.add(PaymentLinkItem.builder()
+                        .name("Khóa học: " + courses.get(i).getTitle())
+                        .price(pricingResults.get(i).finalPrice().longValue())
+                        .quantity(1)
+                        .build());
+            }
             String checkoutUrl = buildPayOsCheckoutUrl(orderCode, totalAmount, "Thanh toan don " + orderCode, items);
             return new PaymentDto.PaymentUrlRes(checkoutUrl);
         }
@@ -192,6 +214,17 @@ public class PaymentService {
 
         // Fallback for Momo / Others
         return new PaymentDto.PaymentUrlRes("https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?vnp_TxnRef=" + orderGroupRef);
+    }
+
+    /** Ghi lại coupon đã áp dụng (nếu có) vào 1 dòng {@link Payment} — dùng chung bởi cả
+     * {@link #createPayment} và {@link #createBatchPayment} (15/09/2026, mở rộng). */
+    private void applyCouponToPayment(Payment payment, CouponService.PricingResult pricing) {
+        if (pricing.appliedCoupon() != null) {
+            Coupon coupon = pricing.appliedCoupon();
+            payment.setCoupon(coupon);
+            payment.setOriginalAmount(pricing.originalPrice());
+            payment.setDiscountAmount(pricing.originalPrice().subtract(pricing.finalPrice()));
+        }
     }
 
     /** Tạo link thanh toán PayOS thật — dùng chung bởi cả {@link #createPayment} (1 khóa)
@@ -363,7 +396,10 @@ public class PaymentService {
                         p.getCourse().getTitle(),
                         p.getGatewayTxnNo(),
                         p.getBillingName(),
-                        p.getBillingPhone()
+                        p.getBillingPhone(),
+                        p.getOriginalAmount(),
+                        p.getDiscountAmount(),
+                        p.getCoupon() != null ? p.getCoupon().getCode() : null
                 )).toList();
     }
 
@@ -382,7 +418,10 @@ public class PaymentService {
                         p.getGatewayTxnNo(),
                         p.getUser().getEmail(),
                         p.getBillingName(),
-                        p.getBillingPhone()
+                        p.getBillingPhone(),
+                        p.getOriginalAmount(),
+                        p.getDiscountAmount(),
+                        p.getCoupon() != null ? p.getCoupon().getCode() : null
                 )).toList();
     }
 }

@@ -17,6 +17,7 @@ import com.lms.common.exception.BusinessRuleViolationException;
 import com.lms.common.exception.InvalidRequestException;
 import com.lms.common.storage.StorageService;
 import com.lms.enrollment.repository.EnrollmentRepository;
+import com.lms.instructor.repository.InstructorVerificationRepository;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
@@ -56,6 +57,7 @@ class CourseServiceTest {
     @Mock private UserRepository userRepository;
     @Mock private StorageService storageService;
     @Mock private LessonService lessonService;
+    @Mock private InstructorVerificationRepository instructorVerificationRepository;
 
     @InjectMocks
     private CourseService courseService;
@@ -86,6 +88,9 @@ class CourseServiceTest {
         when(courseRepository.findById(10L)).thenReturn(Optional.of(course));
         lenient().when(courseRepository.save(any(Course.class))).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(chapterRepository.findByCourseIdOrderByDisplayOrderAsc(anyLong())).thenReturn(List.of());
+        // BR-VERIFY-01 (15/09/2026) — mặc định coi như ĐÃ xác minh để không ảnh hưởng các test
+        // khác vốn kiểm tra BR-COURSE-01/04; có test riêng cho nhánh CHƯA xác minh bên dưới.
+        lenient().when(instructorVerificationRepository.existsByUser_Id(anyLong())).thenReturn(true);
     }
 
     @Test
@@ -155,6 +160,17 @@ class CourseServiceTest {
 
         assertThatThrownBy(() -> courseService.submitForReview(OWNER_EMAIL, 10L))
                 .isInstanceOf(BusinessRuleViolationException.class);
+    }
+
+    @Test
+    void submitForReview_blocksWhenInstructorNotVerified() {
+        when(instructorVerificationRepository.existsByUser_Id(1L)).thenReturn(false);
+
+        assertThatThrownBy(() -> courseService.submitForReview(OWNER_EMAIL, 10L))
+                .isInstanceOf(BusinessRuleViolationException.class)
+                .hasMessageContaining("BR-VERIFY-01");
+
+        verify(courseRepository, never()).save(any());
     }
 
     @Test

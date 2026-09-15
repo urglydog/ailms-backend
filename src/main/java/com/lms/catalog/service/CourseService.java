@@ -20,6 +20,7 @@ import com.lms.common.exception.InvalidRequestException;
 import com.lms.common.exception.ResourceNotFoundException;
 import com.lms.common.storage.StorageService;
 import com.lms.enrollment.repository.EnrollmentRepository;
+import com.lms.instructor.repository.InstructorVerificationRepository;
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigDecimal;
@@ -59,6 +60,7 @@ public class CourseService {
     private final UserRepository userRepository;
     private final StorageService storageService;
     private final LessonService lessonService;
+    private final InstructorVerificationRepository instructorVerificationRepository;
     private final Tika tika = new Tika();
 
     @Transactional
@@ -289,9 +291,20 @@ public class CourseService {
         return candidate;
     }
 
-    /** BR-COURSE-01: điều kiện gửi duyệt — trả về danh sách điều kiện CHƯA đạt (rỗng = đủ điều kiện). */
+    /**
+     * BR-COURSE-01: điều kiện gửi duyệt — trả về danh sách điều kiện CHƯA đạt (rỗng = đủ điều kiện).
+     * Gộp cả BR-VERIFY-01 (15/09/2026) vào đây thay vì chặn riêng ở {@link #submitForReview} —
+     * để FE hiện được ngay trong checklist "Điều kiện gửi duyệt" (component có sẵn, xem
+     * {@code SubmitChecklist.tsx}) thay vì instructor chỉ biết lúc bấm nút và nhận lỗi bất ngờ.
+     */
     private List<String> computeMissingConditions(Course course) {
         List<String> missing = new ArrayList<>();
+        // BR-VERIFY-01: chặn 1 LẦN DUY NHẤT/tài khoản — kiểm tra "đã có bản ghi xác minh chưa"
+        // thay vì đếm số khóa học trước đó, nên 1 khi đã xác minh thì mọi khóa (kể cả khóa đầu
+        // tiên tiếp theo) đều qua được, đúng nghĩa "không lặp lại cho các khóa sau".
+        if (!instructorVerificationRepository.existsByUser_Id(course.getInstructor().getId())) {
+            missing.add("Chưa hoàn tất xác minh thông tin định danh (BR-VERIFY-01)");
+        }
         if (course.getTitle() == null || course.getTitle().isBlank()) {
             missing.add("Chưa có tiêu đề");
         }

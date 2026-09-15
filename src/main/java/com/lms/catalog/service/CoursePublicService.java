@@ -10,6 +10,8 @@ import com.lms.catalog.repository.LessonRepository;
 import com.lms.common.enums.CourseStatus;
 import com.lms.common.exception.AccessDeniedDomainException;
 import com.lms.common.exception.ResourceNotFoundException;
+import com.lms.coupon.dto.CouponDto.PriceRes;
+import com.lms.coupon.service.CouponService;
 import com.lms.dubbing.repository.AudioTrackRepository;
 import com.lms.enrollment.repository.CourseReviewRepository;
 import com.lms.enrollment.repository.EnrollmentRepository;
@@ -39,6 +41,7 @@ public class CoursePublicService {
     private final CourseReviewRepository courseReviewRepository;
     private final AudioTrackRepository audioTrackRepository;
     private final EnrollmentRepository enrollmentRepository;
+    private final CouponService couponService;
 
     @Transactional(readOnly = true)
     public Page<SummaryRes> search(
@@ -157,6 +160,7 @@ public class CoursePublicService {
     }
 
     private SummaryRes mapToSummaryRes(Course course) {
+        PriceRes price = resolveDisplayPrice(course);
         return new SummaryRes(
                 course.getId(),
                 course.getTitle(),
@@ -171,8 +175,18 @@ public class CoursePublicService {
                 (int) lessonRepository.countByChapter_CourseId(course.getId()),
                 lessonRepository.sumDurationSecByCourseId(course.getId()),
                 course.getCategory().getSlug(),
-                course.getCategory().getName()
+                course.getCategory().getName(),
+                price.finalPrice(),
+                price.discountPercent()
         );
+    }
+
+    /** UC57 mở rộng (15/09/2026) — khóa miễn phí bỏ qua tính coupon (giảm giá trên 0đ vô nghĩa). */
+    private PriceRes resolveDisplayPrice(Course course) {
+        if (Boolean.TRUE.equals(course.getIsFree())) {
+            return new PriceRes(course.getPrice(), course.getPrice(), null, null, true);
+        }
+        return couponService.getDisplayPrice(course);
     }
 
     private DetailRes mapToDetailRes(Course course) {
@@ -202,6 +216,7 @@ public class CoursePublicService {
                 .map(this::displayLabel)
                 .toList();
         long learnerCount = enrollmentRepository.countByCourseId(course.getId());
+        PriceRes price = resolveDisplayPrice(course);
 
         return new DetailRes(
                 course.getId(),
@@ -222,7 +237,9 @@ public class CoursePublicService {
                 course.getUpdatedAt(),
                 sourceLanguage,
                 dubbedLanguages,
-                learnerCount
+                learnerCount,
+                price.finalPrice(),
+                price.discountPercent()
         );
     }
 

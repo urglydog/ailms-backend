@@ -27,7 +27,11 @@ public class CoursePublicDto {
             /** UC09 mở rộng (14/09/2026) — tổng giây video, dùng cho bộ lọc "Video Duration" kiểu Udemy. */
             Integer totalDurationSec,
             String categorySlug,
-            String categoryName
+            String categoryName,
+            /** UC57 mở rộng (15/09/2026) — giá sau khi áp coupon autoApply tốt nhất (BR-COUPON-04); bằng {@code price} nếu không có coupon nào áp dụng được. */
+            BigDecimal finalPrice,
+            /** Null nếu không có coupon nào áp dụng — FE dùng để quyết định có hiện giá gạch ngang hay không. */
+            Integer discountPercent
     ) {}
 
     public record DetailRes(
@@ -52,7 +56,10 @@ public class CoursePublicDto {
             String sourceLanguage,
             /** Ngôn ngữ đã lồng tiếng XONG (ít nhất 1 bài, {@code AudioTrack.status = COMPLETED}) — rỗng nếu chưa có. */
             List<String> dubbedLanguages,
-            Long learnerCount
+            Long learnerCount,
+            /** UC57 mở rộng (15/09/2026) — xem {@code SummaryRes.finalPrice}. */
+            BigDecimal finalPrice,
+            Integer discountPercent
     ) {}
 
     public record ChapterRes(

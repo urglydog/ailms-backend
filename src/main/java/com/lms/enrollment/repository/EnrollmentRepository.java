@@ -39,4 +39,8 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, Long> {
     /** Danh sách ghi danh của một khóa học phục vụ Giảng viên Gradebook. */
     List<Enrollment> findByCourseId(Long courseId);
 
+    /** Dashboard Giảng viên (15/09/2026, sửa lỗi) — tổng lượt ghi danh trên MỌI khóa của
+     * giảng viên, thay số "12450" gắn cứng cũ (đang chờ module Enrollment — module đã có thật). */
+    long countByCourse_Instructor_Email(String email);
+
 }

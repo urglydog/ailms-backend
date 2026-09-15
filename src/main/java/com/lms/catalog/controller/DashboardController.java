@@ -1,9 +1,17 @@
 package com.lms.catalog.controller;
 
 import com.lms.auth.repository.UserRepository;
+import com.lms.catalog.entity.Course;
 import com.lms.catalog.repository.CourseRepository;
 import com.lms.common.enums.CourseStatus;
+import com.lms.enrollment.repository.EnrollmentRepository;
+import com.lms.payment.repository.PaymentRepository;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -13,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import com.lms.auth.entity.User;
 
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -22,6 +31,8 @@ public class DashboardController {
 
     private final CourseRepository courseRepository;
     private final UserRepository userRepository;
+    private final EnrollmentRepository enrollmentRepository;
+    private final PaymentRepository paymentRepository;
 
     @GetMapping("/admin")
     @PreAuthorize("hasRole('ADMIN')")
@@ -67,28 +78,38 @@ public class DashboardController {
         ));
     }
 
+    /**
+     * (15/09/2026, sửa lỗi) — trước đây `myStudents`/`averageRating`/`revenue` gắn cứng
+     * (12450/4.8/15.400.000đ) với ghi chú "chờ module Enrollment/Payment", nhưng 2 module đó
+     * đã có thật từ lâu trong dự án — lỗi này lộ rõ khi 1 tài khoản MỚI vừa "Trở thành Giảng
+     * viên" (0 khóa học) vẫn thấy số liệu giả của người khác. Tính lại bằng dữ liệu thật.
+     */
     @GetMapping("/instructor")
     @PreAuthorize("hasRole('INSTRUCTOR')")
     public ResponseEntity<Map<String, Object>> getInstructorDashboard(java.security.Principal principal) {
-        // Lấy thông tin user hiện tại (giảng viên)
         User instructor = userRepository.findByEmail(principal.getName()).orElseThrow();
+        String email = instructor.getEmail();
 
-        long myCourses = courseRepository.countByInstructor_Email(instructor.getEmail());
-        // TODO: Chờ module Enrollment/Payment (Giai đoạn 3/9) để tính học viên/doanh thu thật
-        long myStudents = 12450;
-        double averageRating = 4.8;
-        long revenue = 15400000;
+        long myCourses = courseRepository.countByInstructor_Email(email);
+        long myStudents = enrollmentRepository.countByCourse_Instructor_Email(email);
+
+        List<Course> courses = courseRepository.findByInstructor_Email(email, Pageable.unpaged()).getContent();
+        double averageRating = courses.stream()
+                .map(Course::getAvgRating)
+                .filter(rating -> rating != null && rating.compareTo(BigDecimal.ZERO) > 0)
+                .mapToDouble(BigDecimal::doubleValue)
+                .average()
+                .orElse(0.0);
+        averageRating = BigDecimal.valueOf(averageRating).setScale(1, RoundingMode.HALF_UP).doubleValue();
+
+        LocalDateTime monthStart = LocalDate.now().withDayOfMonth(1).atStartOfDay();
+        BigDecimal revenue = paymentRepository.sumInstructorEarningSince(email, monthStart);
 
         return ResponseEntity.ok(Map.of(
                 "totalCourses", myCourses,
                 "totalStudents", myStudents,
                 "averageRating", averageRating,
-                "revenue", revenue,
-                "recentCourses", java.util.List.of(
-                        Map.of("id", 1, "title", "React Masterclass", "status", "PUBLISHED", "students", 1250),
-                        Map.of("id", 2, "title", "Advanced CSS Layouts", "status", "PENDING", "students", 0),
-                        Map.of("id", 3, "title", "JavaScript for Beginners", "status", "DRAFT", "students", 0)
-                )
+                "revenue", revenue
         ));
     }
 }
