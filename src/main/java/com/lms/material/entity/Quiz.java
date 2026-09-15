@@ -5,6 +5,7 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 
+import com.lms.common.enums.QuizType;
 import java.time.LocalDateTime;
 
 /**
@@ -33,6 +34,10 @@ public class Quiz extends BaseEntity {
 
     @Column(name = "is_official", nullable = false)
     private Boolean isOfficial = false;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "quiz_type", nullable = false, length = 20)
+    private QuizType quizType = QuizType.OFFICIAL_EXAM;
 
     /** So cau boc ngau nhien moi lan thi. NULL = lay het cau hoi. */
     @Column(name = "random_pick_count")
