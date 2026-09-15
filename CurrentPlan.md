@@ -59,6 +59,20 @@
 
 ---
 
+## TASK 4: Import / Export Mở Rộng (Ngoại Trừ AI)
+
+**Vấn đề:** Hiện tại cả giảng viên và học viên đều bị phụ thuộc quá nhiều vào AI để tạo học liệu, hoặc tạo thủ công từng câu/thẻ rất mất thời gian.
+
+**Đề xuất tính năng (Mới):**
+- **Giảng viên (Instructor):**
+  - **Trắc nghiệm & Flashcard:** Cho phép import hàng loạt từ file Excel (`.xlsx`), CSV, hoặc JSON theo form mẫu có sẵn.
+  - **Mindmap:** Cung cấp khung nhập liệu trực tiếp mã Mermaid (giống Draw.io). Gõ code đến đâu render sơ đồ đến đó, sau đó nhấn "Lưu" để thành Mindmap chính thức thay vì phải đợi AI sinh.
+- **Học viên (Student):**
+  - Dựa trên BR hệ thống, học viên ĐƯỢC QUYỀN chủ động tạo học liệu cá nhân. Do đó, học viên cũng sẽ được phép Import các bộ Flashcard từ Anki/Quizlet (file `.txt`, `.csv`) để tự học trong hệ thống mà không cần tốn token AI.
+  - Export: Cho phép học viên tải Markdown của Mindmap, tải PDF của Quiz (để in ra giấy).
+
+---
+
 ## TASK 3: Tối Ưu Luồng Làm Bài Quiz Official [PASSED]
 
 ### 3A & 3B. Layout Sidebar, Phân Trang & Ma Trận 2 Chiều Cố Định [PASSED]
