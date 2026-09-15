@@ -9,6 +9,8 @@ import com.lms.material.repository.MindmapRepository;
 import com.lms.common.service.NotificationService;
 import com.lms.enrollment.repository.EnrollmentRepository;
 import com.lms.enrollment.entity.Enrollment;
+import com.lms.catalog.entity.Course;
+import com.lms.catalog.repository.CourseRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -29,6 +31,7 @@ public class InstructorMaterialController {
     private final com.lms.material.repository.QuizAttemptRepository quizAttemptRepository;
     private final NotificationService notificationService;
     private final EnrollmentRepository enrollmentRepository;
+    private final CourseRepository courseRepository;
 
     @PutMapping("/mindmaps/{id}/set-official")
     @PreAuthorize("hasRole('INSTRUCTOR')")
