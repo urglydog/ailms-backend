@@ -38,7 +38,7 @@
 ### 2C. Mindmap — Kho Cá Nhân
 - Xoay 4 hướng, tải SVG, Copy code: ✅ đã có
 - **Tooltip nút Copy:** hover → "Copy mã Mermaid (paste vào nền tảng hỗ trợ Mermaid.js)"
-- **Xóa mindmap:** đã có `useDeleteMaterial` hook → thêm nút xóa
+- **Xóa mindmap:** ✅ Đã hoàn thành (Có modal xác nhận)
 
 ### 2D. Mindmap — Kho Official + Tab Xem Tĩnh Instructor
 - `CourseMaterialsManager.tsx` tab VIEW: thêm `readOnly={true}` (1 dòng code)
@@ -47,17 +47,8 @@
 ### 2E. Trắc Nghiệm — Kho Cá Nhân
 - Xóa/sửa câu hỏi cho student: cần endpoint mới với ownership check
 
-### 2F. Phía Giảng Viên
-
-| Vấn đề | Đề xuất |
-|---|---|
-| Ngôn ngữ mặc định trống | FE set default = `'vi'` hoặc pick đầu tiên từ `availableLanguages` |
-| Không thoát được màn hình tạo | Thêm nút "✕ Đóng" + fix breadcrumb navigation |
-| Thêm câu hỏi quiz mới | BE: `POST /instructor/quizzes/{quizId}/questions` |
-| Flashcard CRUD giảng viên | Thêm/sửa/xóa card với instructor ownership check |
-| **Tạo học liệu thủ công (Mới)** | Thêm nút "Tạo Thủ Công (Không dùng AI)" để khởi tạo Quiz/Flashcard/Mindmap trống hoàn toàn, cho phép giảng viên tự gõ 100% thay vì bắt buộc dùng AI. Giao diện tái sử dụng form Edit hiện tại. |
-| **Checklist duyệt khóa học tự động** | Trước khi chuyển khóa học sang `PENDING_REVIEW`, FE/BE tự động check: tối thiểu X phút video/bài học, có thumbnail, và có ít nhất 1 bài tập (tạo bằng AI hoặc thủ công). Chặn gửi duyệt ngay tại client nếu chưa đạt. |
-| **Trạng thái `NEEDS_REVISION` & Re-submit** | Bổ sung trạng thái `NEEDS_REVISION` kèm Feedback Note từ Admin. Giảng viên sửa xong sẽ có nút "Gửi duyệt lại" (Re-submit) để về lại `PENDING_REVIEW`. Khi khóa học ở trạng thái `PENDING_REVIEW` hoặc `APPROVED`, khóa các thông tin nhạy cảm (như thay đổi toàn bộ video) để tránh "treo đầu dê bán thịt chó". |
+### 2F. Phía Giảng Viên [PASSED]
+- Đã hoàn thành các UX cơ bản cho giảng viên (Ngôn ngữ, Tạo thủ công, Xóa học liệu, Chỉnh sửa Node Mindmap).
 
 ### 2G. Cấu Trúc Khóa Học (Curriculum Structure) - Chuẩn Udemy
 - Tổ chức học liệu theo mô hình hình cây: **Chương (Section) $\rightarrow$ Bài học (Lecture) $\rightarrow$ Tài nguyên đính kèm (Resources)**.
@@ -68,55 +59,32 @@
 
 ---
 
-## TASK 3: Tối Ưu Luồng Làm Bài Quiz Official
+## TASK 3: Tối Ưu Luồng Làm Bài Quiz Official (Theo chuẩn mô tả)
 
-### 3A. Layout Sidebar (đã sửa, cần verify)
-Thứ tự: Camera → Đếm ngược → Ma trận câu hỏi → Nút Nộp bài
+### 3A & 3B. Layout Sidebar, Phân Trang & Ma Trận 2 Chiều Cố Định
+- **Layout Cố Định (Sticky):** Các thành phần bên cột phải (đồng hồ đếm ngược, camera giám sát, nút nộp bài, ma trận 2 chiều) **tuyệt đối không bị xê dịch** khi người dùng cuộn màn hình để làm các câu hỏi khác. 
+- **Vị trí Ma Trận:** Ma trận 2 chiều phải nằm **BÊN DƯỚI** nút nộp bài, hoặc ở vị trí `absolute` góc phải phía dưới cùng (nơi còn trống).
+- **Phân trang:** Hiển thị tối đa 5 câu hỏi/trang, sử dụng nút mũi tên `< >` để chuyển đổi qua lại giữa các trang.
+- **Quy tắc Ma Trận:**
+  - Ô vuông chia tỉ lệ: 70% phía trên hiển thị số thứ tự câu hỏi, 30% phía dưới hiển thị dấu tích nền xanh (đã làm) và dấu `x` nền đỏ (chưa làm).
+  - Khi nhấn vào câu nào trên ma trận, màn hình sẽ tự động forward về đúng câu đó (bất kể đang ở trang nào).
 
-### 3B. Ma Trận 2 Chiều — Cải Tiến
-Ô vuông chia 70% trên (số câu) + 30% dưới (✓ xanh đã làm / ✗ đỏ chưa làm)
+### 3C. Tích hợp Ma Trận vào Lịch Sử Làm Bài
+- Màn hình lịch sử / xem chi tiết bài làm hiện đang dồn toàn bộ đáp án vào một trang cuộn dọc rất dài (có thể lên tới hàng trăm câu).
+- **Yêu cầu:** Bắt buộc bổ sung Ma Trận 2 chiều vào màn hình Lịch sử này để học viên có thể click vào ma trận và nhảy ngay đến câu hỏi cần xem, thay vì phải cuộn dọc liên tục.
 
-### 3C. Ma Trận Trong Lịch Sử
-Thêm grid navigation vào `history/page.tsx` để nhảy nhanh đến câu bất kỳ
+### 3D. Quy Trình Nộp Bài 2 Chốt Chặn
+- **Chốt 1 (Nút Nộp bài ngoài bài thi):** Nếu phát hiện có câu hỏi chưa làm, hệ thống KHÔNG cần đếm chính xác số câu, mà chỉ hiện thông báo nhắc nhở chung: *"Vui lòng hoàn thành toàn bộ câu hỏi trước khi nộp"* (Mục đích: Gọi nhớ người dùng tự nhìn vào ma trận để xem câu nào còn thiếu).
+- **Chốt 2 (Màn hình Review Confirm):**
+  - Hiển thị danh sách TỪNG CÂU HỎI dọc từ trên xuống dưới.
+  - Mỗi câu hỏi chỉ hiển thị dòng chữ: `✅ Đã ghi nhận câu trả lời` HOẶC `❌ Chưa ghi nhận câu trả lời` (đối với câu bị bỏ trống).
+  - KHÔNG sử dụng ma trận hay dạng rút gọn ở bước này.
+  - Người dùng **bắt buộc phải cuộn xuống tận cùng** của danh sách này mới thấy được 2 nút: **[Xác nhận nộp bài]** và **[Quay lại bài thi]**.
 
-### 3D. Quy Trình Nộp Bài 2 Chốt Chặn ⭐
-
-**Chốt 1 — Nhấn "Nộp bài":**
-- Kiểm tra số câu chưa trả lời.
-- Nếu CÓ câu chưa làm → hiện cảnh báo: **"Bạn còn [X] câu chưa hoàn thành, bạn có chắc chắn muốn nộp?"** thay vì chặn cứng (`disabled`).
-- Ma trận 2 chiều ở sidebar vẫn phát huy tác dụng: user nhìn vào ma trận thấy câu nào đỏ (chưa làm) → nhấn vào → nhảy thẳng đến câu đó.
-- Vẫn **cho phép nộp** nếu user xác nhận muốn bỏ qua các câu trống (câu trống = 0 điểm).
-
-**Chốt 2 — Màn hình Review Confirm:**
-- Render danh sách TỪNG CÂU, mỗi dòng hiện chính xác chuỗi:
-  - `Câu 1: ✅ Đã ghi nhận câu trả lời`
-  - `Câu 2: ❌ Chưa ghi nhận câu trả lời` (đối với câu bị bỏ trống)
-- Phải scroll xuống cuối mới thấy 2 nút:
-  - **[Quay lại bài thi]** — đóng, quay lại làm bài
-  - **[Xác nhận nộp bài]** — gọi API submit thật
-
-### 3E. Câu Hỏi Chọn Nhiều Đáp Án (Multi-Select) ⭐
-
-**Schema thay đổi:**
-- `QuizQuestion` thêm: `questionType` (`SINGLE_CHOICE` / `MULTI_CHOICE`)
-- `QuizAnswer`: hỗ trợ lưu nhiều `selectedOption` (bảng trung gian hoặc JSON array)
-- Migration SQL cần thiết
-
-**Quy tắc tính điểm Multi-Choice:**
-- Phải chọn **ĐÚNG HẾT** tất cả đáp án được set sẵn → mới được điểm câu đó
-- Chọn thiếu 1 đáp án đúng → **0 điểm**
-- Chọn dư 1 đáp án sai → **0 điểm**
-
-**Công thức tính điểm chuyên nghiệp:**
-- Single-choice: 1.0 điểm gốc/câu
-- Multi-choice: 1.5 điểm gốc/câu (khó hơn → trọng số cao hơn)
-- Tổng điểm gốc = (số câu single × 1.0) + (số câu multi × 1.5)
-- Điểm thang 10 = (điểm đạt được / Tổng điểm gốc) × 10
-
-**FE thay đổi:**
-- `radio` → `checkbox` khi `questionType === 'MULTI_CHOICE'`
-- `answers` state: `Record<id, optionId>` → `Record<id, optionId | optionId[]>`
-- Instructor: form thêm câu hỏi mới có toggle "Cho chọn nhiều đáp án" + tick nhiều ô đúng
+### 3E. Câu Hỏi Chọn Nhiều Đáp Án (Multi-choice)
+- **Giao diện:** Chuyển từ thẻ radio (chỉ chọn 1) sang dạng ô **Checkbox** để học viên có thể check chọn nhiều đáp án.
+- **Nhắc nhở:** Tự động bổ sung ghi chú dòng chữ `(Chọn nhiều đáp án)` dưới tiêu đề của các câu hỏi thuộc loại này.
+- **Logic Tính Điểm Mới:** Đảm bảo đúng chuẩn: Sinh viên phải chọn **ĐÚNG VÀ ĐỦ TẤT CẢ** các đáp án đúng được set sẵn mới được tính điểm câu đó. Chọn thiếu hoặc dư đáp án sai đều bị 0 điểm.
 
 ---
 
@@ -162,11 +130,11 @@ Thêm grid navigation vào `history/page.tsx` để nhảy nhanh đến câu b�
 
 | # | Task | Lý do | Ước lượng |
 |---|---|---|---|
-| 1 | **2F — Fix UX giảng viên** (Ngôn ngữ mặc định, thêm câu hỏi, trạng thái duyệt) | Bug UX trực tiếp & Core flow | 4-5h |
+| 1 | **2F — Fix UX giảng viên** | Đã hoàn thành (PASSED) | 0h |
 | 2 | **3D — 2 chốt chặn nộp bài** | Academic integrity | 3-4h |
 | 3 | **2A+2B — Flashcard xóa + Export + SRS Official** | Hoàn thiện trải nghiệm học | 4-5h |
 | 4 | **3B+3C — Ma trận 2 chiều + History** | UX bài thi nhiều câu | 3-4h |
-| 5 | **2D — Mindmap readOnly** | 1 dòng code | 15 phút |
+| 5 | **2D — Mindmap readOnly** | Đã hoàn thành (PASSED) | 0h |
 | 6 | **2G — Curriculum Structure (Mới)** | Task kiến trúc nặng, phân tách 2 loại Quiz | 8-10h |
 | 7 | **3E — Multi-choice + tính điểm mới** | Schema lớn, cần plan kỹ | 8-10h |
 | 8 | **11B — Instructor Onboarding (Mới)** | Lọc spam, hồ sơ chuyên nghiệp | 3-4h |

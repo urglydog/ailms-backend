@@ -16,6 +16,7 @@ public class QuizAttemptDto {
             Long id,
             String content,
             Integer displayOrder,
+            Boolean isMultipleChoice,
             List<OptionDto> options
     ) {}
 
@@ -31,15 +32,15 @@ public class QuizAttemptDto {
 
 
     public record SubmitReq(
-            // Key: quizQuestionId, Value: selectedOptionId
-            Map<Long, Long> answers
+            // Key: quizQuestionId, Value: list of selectedOptionIds
+            Map<Long, List<Long>> answers
     ) {}
 
     public record AnswerDetailDto(
             Long questionId,
             String content,
-            Long selectedOptionId,
-            Long correctOptionId,
+            List<Long> selectedOptionIds,
+            List<Long> correctOptionIds,
             boolean isCorrect,
             List<OptionDto> options
     ) {}

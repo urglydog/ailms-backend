@@ -263,7 +263,7 @@ public class QuizService {
                     .map(o -> new QuizAttemptDto.OptionDto(o.getId(), o.getContent()))
                     .collect(Collectors.toList());
                     
-            questionDtos.add(new QuizAttemptDto.QuestionDto(q.getId(), q.getContent(), q.getDisplayOrder(), optionDtos));
+            questionDtos.add(new QuizAttemptDto.QuestionDto(q.getId(), q.getContent(), q.getDisplayOrder(), Boolean.TRUE.equals(q.getIsMultipleChoice()), optionDtos));
         }
         
         return new QuizAttemptDto.StartRes(
@@ -298,21 +298,28 @@ public class QuizService {
         boolean allowReview = Boolean.TRUE.equals(attempt.getQuiz().getAllowReview());
         
         for (QuizAnswer answer : answers) {
-            Long selectedOptionId = req.answers().get(answer.getQuizQuestion().getId());
-            QuizOption correctOpt = quizOptionRepository.findByQuizQuestion_Id(answer.getQuizQuestion().getId())
-                    .stream().filter(o -> Boolean.TRUE.equals(o.getIsCorrect())).findFirst().orElse(null);
-                    
-            if (selectedOptionId != null) {
-                QuizOption selectedOption = quizOptionRepository.findById(selectedOptionId).orElse(null);
-                answer.setSelectedOption(selectedOption);
-                if (selectedOption != null && Boolean.TRUE.equals(selectedOption.getIsCorrect())) {
-                    answer.setIsCorrect(true);
-                    correctCount++;
-                } else {
-                    answer.setIsCorrect(false);
+            List<Long> selectedOptionIds = req.answers().get(answer.getQuizQuestion().getId());
+            
+            List<QuizOption> correctOpts = quizOptionRepository.findByQuizQuestion_Id(answer.getQuizQuestion().getId())
+                    .stream().filter(o -> Boolean.TRUE.equals(o.getIsCorrect())).toList();
+            List<Long> correctOptionIds = correctOpts.stream().map(QuizOption::getId).toList();
+            
+            boolean isCorrect = false;
+            if (selectedOptionIds != null && !selectedOptionIds.isEmpty()) {
+                String idsStr = selectedOptionIds.stream().map(String::valueOf).collect(Collectors.joining(","));
+                answer.setSelectedOptionIds(idsStr);
+                
+                // Logic: ALL OR NOTHING for all question types.
+                if (selectedOptionIds.size() == correctOptionIds.size() && selectedOptionIds.containsAll(correctOptionIds)) {
+                    isCorrect = true;
                 }
             } else {
-                answer.setIsCorrect(false);
+                answer.setSelectedOptionIds("");
+            }
+            
+            answer.setIsCorrect(isCorrect);
+            if (isCorrect) {
+                correctCount++;
             }
             quizAnswerRepository.save(answer);
             
@@ -322,8 +329,8 @@ public class QuizService {
             details.add(new QuizAttemptDto.AnswerDetailDto(
                     answer.getQuizQuestion().getId(),
                     answer.getQuizQuestion().getContent(),
-                    selectedOptionId,
-                    allowReview && correctOpt != null ? correctOpt.getId() : null, // Ẩn đáp án đúng nếu allowReview = false
+                    selectedOptionIds != null ? selectedOptionIds : new ArrayList<>(),
+                    allowReview && !correctOptionIds.isEmpty() ? correctOptionIds : new ArrayList<>(), // Ẩn đáp án đúng nếu allowReview = false
                     allowReview ? answer.getIsCorrect() : false, // Ẩn kết quả Đúng/Sai nếu allowReview = false
                     options
             ));
@@ -353,8 +360,15 @@ public class QuizService {
         boolean allowReview = Boolean.TRUE.equals(attempt.getQuiz().getAllowReview());
         
         for (QuizAnswer answer : answers) {
-            QuizOption correctOpt = quizOptionRepository.findByQuizQuestion_Id(answer.getQuizQuestion().getId())
-                    .stream().filter(o -> Boolean.TRUE.equals(o.getIsCorrect())).findFirst().orElse(null);
+            List<QuizOption> correctOpts = quizOptionRepository.findByQuizQuestion_Id(answer.getQuizQuestion().getId())
+                    .stream().filter(o -> Boolean.TRUE.equals(o.getIsCorrect())).toList();
+            List<Long> correctOptionIds = correctOpts.stream().map(QuizOption::getId).toList();
+            
+            List<Long> selectedIds = new ArrayList<>();
+            if (answer.getSelectedOptionIds() != null && !answer.getSelectedOptionIds().isEmpty()) {
+                selectedIds = java.util.Arrays.stream(answer.getSelectedOptionIds().split(","))
+                        .map(Long::parseLong).toList();
+            }
                     
             List<QuizAttemptDto.OptionDto> options = quizOptionRepository.findByQuizQuestion_Id(answer.getQuizQuestion().getId())
                     .stream().map(o -> new QuizAttemptDto.OptionDto(o.getId(), o.getContent())).toList();
@@ -362,8 +376,8 @@ public class QuizService {
             details.add(new QuizAttemptDto.AnswerDetailDto(
                     answer.getQuizQuestion().getId(),
                     answer.getQuizQuestion().getContent(),
-                    answer.getSelectedOption() != null ? answer.getSelectedOption().getId() : null,
-                    allowReview && correctOpt != null ? correctOpt.getId() : null,
+                    selectedIds,
+                    allowReview && !correctOptionIds.isEmpty() ? correctOptionIds : new ArrayList<>(),
                     allowReview ? answer.getIsCorrect() : false,
                     options
             ));
