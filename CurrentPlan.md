@@ -25,15 +25,15 @@
 |---|---|---|
 | Edit card | ✅ `PATCH /api/v1/flashcards/{id}` | Verify instant update |
 | Thêm card | ✅ `POST /api/v1/flashcards/deck/{generationId}` | OK |
-| **Xóa card** | ❌ Chưa có | BE: `DELETE /api/v1/flashcards/{id}` + FE: nút xóa |
-| **Export Anki/Quizlet** | ❌ | FE-only: xuất `.txt` tab-separated (Anki/Quizlet đều import được) |
+| **Xóa card** | ✅ `DELETE /api/v1/flashcards/{id}` | OK |
+| **Export Anki/Quizlet** | ✅ | OK |
 
 ### 2B. Flashcard — Kho Official
 
 | Tính năng | Cần làm |
 |---|---|
-| **SRS cho Official** | Entity `FlashcardReview` đã sẵn sàng. FE: dùng FlashcardStudyMode nhưng ẩn edit/add/delete |
-| **Export** | Cùng logic export như 2A |
+| **SRS cho Official** | ✅ Đã hoàn thành (dùng FlashcardStudyMode readOnly) |
+| **Export** | ✅ Đã hoàn thành |
 
 ### 2C. Mindmap — Kho Cá Nhân
 - Xoay 4 hướng, tải SVG, Copy code: ✅ đã có
@@ -132,7 +132,7 @@
 |---|---|---|---|
 | 1 | **2F — Fix UX giảng viên** | Đã hoàn thành (PASSED) | 0h |
 | 2 | **3D — 2 chốt chặn nộp bài** | Đã hoàn thành (PASSED) | 0h |
-| 3 | **2A+2B — Flashcard xóa + Export + SRS Official** | Hoàn thiện trải nghiệm học | 4-5h |
+| 3 | **2A+2B — Flashcard xóa + Export + SRS Official** | Đã hoàn thành (PASSED) | 0h |
 | 4 | **3B+3C — Ma trận 2 chiều + History** | Đã hoàn thành (PASSED) | 0h |
 | 5 | **2D — Mindmap readOnly** | Đã hoàn thành (PASSED) | 0h |
 | 6 | **2G — Curriculum Structure (Mới)** | Task kiến trúc nặng, phân tách 2 loại Quiz | 8-10h |
