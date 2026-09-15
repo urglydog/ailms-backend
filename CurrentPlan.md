@@ -50,7 +50,7 @@
 ### 2F. Phía Giảng Viên [PASSED]
 - Đã hoàn thành các UX cơ bản cho giảng viên (Ngôn ngữ, Tạo thủ công, Xóa học liệu, Chỉnh sửa Node Mindmap).
 
-### 2G. Cấu Trúc Khóa Học (Curriculum Structure) - Chuẩn Udemy
+### 2G. Cấu Trúc Khóa Học (Curriculum Structure) - Chuẩn Udemy [PASSED - Cần xem xét lại]
 - Tổ chức học liệu theo mô hình hình cây: **Chương (Section) $\rightarrow$ Bài học (Lecture) $\rightarrow$ Tài nguyên đính kèm (Resources)**.
 - Cho phép đính kèm trực tiếp (pin/attach) Quiz, Flashcard, Mindmap từ Kho Official vào từng Lecture cụ thể, xuất hiện ở tab Resources bên cạnh video bài giảng.
 - **Phân định rõ 2 loại Quiz:**
@@ -149,7 +149,7 @@
 | 3 | **2A+2B — Flashcard xóa + Export + SRS Official** | Đã hoàn thành (PASSED) | 0h |
 | 4 | **3B+3C — Ma trận 2 chiều + History** | Đã hoàn thành (PASSED) | 0h |
 | 5 | **2D — Mindmap readOnly** | Đã hoàn thành (PASSED) | 0h |
-| 6 | **2G — Curriculum Structure (Mới)** | Task kiến trúc nặng, phân tách 2 loại Quiz | 8-10h |
+| 6 | **2G — Curriculum Structure (Mới)** | Đã hoàn thành (PASSED - Cần xem xét lại) | 8-10h |
 | 7 | **3E — Multi-choice + tính điểm mới** | Đã hoàn thành (PASSED) | 0h |
 | 8 | **11B — Instructor Onboarding (Mới)** | Lọc spam, hồ sơ chuyên nghiệp | 3-4h |
 | 9 | **11A — Auto rate-limit AI + Dashboard** | Bỏ thủ công, tự động hóa | 8-10h |
