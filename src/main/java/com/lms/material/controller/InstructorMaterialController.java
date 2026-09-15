@@ -120,14 +120,14 @@ public class InstructorMaterialController {
             com.lms.material.entity.Quiz quiz = new com.lms.material.entity.Quiz();
             quiz.setMaterialGeneration(generation);
             quiz.setQuestionCount(0);
-            quiz.setIsOfficial(true);
+            quiz.setIsOfficial(false);
             quiz = quizRepository.save(quiz);
             materialId = quiz.getId();
         } else if (materialType == com.lms.common.enums.MaterialType.FLASHCARD) {
             FlashcardDeck deck = new FlashcardDeck();
             deck.setMaterialGeneration(generation);
             deck.setCardCount(0);
-            deck.setIsOfficial(true);
+            deck.setIsOfficial(false);
             deck = flashcardDeckRepository.save(deck);
             materialId = deck.getId();
         } else if (materialType == com.lms.common.enums.MaterialType.MINDMAP) {
@@ -135,7 +135,7 @@ public class InstructorMaterialController {
             mindmap.setMaterialGeneration(generation);
             mindmap.setNodeCount(0);
             mindmap.setMermaidCode("mindmap\n  root((\"Tâm điểm\"))\n    Nhánh 1\n    Nhánh 2");
-            mindmap.setIsOfficial(true);
+            mindmap.setIsOfficial(false);
             mindmap = mindmapRepository.save(mindmap);
             materialId = mindmap.getId();
         }

@@ -23,6 +23,7 @@ public class QuizDto {
 
     public record QuestionUpdateReq(
             String content,
+            Boolean isMultipleChoice,
             java.util.List<OptionReq> options
     ) {}
 

@@ -27,6 +27,9 @@ public class QuizQuestion extends BaseEntity {
     @Column(name = "display_order", nullable = false)
     private Integer displayOrder = 0;
 
+    @Column(name = "is_multiple_choice", nullable = false)
+    private Boolean isMultipleChoice = false;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "quiz_id", nullable = false)
     private Quiz quiz;
