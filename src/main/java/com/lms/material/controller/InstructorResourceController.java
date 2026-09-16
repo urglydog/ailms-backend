@@ -90,7 +90,7 @@ public class InstructorResourceController {
     @PreAuthorize("isAuthenticated()")
     @Transactional(readOnly = true)
     public ResponseEntity<List<Map<String, Object>>> getCourseResources(@PathVariable Long courseId) {
-        List<CourseResource> resources = courseResourceRepository.findByCourse_IdOrderByCreatedAtDesc(courseId);
+        List<CourseResource> resources = courseResourceRepository.findByCourse_IdAndIsDeletedFalseOrderByCreatedAtDesc(courseId);
         
         List<Map<String, Object>> result = resources.stream().map(r -> {
             Map<String, Object> map = new java.util.HashMap<>();
@@ -118,7 +118,9 @@ public class InstructorResourceController {
             throw new AccessDeniedDomainException("Ban khong co quyen");
         }
         
-        courseResourceRepository.delete(resource);
+        resource.setIsDeleted(true);
+        resource.setDeletedAt(java.time.LocalDateTime.now());
+        courseResourceRepository.save(resource);
         return ResponseEntity.ok(Map.of("message", "Đã xóa tài nguyên tĩnh"));
     }
 }

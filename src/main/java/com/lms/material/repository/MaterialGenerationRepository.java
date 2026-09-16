@@ -20,9 +20,9 @@ public interface MaterialGenerationRepository extends JpaRepository<MaterialGene
 
     long countByUser_IdAndCourse_Id(Long userId, Long courseId);
 
-    Optional<MaterialGeneration> findTopByUser_IdAndCourse_IdOrderByVersionNoDesc(Long userId, Long courseId);
+    Optional<MaterialGeneration> findTopByUser_IdAndCourse_IdAndIsDeletedFalseOrderByVersionNoDesc(Long userId, Long courseId);
     
-    List<MaterialGeneration> findByUser_IdAndCourse_IdOrderByVersionNoDesc(Long userId, Long courseId);
+    List<MaterialGeneration> findByUser_IdAndCourse_IdAndIsDeletedFalseOrderByVersionNoDesc(Long userId, Long courseId);
 
-    List<MaterialGeneration> findByCourse_IdOrderByCreatedAtDesc(Long courseId);
+    List<MaterialGeneration> findByCourse_IdAndIsDeletedFalseOrderByCreatedAtDesc(Long courseId);
 }

@@ -37,4 +37,10 @@ public class CourseResource extends BaseEntity {
 
     @Column(name = "file_type", length = 50)
     private String fileType;
+    
+    @Column(name = "is_deleted", nullable = false)
+    private Boolean isDeleted = false;
+    
+    @Column(name = "deleted_at")
+    private java.time.LocalDateTime deletedAt;
 }

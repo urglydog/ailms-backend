@@ -81,6 +81,12 @@ public class MaterialGeneration extends BaseEntity {
     @Column(name = "error_message", columnDefinition = "TEXT")
     private String errorMessage;
 
+    @Column(name = "is_deleted", nullable = false)
+    private Boolean isDeleted = false;
+
+    @Column(name = "deleted_at")
+    private java.time.LocalDateTime deletedAt;
+
     /** Nguoi yeu cau tao - bo hoc lieu chi thuoc ve nguoi nay. */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id", nullable = false)

@@ -71,6 +71,12 @@ public class Quiz extends BaseEntity {
     @Column(name = "max_violations")
     private Integer maxViolations = 3;
 
+    @Column(name = "is_deleted", nullable = false)
+    private Boolean isDeleted = false;
+
+    @Column(name = "deleted_at")
+    private java.time.LocalDateTime deletedAt;
+
 
     @OneToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "material_generation_id", nullable = false, unique = true)

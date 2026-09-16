@@ -26,6 +26,8 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, Long> {
 
     boolean existsByUser_EmailAndCourse_Id(String email, Long courseId);
 
+    Optional<Enrollment> findByUser_EmailAndCourse_Id(String email, Long courseId);
+
     /** Danh sách khóa đã sở hữu của 1 học viên ("Khóa học của tôi"). */
     List<Enrollment> findByUser_Email(String email);
 

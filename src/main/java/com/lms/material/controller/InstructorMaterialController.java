@@ -132,7 +132,7 @@ public class InstructorMaterialController {
 
         com.lms.common.enums.MaterialType materialType = com.lms.common.enums.MaterialType.valueOf(materialTypeStr);
 
-        int nextVersion = materialGenerationRepository.findTopByUser_IdAndCourse_IdOrderByVersionNoDesc(course.getInstructor().getId(), course.getId())
+        int nextVersion = materialGenerationRepository.findTopByUser_IdAndCourse_IdAndIsDeletedFalseOrderByVersionNoDesc(course.getInstructor().getId(), course.getId())
                 .map(mg -> mg.getVersionNo() + 1)
                 .orElse(1);
 
@@ -214,7 +214,7 @@ public class InstructorMaterialController {
     public ResponseEntity<java.util.List<java.util.Map<String, Object>>> getMaterialsForCourse(Principal principal, @PathVariable Long courseId) {
         // Fetch all generated materials for the course
         java.util.List<com.lms.material.entity.MaterialGeneration> generations = 
-            materialGenerationRepository.findByCourse_IdOrderByCreatedAtDesc(courseId);
+            materialGenerationRepository.findByCourse_IdAndIsDeletedFalseOrderByCreatedAtDesc(courseId);
                 
         java.util.List<java.util.Map<String, Object>> result = new java.util.ArrayList<>();
         for (com.lms.material.entity.MaterialGeneration gen : generations) {
@@ -255,7 +255,7 @@ public class InstructorMaterialController {
                         usageCount = flashcardReviewRepository.countByFlashcard_FlashcardDeck_Id(f.getId());
                     }
                 } else if (gen.getMaterialType() == com.lms.common.enums.MaterialType.QUIZ) {
-                    var q = quizRepository.findByMaterialGeneration_Id(gen.getId()).orElse(null);
+                    var q = quizRepository.findByMaterialGeneration_IdAndIsDeletedFalse(gen.getId()).orElse(null);
                     if (q != null) {
                         materialId = q.getId();
                         isOfficial = q.getIsOfficial();
