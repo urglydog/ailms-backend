@@ -184,6 +184,11 @@ public class InternalMaterialService {
                 Quiz quiz = new Quiz();
                 quiz.setMaterialGeneration(generation);
                 quiz.setQuestionCount(req.quizzes().size());
+                if (generation.getScopeType() == ScopeType.CUSTOM_LESSONS) {
+                    quiz.setQuizType(com.lms.common.enums.QuizType.LECTURE_QUIZ);
+                } else {
+                    quiz.setQuizType(com.lms.common.enums.QuizType.OFFICIAL_EXAM);
+                }
                 quiz = quizRepository.save(quiz);
 
                 int order = 1;
