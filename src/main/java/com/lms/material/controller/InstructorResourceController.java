@@ -92,16 +92,18 @@ public class InstructorResourceController {
     public ResponseEntity<List<Map<String, Object>>> getCourseResources(@PathVariable Long courseId) {
         List<CourseResource> resources = courseResourceRepository.findByCourse_IdOrderByCreatedAtDesc(courseId);
         
-        List<Map<String, Object>> result = resources.stream().map(r -> Map.of(
-                "id", r.getId(),
-                "title", r.getTitle(),
-                "fileUrl", r.getFileUrl(),
-                "fileSize", r.getFileSize() != null ? r.getFileSize() : 0,
-                "fileType", r.getFileType() != null ? r.getFileType() : "",
-                "chapterId", r.getChapter() != null ? r.getChapter().getId() : "",
-                "lessonId", r.getLesson() != null ? r.getLesson().getId() : "",
-                "createdAt", r.getCreatedAt().toString()
-        )).collect(Collectors.toList());
+        List<Map<String, Object>> result = resources.stream().map(r -> {
+            Map<String, Object> map = new java.util.HashMap<>();
+            map.put("id", r.getId());
+            map.put("title", r.getTitle());
+            map.put("fileUrl", r.getFileUrl());
+            map.put("fileSize", r.getFileSize() != null ? r.getFileSize() : 0);
+            map.put("fileType", r.getFileType() != null ? r.getFileType() : "");
+            map.put("chapterId", r.getChapter() != null ? r.getChapter().getId() : "");
+            map.put("lessonId", r.getLesson() != null ? r.getLesson().getId() : "");
+            map.put("createdAt", r.getCreatedAt().toString());
+            return map;
+        }).collect(Collectors.toList());
 
         return ResponseEntity.ok(result);
     }

@@ -115,8 +115,6 @@ public class InstructorMaterialController {
         return ResponseEntity.ok(java.util.Map.of("message", isOfficial ? "Đã đặt làm học liệu chính thức" : "Đã hủy học liệu chính thức"));
     }
 
-    @PostMapping(value = "/courses/{courseId}/upload")
-    @PreAuthorize("hasRole('INSTRUCTOR')")
     @PostMapping("/courses/{courseId}/manual")
     @PreAuthorize("hasRole('INSTRUCTOR')")
     @Transactional
