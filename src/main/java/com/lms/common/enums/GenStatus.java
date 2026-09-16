@@ -11,5 +11,6 @@ public enum GenStatus {
     PENDING,
     PROCESSING,
     COMPLETED,
-    FAILED
+    FAILED,
+    ARCHIVED
 }

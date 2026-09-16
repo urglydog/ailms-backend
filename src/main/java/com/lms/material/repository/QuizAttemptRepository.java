@@ -22,5 +22,7 @@ public interface QuizAttemptRepository extends JpaRepository<QuizAttempt, Long> 
     // Tìm attempt đang làm dở gần nhất
     QuizAttempt findFirstByUser_EmailAndQuiz_IdAndStatusOrderByCreatedAtDesc(String email, Long quizId, String status);
     
+    int countByQuiz_Id(Long quizId);
+    
     void deleteByQuiz_Id(Long quizId);
 }

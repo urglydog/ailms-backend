@@ -48,6 +48,7 @@ public class MaterialGenerationService {
     private final com.lms.material.repository.QuizQuestionRepository quizQuestionRepository;
     private final com.lms.material.repository.QuizOptionRepository quizOptionRepository;
     private final com.lms.material.repository.QuizAttemptRepository quizAttemptRepository;
+    private final com.lms.material.repository.QuizAnswerRepository quizAnswerRepository;
     private final com.lms.catalog.repository.ChapterRepository chapterRepository;
     private final com.lms.catalog.repository.LessonRepository lessonRepository;
     private final TranscriptRepository transcriptRepository;
@@ -343,6 +344,27 @@ public class MaterialGenerationService {
             throw new AccessDeniedDomainException("Học liệu này thuộc về người khác");
         }
 
+        int usageCount = 0;
+        if (generation.getMaterialType() == com.lms.common.enums.MaterialType.MINDMAP) {
+            // Mindmap doesn't have usage count for now
+        } else if (generation.getMaterialType() == com.lms.common.enums.MaterialType.FLASHCARD) {
+            usageCount = flashcardDeckRepository.findByMaterialGeneration_Id(generation.getId())
+                    .map(deck -> flashcardReviewRepository.countByFlashcard_FlashcardDeck_Id(deck.getId()))
+                    .orElse(0);
+        } else if (generation.getMaterialType() == com.lms.common.enums.MaterialType.QUIZ) {
+            usageCount = quizRepository.findByMaterialGeneration_Id(generation.getId())
+                    .map(quiz -> quizAttemptRepository.countByQuiz_Id(quiz.getId()))
+                    .orElse(0);
+        }
+
+        if (usageCount > 0) {
+            // Soft Delete
+            generation.setStatus(com.lms.common.enums.GenStatus.ARCHIVED);
+            materialGenerationRepository.save(generation);
+            return;
+        }
+
+        // Hard Delete
         if (generation.getMaterialType() == com.lms.common.enums.MaterialType.MINDMAP) {
             mindmapRepository.findByMaterialGeneration_Id(generation.getId()).ifPresent(mindmapRepository::delete);
         } else if (generation.getMaterialType() == com.lms.common.enums.MaterialType.FLASHCARD) {
@@ -353,6 +375,7 @@ public class MaterialGenerationService {
             });
         } else if (generation.getMaterialType() == com.lms.common.enums.MaterialType.QUIZ) {
             quizRepository.findByMaterialGeneration_Id(generation.getId()).ifPresent(quiz -> {
+                quizAnswerRepository.deleteByQuizAttempt_Quiz_Id(quiz.getId());
                 quizAttemptRepository.deleteByQuiz_Id(quiz.getId());
                 
                 quizQuestionRepository.findByQuiz_IdOrderByDisplayOrderAsc(quiz.getId()).forEach(question -> {

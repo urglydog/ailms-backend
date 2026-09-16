@@ -29,6 +29,7 @@ public class InstructorMaterialController {
     private final com.lms.material.repository.MaterialGenerationRepository materialGenerationRepository;
     private final com.lms.material.repository.QuizRepository quizRepository;
     private final com.lms.material.repository.QuizAttemptRepository quizAttemptRepository;
+    private final com.lms.material.repository.FlashcardReviewRepository flashcardReviewRepository;
     private final NotificationService notificationService;
     private final EnrollmentRepository enrollmentRepository;
     private final CourseRepository courseRepository;
@@ -217,6 +218,10 @@ public class InstructorMaterialController {
                 
         java.util.List<java.util.Map<String, Object>> result = new java.util.ArrayList<>();
         for (com.lms.material.entity.MaterialGeneration gen : generations) {
+            if (gen.getStatus() == com.lms.common.enums.GenStatus.ARCHIVED) {
+                continue;
+            }
+            
             boolean createdByInstructor = gen.getUser() != null && gen.getUser().getEmail().equals(principal.getName());
             
             boolean isOfficial = false;
@@ -233,6 +238,7 @@ public class InstructorMaterialController {
             Integer maxAttempts = null;
             Boolean isProctored = false;
             Integer maxViolations = 3;
+            Integer usageCount = 0;
 
             if (gen.getStatus() == com.lms.common.enums.GenStatus.COMPLETED) {
                 if (gen.getMaterialType() == com.lms.common.enums.MaterialType.MINDMAP) {
@@ -246,12 +252,14 @@ public class InstructorMaterialController {
                     if (f != null) {
                         materialId = f.getId();
                         isOfficial = f.getIsOfficial();
+                        usageCount = flashcardReviewRepository.countByFlashcard_FlashcardDeck_Id(f.getId());
                     }
                 } else if (gen.getMaterialType() == com.lms.common.enums.MaterialType.QUIZ) {
                     var q = quizRepository.findByMaterialGeneration_Id(gen.getId()).orElse(null);
                     if (q != null) {
                         materialId = q.getId();
                         isOfficial = q.getIsOfficial();
+                        usageCount = quizAttemptRepository.countByQuiz_Id(q.getId());
                         quizType = q.getQuizType() != null ? q.getQuizType().name() : "OFFICIAL_EXAM";
                         questionCount = q.getQuestionCount();
                         randomPickCount = q.getRandomPickCount();
