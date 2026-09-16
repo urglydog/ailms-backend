@@ -1,15 +1,8 @@
--- 1. Revert material_generations table
-ALTER TABLE material_generations DROP COLUMN IF EXISTS attached_chapter_id;
-ALTER TABLE material_generations DROP COLUMN IF EXISTS attached_lesson_ids;
-ALTER TABLE material_generations DROP COLUMN IF EXISTS static_file_url;
-
 -- Restore standard foreign keys if they don't exist
--- In MySQL, ADD COLUMN IF NOT EXISTS requires MariaDB or MySQL 8.0.16+ which we are on, but for FK we need standard syntax
-ALTER TABLE material_generations ADD COLUMN IF NOT EXISTS lesson_id BIGINT;
-ALTER TABLE material_generations ADD COLUMN IF NOT EXISTS chapter_id BIGINT;
+ALTER TABLE material_generations ADD COLUMN chapter_id BIGINT;
 
 -- 2. Create course_resources table for Static Files (PDF, PPT, ZIP, etc)
-CREATE TABLE IF NOT EXISTS course_resources (
+CREATE TABLE course_resources (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     course_id BIGINT NOT NULL,
     chapter_id BIGINT,
