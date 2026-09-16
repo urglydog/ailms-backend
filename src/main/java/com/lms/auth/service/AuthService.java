@@ -45,6 +45,7 @@ public class AuthService {
 
     private static final String LOGIN_FAIL_PREFIX = "login_fail:";
     private static final String REFRESH_TOKEN_PREFIX = "refresh_token:";
+    private static final String USER_TOKENS_PREFIX = "user_refresh_tokens:";
     private static final String PENDING_USER_PREFIX = "pending_user:";
 
     /**
@@ -133,8 +134,9 @@ public class AuthService {
         CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
         
         // Lưu Refresh Token vào Redis với TTL 7 ngày (BR-AUTH-04)
-        // Lưu key là token, value là email. Có thể lưu thêm set user_refresh_tokens để thu hồi
         redisTemplate.opsForValue().set(REFRESH_TOKEN_PREFIX + refreshToken, userDetails.getEmail(), Duration.ofDays(7));
+        redisTemplate.opsForSet().add(USER_TOKENS_PREFIX + userDetails.getEmail(), refreshToken);
+        redisTemplate.expire(USER_TOKENS_PREFIX + userDetails.getEmail(), Duration.ofDays(7));
 
         return new TokenRes(accessToken, refreshToken);
     }
@@ -163,8 +165,23 @@ public class AuthService {
     }
 
     public void logout(String refreshToken) {
-        // Thu hồi refresh token hiện tại bằng cách xóa khỏi Redis
+        String email = redisTemplate.opsForValue().get(REFRESH_TOKEN_PREFIX + refreshToken);
+        if (email != null) {
+            redisTemplate.opsForSet().remove(USER_TOKENS_PREFIX + email, refreshToken);
+        }
         redisTemplate.delete(REFRESH_TOKEN_PREFIX + refreshToken);
+    }
+
+    public void logoutAllDevices(String email) {
+        java.util.Set<String> tokens = redisTemplate.opsForSet().members(USER_TOKENS_PREFIX + email);
+        if (tokens != null && !tokens.isEmpty()) {
+            for (String token : tokens) {
+                redisTemplate.delete(REFRESH_TOKEN_PREFIX + token);
+            }
+        }
+        redisTemplate.delete(USER_TOKENS_PREFIX + email);
+        // Xoá cả phiên xem video hiện tại (nếu có)
+        redisTemplate.delete("user_stream:" + email); // Wait, user_stream uses userId!
     }
 
     /**

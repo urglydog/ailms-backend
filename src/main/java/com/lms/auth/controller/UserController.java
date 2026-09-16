@@ -26,6 +26,7 @@ import java.util.List;
 public class UserController {
 
     private final UserService userService;
+    private final com.lms.auth.service.AuthService authService;
 
     /**
      * Lấy danh sách toàn bộ người dùng (Chỉ dành cho Admin).
@@ -42,6 +43,15 @@ public class UserController {
     @GetMapping("/me")
     public ResponseEntity<UserRes> getMyProfile(java.security.Principal principal) {
         return ResponseEntity.ok(userService.getUserByEmail(principal.getName()));
+    }
+
+    /**
+     * Đăng xuất khỏi tất cả các thiết bị khác (Task 10).
+     */
+    @PostMapping("/me/logout-all")
+    public ResponseEntity<MessageRes> logoutAllDevices(java.security.Principal principal) {
+        authService.logoutAllDevices(principal.getName());
+        return ResponseEntity.ok(new MessageRes("Đã đăng xuất khỏi tất cả các thiết bị."));
     }
 
     /**

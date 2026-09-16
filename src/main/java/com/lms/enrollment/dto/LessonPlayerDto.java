@@ -89,4 +89,10 @@ public class LessonPlayerDto {
             Integer endSec,
             String fileUrl
     ) {}
+
+    public record HeartbeatReq(
+            String sessionId,
+            String deviceName,
+            boolean force
+    ) {}
 }
