@@ -113,8 +113,24 @@ public class MaterialGenerationService {
         generation.setCourse(course);
         generation.setMaterialType(req.materialType());
         generation.setLanguage(req.language());
+        if (req.title() != null && !req.title().trim().isEmpty()) {
+            generation.setTitle(req.title().trim());
+        }
         generation.setScopeType(req.scopeType());
         generation.setScopeRefId(req.scopeRefId());
+        
+        // Auto-binding logic
+        if (req.scopeType() == com.lms.common.enums.ScopeType.CUSTOM_LESSONS && req.customLessonIds() != null && req.customLessonIds().size() == 1) {
+            com.lms.catalog.entity.Lesson lesson = new com.lms.catalog.entity.Lesson();
+            lesson.setId(req.customLessonIds().get(0));
+            generation.setLesson(lesson);
+        }
+        if (req.scopeType() == com.lms.common.enums.ScopeType.CHAPTER && req.scopeRefId() != null) {
+            com.lms.catalog.entity.Chapter chapter = new com.lms.catalog.entity.Chapter();
+            chapter.setId(req.scopeRefId());
+            generation.setChapter(chapter);
+        }
+
         if (req.scopeType() == com.lms.common.enums.ScopeType.CUSTOM_LESSONS && req.customLessonIds() != null && !req.customLessonIds().isEmpty()) {
             try {
                 generation.setCustomLessonIds(objectMapper.writeValueAsString(req.customLessonIds()));
