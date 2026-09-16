@@ -132,7 +132,7 @@ public class InstructorMaterialController {
 
         com.lms.common.enums.MaterialType materialType = com.lms.common.enums.MaterialType.valueOf(materialTypeStr);
 
-        int nextVersion = materialGenerationRepository.findTopByUser_IdAndCourse_IdOrderByVersionNoDesc(course.getInstructor().getId(), course.getId())
+        int nextVersion = materialGenerationRepository.findTopByUser_IdAndCourse_IdAndIsDeletedFalseOrderByVersionNoDesc(course.getInstructor().getId(), course.getId())
                 .map(mg -> mg.getVersionNo() + 1)
                 .orElse(1);
 
