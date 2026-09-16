@@ -1,157 +1,133 @@
-# 📋 Phân Tích UpComming_Plan & Current Plan (v2)
+Việc tham chiếu trực tiếp từ **Udemy** (và các nền tảng edtech lớn như Coursera, edX) là hoàn toàn chuẩn xác để tránh tình trạng "tự chế nghiệp vụ" dẫn tới việc phá vỡ luồng người dùng hoặc xung đột cơ sở dữ liệu.
 
-> Phân tích dựa trên hiện trạng code thực tế + feedback chi tiết từ người dùng.  
-> Cập nhật lần cuối: 14/09/2026  
-> *(Phần thay đổi mô hình YouTube đã được tách riêng thành văn bản Đề Xuất trình ban quản trị).*
+Dưới đây là các khuyến nghị chuẩn hóa theo chuẩn công nghiệp (Industry Best Practices) cho **Task 1, Task 4, Task 10 và Task 11**.
 
 ---
 
-## TASK 1: Tiến Độ Học Tập (Progress Tracking)
+### TASK 1: Tiến Độ Học Tập (Progress Tracking)
 
-**Hiện trạng:** "chưa thật sự thấy effect để test"
+**Chuẩn Udemy hoạt động ra sao?**
 
-**Đề xuất:**
-- Kiểm tra endpoint progress đã trả đúng data chưa
-- Nếu chưa có giao diện → build trang `/my-progress` với biểu đồ tiến độ
-- **Ưu tiên:** THẤP — để sau khi hoàn thiện các task cốt lõi
+* **Không làm trang `/my-progress` riêng biệt rườm rà với biểu đồ phức tạp**: Học viên không vào LMS để ngắm biểu đồ chứng khoán. Tiến độ trên Udemy gắn liền mật thiết với việc **hoàn thành từng bài học (Checklist-driven completion)** và **điều kiện cấp Chứng chỉ (Certificate of Completion)**.
+* **Quy tắc tính % tiến độ:**
 
----
+$$\text{Progress \%} = \left( \frac{\text{Số mục bắt buộc đã tick hoàn thành}}{\text{Tổng số mục bắt buộc trong Curriculum}} \right) \times 100$$
 
-## TASK 2: CRUD Học Liệu Cá Nhân (6 sub-task)
 
-### 2A. Flashcard — Kho Cá Nhân (Browse tab)
+* **Trọng số và điều kiện hoàn thành:**
+* **Video bài giảng:** Tự động đánh dấu `COMPLETED` khi học viên xem đạt $\ge 80\%$ thời lượng video. Học viên cũng có thể tự bấm bỏ tick/tick thủ công nếu muốn.
+* **Quiz gắn bài học (Quick Check):** Chỉ cần submit bài đạt điểm đậu (Passing Score, ví dụ $\ge 80\%$) thì mới được đánh dấu hoàn thành bài học đó.
+* **Học liệu tĩnh (PDF, Slide, Sách):** Tự động tick hoàn thành khi học viên click nút "Tải về" hoặc xem file.
 
-| Tính năng | Hiện trạng | Cần làm |
-|---|---|---|
-| Edit card | ✅ `PATCH /api/v1/flashcards/{id}` | Verify instant update |
-| Thêm card | ✅ `POST /api/v1/flashcards/deck/{generationId}` | OK |
-| **Xóa card** | ✅ `DELETE /api/v1/flashcards/{id}` | OK |
-| **Export Anki/Quizlet** | ✅ | OK |
 
-### 2B. Flashcard — Kho Official
 
-| Tính năng | Cần làm |
-|---|---|
-| **SRS cho Official** | ✅ Đã hoàn thành (dùng FlashcardStudyMode readOnly) |
-| **Export** | ✅ Đã hoàn thành |
+**Yêu cầu kỹ thuật khuyến nghị cho hệ thống của bạn:**
 
-### 2C. Mindmap — Kho Cá Nhân
-- Xoay 4 hướng, tải SVG, Copy code: ✅ đã có
-- **Tooltip nút Copy:** hover → "Copy mã Mermaid (paste vào nền tảng hỗ trợ Mermaid.js)"
-- **Xóa mindmap:** ✅ Đã hoàn thành (Có modal xác nhận)
+* **Bỏ ý định làm trang `/my-progress` riêng:** Đưa tiến độ trực tiếp vào:
+1. **Course Card ngoài trang chủ / My Courses:** Thanh progress bar nhỏ kèm con số (ví dụ: `45% hoàn thành`).
+2. **Top Header của màn hình học (Learning Player):** Thanh tiến độ kèm biểu tượng cúp (Trophy icon). Khi đạt 100%, popup chúc mừng xuất hiện và kích hoạt nút tải **Chứng chỉ hoàn thành (PDF Certificate)**.
 
-### 2D. Mindmap — Kho Official + Tab Xem Tĩnh Instructor
-- `CourseMaterialsManager.tsx` tab VIEW: thêm `readOnly={true}` (1 dòng code)
-- Student Official: verify `readOnly` sau build mới
 
-### 2E. Trắc Nghiệm — Kho Cá Nhân
-- Xóa/sửa câu hỏi cho student: cần endpoint mới với ownership check
+* **Xử lý xóa học liệu (như đã phân tích trước đó):** Đảm bảo dùng **Soft Delete** (`is_deleted = true`). Nếu giảng viên xóa một bài Quiz, công thức tính mẫu số tổng bài tập phải được cân đối lại để không làm tụt tiến độ của học viên đã nộp bài.
 
-### 2F. Phía Giảng Viên [PASSED]
-- Đã hoàn thành các UX cơ bản cho giảng viên (Ngôn ngữ, Tạo thủ công, Xóa học liệu, Chỉnh sửa Node Mindmap).
 
-### 2G. Cấu Trúc Khóa Học (Curriculum Structure) - Chuẩn Udemy [PASSED - Cần xem xét lại]
-- Tổ chức học liệu theo mô hình hình cây: **Chương (Section) $\rightarrow$ Bài học (Lecture) $\rightarrow$ Tài nguyên đính kèm (Resources)**.
-- Cho phép đính kèm trực tiếp (pin/attach) Quiz, Flashcard, Mindmap từ Kho Official vào từng Lecture cụ thể, xuất hiện ở tab Resources bên cạnh video bài giảng.
-- **Phân định rõ 2 loại Quiz:**
-  - **Lecture Quiz (Quick Check):** Gắn trong tab Resources cuối bài học. Chỉ từ 1-3 câu, KHÔNG cần Camera, KHÔNG cần đếm ngược, làm xong biết đáp án ngay để củng cố kiến thức.
-  - **Official Exam / Test:** Áp dụng toàn bộ luồng kiểm tra nghiêm ngặt ở Task 3 (Camera, Timer, ma trận, 2 chốt nộp bài).
 
 ---
 
-## TASK 4: Import / Export Mở Rộng (Ngoại Trừ AI)
+### TASK 4: Import / Export Mở Rộng
 
-**Vấn đề:** Hiện tại cả giảng viên và học viên đều bị phụ thuộc quá nhiều vào AI để tạo học liệu, hoặc tạo thủ công từng câu/thẻ rất mất thời gian.
+**Chuẩn Udemy & LMS hiện nay hoạt động ra sao?**
 
-**Đề xuất tính năng (Mới):**
-- **Giảng viên (Instructor):**
-  - **Trắc nghiệm & Flashcard:** Cho phép import hàng loạt từ file Excel (`.xlsx`), CSV, hoặc JSON theo form mẫu có sẵn.
-  - **Mindmap:** Cung cấp khung nhập liệu trực tiếp mã Mermaid (giống Draw.io). Gõ code đến đâu render sơ đồ đến đó, sau đó nhấn "Lưu" để thành Mindmap chính thức thay vì phải đợi AI sinh.
-- **Học viên (Student):**
-  - Dựa trên BR hệ thống, học viên ĐƯỢC QUYỀN chủ động tạo học liệu cá nhân. Do đó, học viên cũng sẽ được phép Import các bộ Flashcard từ Anki/Quizlet (file `.txt`, `.csv`) để tự học trong hệ thống mà không cần tốn token AI.
-  - Export: Cho phép học viên tải Markdown của Mindmap, tải PDF của Quiz (để in ra giấy).
+* Udemy cung cấp công cụ **Bulk Course Importer** cho giảng viên và hỗ trợ tài liệu học tập mở rộng cho học viên.
+* **Về phía Giảng viên:**
+* **Flashcard & Quiz:** Định dạng nhập liệu tốt nhất không phải là JSON (quá khó cho giảng viên thông thường) mà là **CSV / Excel (`.xlsx`) theo mẫu chuẩn**.
+* Cột CSV chuẩn Quiz: `Question Type (SINGLE/MULTI)`, `Question Text`, `Option A`, `Option B`, `Option C`, `Option D`, `Correct Answer (A, B, C...)`, `Explanation`.
+* Cột CSV chuẩn Flashcard: `Front (Term)`, `Back (Definition)`.
 
----
 
-## TASK 3: Tối Ưu Luồng Làm Bài Quiz Official [PASSED]
+* **Mindmap:** Đưa khung Mermaid Editor trực tiếp là rất tốt, nhưng cần bổ sung nút **"Xem trước trực tiếp" (Live Preview Split-screen)**: Bên trái gõ Markdown/Mermaid, bên phải render Canvas ngay lập tức trước khi bấm "Lưu".
 
-### 3A & 3B. Layout Sidebar, Phân Trang & Ma Trận 2 Chiều Cố Định [PASSED]
-- **Layout Cố Định (Sticky):** Các thành phần bên cột phải (đồng hồ đếm ngược, camera giám sát, nút nộp bài, ma trận 2 chiều) **tuyệt đối không bị xê dịch** khi người dùng cuộn màn hình để làm các câu hỏi khác. 
-- **Vị trí Ma Trận:** Ma trận 2 chiều phải nằm **BÊN DƯỚI** nút nộp bài, hoặc ở vị trí `absolute` góc phải phía dưới cùng (nơi còn trống).
-- **Phân trang:** Hiển thị tối đa 5 câu hỏi/trang, sử dụng nút mũi tên `< >` để chuyển đổi qua lại giữa các trang.
-- **Quy tắc Ma Trận:**
-  - Ô vuông chia tỉ lệ: 70% phía trên hiển thị số thứ tự câu hỏi, 30% phía dưới hiển thị dấu tích nền xanh (đã làm) và dấu `x` nền đỏ (chưa làm).
-  - Khi nhấn vào câu nào trên ma trận, màn hình sẽ tự động forward về đúng câu đó (bất kể đang ở trang nào).
 
-### 3C. Tích hợp Ma Trận vào Lịch Sử Làm Bài [PASSED]
-- Màn hình lịch sử / xem chi tiết bài làm hiện đang dồn toàn bộ đáp án vào một trang cuộn dọc rất dài (có thể lên tới hàng trăm câu).
-- **Yêu cầu:** Bắt buộc bổ sung Ma Trận 2 chiều vào màn hình Lịch sử này để học viên có thể click vào ma trận và nhảy ngay đến câu hỏi cần xem, thay vì phải cuộn dọc liên tục.
+* **Về phía Học viên:**
+* **Import Flashcard:** Hỗ trợ định dạng `.txt` (tab-separated) chuẩn Anki/Quizlet.
+* **Export Quiz:** Không chỉ PDF, học viên rất thích in dạng **Cheatsheet tóm tắt** hoặc bộ đề trắng (kèm đáp án ở trang cuối) để tự làm lại trên giấy.
 
-### 3D. Quy Trình Nộp Bài 2 Chốt Chặn [PASSED]
-- **Chốt 1 (Nút Nộp bài ngoài bài thi):** Nếu phát hiện có câu hỏi chưa làm, hệ thống KHÔNG cần đếm chính xác số câu, mà chỉ hiện thông báo nhắc nhở chung: *"Vui lòng hoàn thành toàn bộ câu hỏi trước khi nộp"* (Mục đích: Gọi nhớ người dùng tự nhìn vào ma trận để xem câu nào còn thiếu).
-- **Chốt 2 (Màn hình Review Confirm):**
-  - Hiển thị danh sách TỪNG CÂU HỎI dọc từ trên xuống dưới.
-  - Mỗi câu hỏi chỉ hiển thị dòng chữ: `✅ Đã ghi nhận câu trả lời` HOẶC `❌ Chưa ghi nhận câu trả lời` (đối với câu bị bỏ trống).
-  - KHÔNG sử dụng ma trận hay dạng rút gọn ở bước này.
-  - Người dùng **bắt buộc phải cuộn xuống tận cùng** của danh sách này mới thấy được 2 nút: **[Xác nhận nộp bài]** và **[Quay lại bài thi]**.
 
-### 3E. Câu Hỏi Chọn Nhiều Đáp Án (Multi-choice) [PASSED]
-- **Giao diện:** Chuyển từ thẻ radio (chỉ chọn 1) sang dạng ô **Checkbox** để học viên có thể check chọn nhiều đáp án.
-- **Nhắc nhở:** Tự động bổ sung ghi chú dòng chữ `(Chọn nhiều đáp án)` dưới tiêu đề của các câu hỏi thuộc loại này.
-- **Logic Tính Điểm Mới:** Đảm bảo đúng chuẩn: Sinh viên phải chọn **ĐÚNG VÀ ĐỦ TẤT CẢ** các đáp án đúng được set sẵn mới được tính điểm câu đó. Chọn thiếu hoặc dư đáp án sai đều bị 0 điểm.
 
 ---
 
-## TASK 10: Quản Lý Thiết Bị / Phiên Đăng Nhập
+### TASK 10: Quản Lý Thiết Bị & Phiên Đăng Nhập (Mô hình Streaming)
 
-### 10C. Quản Lý Đa Thiết Bị — Mô Hình Google ⭐
+**Chuẩn Udemy/Coursera/Netflix hoạt động ra sao?**
+Họ tuyệt đối **không bắt người dùng vào Settings tự tay bấm "Ban thiết bị"** đối với việc xem video thông thường, vì người dùng học tập thường xuyên đổi từ Laptop cá nhân sang điện thoại hoặc máy tính công ty.
 
-**Nguyên tắc:**
-- **Cho phép đăng nhập trên nhiều thiết bị** cùng lúc.
-- **KHÔNG cưỡng chế logout** thiết bị cũ.
+**Đề xuất chuẩn hóa:**
 
-**Luồng Phát Hiện & Chống Share Tài Khoản:**
-1. **Cảnh báo thiết bị mới:** Hệ thống gửi **email cảnh báo** đến email user khi phát hiện thiết bị mới.
-2. **Quản lý thiết bị:** User có thể vào **Trang quản lý thiết bị** (trong Settings cá nhân) để xem thiết bị đang kết nối và nhấn **"Ban thiết bị"** nếu cần.
-3. **Chặn phát video đồng thời (Concurrent Stream Restriction):** 
-   - **Cơ chế kỹ thuật:** FE video player định kỳ 15-30 giây gửi một request nhẹ (Heartbeat ping qua API `POST /api/v1/sessions/heartbeat` kèm `session_id` và `course_id`). Backend lưu heartbeat vào Redis kèm TTL. Nếu phát hiện một `session_id` khác cùng user đang phát video, Backend trả về cờ yêu cầu dừng stream ở thiết bị (session) cũ kèm thông báo *"Tài khoản của bạn đang phát video trên thiết bị khác"*.
+* **Concurrent Stream Restriction (Giới hạn stream đồng thời):**
+* Mỗi khi Player phát video, gửi heartbeat ping (ví dụ 20s/lần) lên Redis kèm TTL:
+```
+Key: user_stream:{userId} -> Value: {sessionId, deviceName, timestamp} (TTL = 30s)
 
----
+```
 
-## TASK 11: Quản Lý User
 
-### 11A. Admin ⭐
+* Nếu một thiết bị khác (Session B) bắt đầu ấn Play video, Redis ghi đè Session B.
+* Khi Session A gửi ping tiếp theo, Backend phát hiện `sessionId` gửi lên không trùng với `sessionId` đang active trong Redis $\rightarrow$ Trả về mã lỗi `CONCURRENT_STREAM_DETECTED`.
+* **Phía Frontend (Session A):** Dừng ngay video player và hiện modal nhẹ:
+> *"Video đã tạm dừng vì tài khoản của bạn đang phát video trên một thiết bị khác."* kèm nút **"Tiếp tục phát tại đây"** (Nếu bấm, nó sẽ giành lại quyền phát từ Session B).
 
-**Bỏ cơ chế khóa AI thủ công → Thay bằng auto rate-limit:**
-1. Thiết lập limit call AI/ngày cho mỗi user.
-2. Quá ngưỡng 80% $\rightarrow$ cảnh báo, 100% $\rightarrow$ chặn auto. Cố tình spam vượt ngưỡng $\rightarrow$ tạm khóa AI 24h.
 
-**Dashboard Admin (Data-driven):**
-- Xây dựng dashboard dạng biểu đồ trực quan (như chứng khoán).
-- Sử dụng **Recharts** (dạng Sparkline, Trend indicator, Bar chart).
-- KHÔNG hiển thị giao diện theo kiểu nút bấm và chữ rời rạc "loãng" màn hình.
 
-### 11B. Giảng Viên (Instructor Onboarding)
-- **Profile Khởi tạo Giảng viên:** Để lọc spam tốt hơn việc chỉ dựa vào 2FA, yêu cầu user điền một Profile ngắn gọn (Headline/Tiêu đề chuyên môn, Bio, Thông tin thanh toán) trước khi được vào giao diện tạo khóa học lần đầu.
 
-### 11C. Student/User Cá Nhân
-- Bổ sung chức năng gửi yêu cầu Khôi phục Mật khẩu qua Email.
-- Thêm bảo mật 2 bước bằng ứng dụng Authenticator (2FA).
+* **Quản lý thiết bị trong Settings:** Chỉ phục vụ mục đích **Security (Bảo mật tài khoản)**:
+* Hiển thị danh sách: Trình duyệt, Hệ điều hành, Địa chỉ IP, Vị trí gần đúng, Thời gian hoạt động gần nhất.
+* Cung cấp duy nhất một nút: **"Đăng xuất khỏi tất cả các thiết bị khác" (Log out from all other devices)** thay vì nút "Ban" mang tính tiêu cực.
+
+
 
 ---
 
-## 🎯 Đề Xuất Thứ Tự Ưu Tiên Chuẩn
+### TASK 11: Quản Lý Người Dùng & Giảng Viên (User & Admin)
 
-| # | Task | Lý do | Ước lượng |
-|---|---|---|---|
-| 1 | **2F — Fix UX giảng viên** | Đã hoàn thành (PASSED) | 0h |
-| 2 | **3D — 2 chốt chặn nộp bài** | Đã hoàn thành (PASSED) | 0h |
-| 3 | **2A+2B — Flashcard xóa + Export + SRS Official** | Đã hoàn thành (PASSED) | 0h |
-| 4 | **3B+3C — Ma trận 2 chiều + History** | Đã hoàn thành (PASSED) | 0h |
-| 5 | **2D — Mindmap readOnly** | Đã hoàn thành (PASSED) | 0h |
-| 6 | **2G — Curriculum Structure (Mới)** | Đã hoàn thành (PASSED - Cần xem xét lại) | 8-10h |
-| 7 | **3E — Multi-choice + tính điểm mới** | Đã hoàn thành (PASSED) | 0h |
-| 8 | **11B — Instructor Onboarding (Mới)** | Lọc spam, hồ sơ chuyên nghiệp | 3-4h |
-| 9 | **11A — Auto rate-limit AI + Dashboard** | Bỏ thủ công, tự động hóa | 8-10h |
-| 10| **11C — 2FA + Quên mật khẩu** | Nền tảng bảo mật | 6-8h |
-| 11| **10C — Concurrent Stream (Heartbeat Redis)** | Infrastructure nâng cao | 8-10h |
+#### 11A. Admin Dashboard & Auto Rate-limit AI
+
+* **Auto Rate-limit AI:**
+* Udemy không có AI sinh học liệu tự động, nhưng các nền tảng AI SaaS lớn (như OpenAI, Cursor, Notion AI) đều dùng thuật toán **Token Bucket** hoặc **Sliding Window Log** qua Redis.
+* Thiết lập hạn mức rõ ràng: Số lượt gọi AI/ngày hoặc Số lượng Token/ngày (cho cả Student và Instructor).
+* Trả về header HTTP chuẩn: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`.
+* Khi chạm 100%: Thay vì "Tạm khóa AI 24h" (nghe rất giống trừng phạt), hãy hiển thị: *"Bạn đã sử dụng hết hạn mức AI hôm nay. Hạn mức sẽ được làm mới sau X giờ"* (hoặc gợi ý dùng tính năng tạo thủ công/import file).
+
+
+* **Dashboard Admin (Recharts):**
+* Chuẩn hóa theo mô hình phân tích kinh doanh (EdTech Metrics):
+1. **MRR / Doanh thu** (nếu có bán khóa học) hoặc **Total Active Users (DAU/MAU)**.
+2. **Khóa học chờ duyệt (Pending Moderation Queue)**: Hiển thị ngay đầu trang để Admin xử lý kiểm duyệt nội dung nhanh.
+3. **AI Usage & Cost Spike**: Biểu đồ Bar/Area chart thể hiện lượng tiêu thụ Token AI theo từng ngày để Admin kiểm soát chi phí API.
+
+
+
+
+
+#### 11B. Instructor Onboarding Profile (Chuẩn hóa từ Đề xuất YouTube/Udemy)
+
+* Để một học viên chuyển sang làm Giảng viên, họ phải trải qua luồng Onboarding 3 bước nhẹ nhàng (Wizard):
+1. **Bước 1: Hồ sơ Giảng dạy (Instructor Profile):** Tiêu đề nghề nghiệp (ví dụ: *Senior Java Engineer*), Tiểu sử (Bio), Ảnh đại diện/Banner.
+2. **Bước 2: Kinh nghiệm & Lĩnh vực:** Chọn các danh mục chuyên môn (Công nghệ thông tin, Thiết kế, Kinh doanh...).
+3. **Bước 3: Điều khoản Giảng dạy (Instructor Terms):** Đồng ý với quy tắc bản quyền và chia sẻ nội dung.
+
+
+* Sau khi hoàn tất 3 bước này, tài khoản được cấp cờ `is_instructor_profile_completed = true` và lập tức được mở quyền tạo khóa học ở trạng thái `DRAFT`.
+
+
+
+---
+
+### Bảng Điều Chỉnh Kế Hoạch & Roadmap Chuẩn Hóa
+
+| Task | Thay đổi quan trọng nhất để chuẩn Udemy | Mức độ ưu tiên |
+| --- | --- | --- |
+| **Task 1 (Progress)** | Bỏ trang `/my-progress` rời rạc; tích hợp % checklist vào Player Header + cấp Chứng chỉ khi $100\%$ | Thấp (Làm sau khi xong Curriculum) |
+| **Task 4 (Import/Export)** | Cung cấp mẫu file Excel/CSV chuẩn; Live Preview cho Mermaid | Trung bình |
+| **Task 10 (Multi-device)** | Thay nút "Ban thiết bị" thủ công bằng **Chặn phát video đồng thời tự động (Heartbeat Redis)** | Cao (Bảo vệ nội dung khóa học) |
+| **Task 11B (Onboarding)** | Triển khai Onboarding Profile Wizard 3 bước trước khi tạo khóa học đầu tiên | Cao (Chặn spam tài khoản) |
+| **Task 11A (Admin)** | Rate-limit AI dạng quota hàng ngày; Dashboard tập trung vào Moderation Queue & Token usage | Trung bình |

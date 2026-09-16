@@ -51,6 +51,9 @@ class AuthServiceTest {
     private ValueOperations<String, String> valueOperations;
 
     @Mock
+    private org.springframework.data.redis.core.SetOperations<String, String> setOperations;
+
+    @Mock
     private PasswordEncoder passwordEncoder;
 
     @Mock
@@ -172,6 +175,7 @@ class AuthServiceTest {
         when(userRepository.save(any(User.class))).thenReturn(user);
         when(jwtTokenProvider.generateAccessToken(any())).thenReturn("access_token");
         when(jwtTokenProvider.generateRefreshToken(any())).thenReturn("refresh_token");
+        when(redisTemplate.opsForSet()).thenReturn(setOperations);
 
         TokenRes tokens = authService.resetPassword(email, otp, newPassword);
 
@@ -291,6 +295,7 @@ class AuthServiceTest {
 
         when(userRepository.findByEmail(googleEmail)).thenReturn(Optional.empty());
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(redisTemplate.opsForSet()).thenReturn(setOperations);
         when(jwtTokenProvider.generateAccessToken(any())).thenReturn("access_token");
         when(jwtTokenProvider.generateRefreshToken(any())).thenReturn("refresh_token");
 
@@ -329,6 +334,7 @@ class AuthServiceTest {
         existingUser.setAvatarUrl("https://example.com/old-pic.jpg");
         when(userRepository.findByEmail(googleEmail)).thenReturn(Optional.of(existingUser));
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(redisTemplate.opsForSet()).thenReturn(setOperations);
         when(jwtTokenProvider.generateAccessToken(any())).thenReturn("access_token");
         when(jwtTokenProvider.generateRefreshToken(any())).thenReturn("refresh_token");
 
