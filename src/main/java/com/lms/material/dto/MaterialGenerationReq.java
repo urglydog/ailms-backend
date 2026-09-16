@@ -13,6 +13,7 @@ public record MaterialGenerationReq(
         @NotNull(message = "courseId không được để trống") Long courseId,
         @NotNull(message = "materialType không được để trống") MaterialType materialType,
         @NotBlank(message = "language không được để trống") String language,
+        String title,
         @NotNull(message = "scopeType không được để trống") ScopeType scopeType,
         Long scopeRefId,
         java.util.List<Long> customLessonIds,

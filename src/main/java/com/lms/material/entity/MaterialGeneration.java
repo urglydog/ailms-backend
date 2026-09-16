@@ -4,6 +4,7 @@ import com.lms.common.entity.BaseEntity;
 import com.lms.auth.entity.User;
 import com.lms.catalog.entity.Course;
 import com.lms.catalog.entity.Lesson;
+import com.lms.catalog.entity.Chapter;
 import com.lms.common.enums.DifficultyLevel;
 import com.lms.common.enums.GenStatus;
 import com.lms.common.enums.MaterialType;
@@ -88,6 +89,11 @@ public class MaterialGeneration extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "course_id", nullable = false)
     private Course course;
+
+    /** Nếu được đính kèm vào cấp Chương, tham chiếu tới Chapter. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "chapter_id")
+    private Chapter chapter;
 
     /** Nếu khác null, học liệu này được đính kèm vào tab Resource của Bài học này. */
     @ManyToOne(fetch = FetchType.LAZY)

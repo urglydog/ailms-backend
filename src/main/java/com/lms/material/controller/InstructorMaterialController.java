@@ -42,16 +42,27 @@ public class InstructorMaterialController {
         if (!gen.getCourse().getInstructor().getEmail().equals(principal.getName())) {
             throw new AccessDeniedDomainException("Ban khong co quyen");
         }
+        
         Long lessonId = payload.get("lessonId");
-        if (lessonId == null) {
-            gen.setLesson(null);
-        } else {
+        Long chapterId = payload.get("chapterId");
+        
+        if (lessonId != null) {
             com.lms.catalog.entity.Lesson lesson = new com.lms.catalog.entity.Lesson();
             lesson.setId(lessonId);
             gen.setLesson(lesson);
+            gen.setChapter(null);
+        } else if (chapterId != null) {
+            com.lms.catalog.entity.Chapter chapter = new com.lms.catalog.entity.Chapter();
+            chapter.setId(chapterId);
+            gen.setChapter(chapter);
+            gen.setLesson(null);
+        } else {
+            gen.setLesson(null);
+            gen.setChapter(null);
         }
+        
         materialGenerationRepository.save(gen);
-        return ResponseEntity.ok(java.util.Map.of("message", "Đã cập nhật bài học đính kèm"));
+        return ResponseEntity.ok(java.util.Map.of("message", "Đã cập nhật đính kèm học liệu"));
     }
 
     @PutMapping("/mindmaps/{id}/set-official")
@@ -104,6 +115,8 @@ public class InstructorMaterialController {
         return ResponseEntity.ok(java.util.Map.of("message", isOfficial ? "Đã đặt làm học liệu chính thức" : "Đã hủy học liệu chính thức"));
     }
 
+    @PostMapping(value = "/courses/{courseId}/upload")
+    @PreAuthorize("hasRole('INSTRUCTOR')")
     @PostMapping("/courses/{courseId}/manual")
     @PreAuthorize("hasRole('INSTRUCTOR')")
     @Transactional
@@ -130,7 +143,31 @@ public class InstructorMaterialController {
         generation.setMaterialType(materialType);
         generation.setLanguage(language);
         generation.setTitle(title);
+        
+        // Auto-binding cho Manual
+        String scopeStr = payload.get("scope");
+        String scopeRefIdStr = payload.get("scopeRefId");
+        String customLessonIdsStr = payload.get("customLessonIds");
+        
+        if ("LESSON".equals(scopeStr) && scopeRefIdStr != null) {
+            com.lms.catalog.entity.Lesson lesson = new com.lms.catalog.entity.Lesson();
+            lesson.setId(Long.parseLong(scopeRefIdStr));
+            generation.setLesson(lesson);
+        } else if ("CHAPTER".equals(scopeStr) && scopeRefIdStr != null) {
+            com.lms.catalog.entity.Chapter chapter = new com.lms.catalog.entity.Chapter();
+            chapter.setId(Long.parseLong(scopeRefIdStr));
+            generation.setChapter(chapter);
+        } else if ("CUSTOM".equals(scopeStr) && customLessonIdsStr != null) {
+            generation.setCustomLessonIds(customLessonIdsStr); // JSON string
+        }
+        
         generation.setScopeType(com.lms.common.enums.ScopeType.WHOLE_COURSE);
+        if ("LESSON".equals(scopeStr) || "CUSTOM".equals(scopeStr)) {
+            generation.setScopeType(com.lms.common.enums.ScopeType.CUSTOM_LESSONS);
+        } else if ("CHAPTER".equals(scopeStr)) {
+            generation.setScopeType(com.lms.common.enums.ScopeType.CHAPTER);
+        }
+        
         generation.setVersionNo(nextVersion);
         generation.setStatus(com.lms.common.enums.GenStatus.COMPLETED); // Completed immediately since manual
 
@@ -186,6 +223,7 @@ public class InstructorMaterialController {
             
             boolean isOfficial = false;
             Long materialId = null;
+            Long chapterId = gen.getChapter() != null ? gen.getChapter().getId() : null;
             Long lessonId = gen.getLesson() != null ? gen.getLesson().getId() : null;
             String quizType = "OFFICIAL_EXAM";
             Integer questionCount = 0;
@@ -247,6 +285,7 @@ public class InstructorMaterialController {
                         java.util.Map.entry("status", gen.getStatus().name()),
                         java.util.Map.entry("isOfficial", isOfficial),
                         java.util.Map.entry("versionNo", gen.getVersionNo()),
+                        java.util.Map.entry("chapterId", chapterId != null ? chapterId : ""),
                         java.util.Map.entry("lessonId", lessonId != null ? lessonId : ""),
                         java.util.Map.entry("quizType", quizType),
                         java.util.Map.entry("materialId", materialId != null ? materialId : ""),
