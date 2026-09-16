@@ -105,7 +105,7 @@ public class MaterialGenerationService {
                             + "trích xuất sau khi nạp video, vui lòng thử lại sau ít phút");
         }
 
-        int nextVersion = materialGenerationRepository.findTopByUser_IdAndCourse_IdOrderByVersionNoDesc(user.getId(), course.getId())
+        int nextVersion = materialGenerationRepository.findTopByUser_IdAndCourse_IdAndIsDeletedFalseOrderByVersionNoDesc(user.getId(), course.getId())
                 .map(mg -> mg.getVersionNo() + 1)
                 .orElse(1);
 
@@ -223,7 +223,7 @@ public class MaterialGenerationService {
                         .toList();
             }
         } else if (generation.getMaterialType() == com.lms.common.enums.MaterialType.QUIZ) {
-            java.util.Optional<com.lms.material.entity.Quiz> quizOpt = quizRepository.findByMaterialGeneration_Id(generation.getId());
+            java.util.Optional<com.lms.material.entity.Quiz> quizOpt = quizRepository.findByMaterialGeneration_IdAndIsDeletedFalse(generation.getId());
             if (quizOpt.isPresent()) {
                 com.lms.material.entity.Quiz quiz = quizOpt.get();
                 isOfficial = quiz.getIsOfficial() != null ? quiz.getIsOfficial() : false;
@@ -307,7 +307,7 @@ public class MaterialGenerationService {
                 .orElseThrow(() -> new ResourceNotFoundException("Course", courseId));
         requireCourseAccess(user, course);
         
-        return materialGenerationRepository.findByUser_IdAndCourse_IdOrderByVersionNoDesc(user.getId(), courseId)
+        return materialGenerationRepository.findByUser_IdAndCourse_IdAndIsDeletedFalseOrderByVersionNoDesc(user.getId(), courseId)
                 .stream()
                 .map(this::toDto)
                 .toList();
@@ -344,49 +344,19 @@ public class MaterialGenerationService {
             throw new AccessDeniedDomainException("Học liệu này thuộc về người khác");
         }
 
-        int usageCount = 0;
-        if (generation.getMaterialType() == com.lms.common.enums.MaterialType.MINDMAP) {
-            // Mindmap doesn't have usage count for now
-        } else if (generation.getMaterialType() == com.lms.common.enums.MaterialType.FLASHCARD) {
-            usageCount = flashcardDeckRepository.findByMaterialGeneration_Id(generation.getId())
-                    .map(deck -> flashcardReviewRepository.countByFlashcard_FlashcardDeck_Id(deck.getId()))
-                    .orElse(0);
-        } else if (generation.getMaterialType() == com.lms.common.enums.MaterialType.QUIZ) {
-            usageCount = quizRepository.findByMaterialGeneration_Id(generation.getId())
-                    .map(quiz -> quizAttemptRepository.countByQuiz_Id(quiz.getId()))
-                    .orElse(0);
-        }
+        // 100% Soft Delete
+        generation.setIsDeleted(true);
+        generation.setDeletedAt(java.time.LocalDateTime.now());
+        generation.setStatus(com.lms.common.enums.GenStatus.ARCHIVED);
+        materialGenerationRepository.save(generation);
 
-        if (usageCount > 0) {
-            // Soft Delete
-            generation.setStatus(com.lms.common.enums.GenStatus.ARCHIVED);
-            materialGenerationRepository.save(generation);
-            return;
-        }
-
-        // Hard Delete
-        if (generation.getMaterialType() == com.lms.common.enums.MaterialType.MINDMAP) {
-            mindmapRepository.findByMaterialGeneration_Id(generation.getId()).ifPresent(mindmapRepository::delete);
-        } else if (generation.getMaterialType() == com.lms.common.enums.MaterialType.FLASHCARD) {
-            flashcardDeckRepository.findByMaterialGeneration_Id(generation.getId()).ifPresent(deck -> {
-                flashcardReviewRepository.deleteByFlashcard_FlashcardDeck_Id(deck.getId());
-                flashcardRepository.deleteByFlashcardDeck_Id(deck.getId());
-                flashcardDeckRepository.delete(deck);
-            });
-        } else if (generation.getMaterialType() == com.lms.common.enums.MaterialType.QUIZ) {
-            quizRepository.findByMaterialGeneration_Id(generation.getId()).ifPresent(quiz -> {
-                quizAnswerRepository.deleteByQuizAttempt_Quiz_Id(quiz.getId());
-                quizAttemptRepository.deleteByQuiz_Id(quiz.getId());
-                
-                quizQuestionRepository.findByQuiz_IdOrderByDisplayOrderAsc(quiz.getId()).forEach(question -> {
-                    quizOptionRepository.deleteByQuizQuestion_Id(question.getId());
-                });
-                quizQuestionRepository.deleteByQuiz_Id(quiz.getId());
-                quizRepository.delete(quiz);
+        if (generation.getMaterialType() == com.lms.common.enums.MaterialType.QUIZ) {
+            quizRepository.findByMaterialGeneration_IdAndIsDeletedFalse(generation.getId()).ifPresent(quiz -> {
+                quiz.setIsDeleted(true);
+                quiz.setDeletedAt(java.time.LocalDateTime.now());
+                quizRepository.save(quiz);
             });
         }
-        
-        materialGenerationRepository.delete(generation);
     }
 
     public MaterialGenerationRes toDto(MaterialGeneration generation) {

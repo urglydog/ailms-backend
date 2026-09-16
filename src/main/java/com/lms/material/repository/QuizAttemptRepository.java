@@ -24,5 +24,7 @@ public interface QuizAttemptRepository extends JpaRepository<QuizAttempt, Long> 
     
     int countByQuiz_Id(Long quizId);
     
+    List<QuizAttempt> findByUser_EmailAndQuiz_MaterialGeneration_Course_IdOrderBySubmittedAtDesc(String email, Long courseId);
+    
     void deleteByQuiz_Id(Long quizId);
 }

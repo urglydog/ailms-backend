@@ -189,7 +189,7 @@ public class QuizService {
 
     @Transactional
     public void addPersonalQuestion(String userEmail, Long materialId, com.lms.material.dto.QuizDto.QuestionUpdateReq req) {
-        Quiz quiz = quizRepository.findByMaterialGeneration_Id(materialId)
+        Quiz quiz = quizRepository.findByMaterialGeneration_IdAndIsDeletedFalse(materialId)
                 .orElseThrow(() -> new ResourceNotFoundException("Quiz", materialId));
         if (!quiz.getMaterialGeneration().getUser().getEmail().equals(userEmail)) {
             throw new AccessDeniedDomainException("Ban khong co quyen");
@@ -383,6 +383,10 @@ public class QuizService {
         
         if ("COMPLETED".equals(attempt.getStatus())) {
             throw new AccessDeniedDomainException("Bai thi nay da duoc nop");
+        }
+        
+        if (Boolean.TRUE.equals(attempt.getQuiz().getIsDeleted())) {
+            throw new com.lms.common.exception.ResourceGoneException("Bài tập này đã được giảng viên thu hồi.");
         }
         
         List<QuizAnswer> answers = quizAnswerRepository.findByQuizAttempt_Id(attemptId);
