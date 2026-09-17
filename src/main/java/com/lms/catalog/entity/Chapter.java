@@ -26,4 +26,7 @@ public class Chapter extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "course_id", nullable = false)
     private Course course;
+
+    @OneToMany(mappedBy = "chapter", fetch = FetchType.LAZY)
+    private java.util.List<Lesson> lessons = new java.util.ArrayList<>();
 }

@@ -190,13 +190,13 @@ public class CoursePublicService {
     }
 
     private DetailRes mapToDetailRes(Course course) {
-        List<Chapter> chapters = chapterRepository.findByCourseIdOrderByDisplayOrderAsc(course.getId());
+        List<Chapter> chapters = chapterRepository.findChaptersWithLessonsByCourseId(course.getId());
         List<ChapterRes> chapterResList = chapters.stream()
                 .map(chapter -> new ChapterRes(
                         chapter.getId(),
                         chapter.getTitle(),
                         chapter.getDisplayOrder(),
-                        lessonRepository.findByChapterIdOrderByDisplayOrderAsc(chapter.getId()).stream()
+                        chapter.getLessons() == null ? java.util.Collections.emptyList() : chapter.getLessons().stream()
                                 .map(lesson -> new LessonRes(
                                         lesson.getId(),
                                         lesson.getTitle(),

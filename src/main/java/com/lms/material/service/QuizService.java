@@ -439,8 +439,8 @@ public class QuizService {
                     answer.getQuizQuestion().getId(),
                     answer.getQuizQuestion().getContent(),
                     selectedOptionIds != null ? selectedOptionIds : new ArrayList<>(),
-                    allowReview && !correctOptionIds.isEmpty() ? correctOptionIds : new ArrayList<>(), // Ẩn đáp án đúng nếu allowReview = false
-                    allowReview ? answer.getIsCorrect() : false, // Ẩn kết quả Đúng/Sai nếu allowReview = false
+                    allowReview ? correctOptionIds : null, // Ẩn đáp án đúng nếu allowReview = false
+                    allowReview ? answer.getIsCorrect() : null, // Ẩn kết quả Đúng/Sai nếu allowReview = false
                     options
             ));
         }
@@ -488,8 +488,8 @@ public class QuizService {
                     answer.getQuizQuestion().getId(),
                     answer.getQuizQuestion().getContent(),
                     selectedIds,
-                    allowReview && !correctOptionIds.isEmpty() ? correctOptionIds : new ArrayList<>(),
-                    allowReview ? answer.getIsCorrect() : false,
+                    allowReview ? correctOptionIds : null,
+                    allowReview ? answer.getIsCorrect() : null,
                     options
             ));
         }
@@ -504,7 +504,7 @@ public class QuizService {
                 .orElseThrow(() -> new ResourceNotFoundException("Quiz", quizId));
         
         return quizAttemptRepository.findByUser_EmailAndQuiz_IdOrderByScoreDesc(studentEmail, quiz.getId()).stream()
-                .map(a -> new QuizAttemptDto.HistoryRes(a.getId(), a.getScore(), a.getCorrectCount(), a.getTotalQuestions(), a.getSubmittedAt(), a.getQuiz().getId(), a.getStatus()))
+                .map(a -> new QuizAttemptDto.HistoryRes(a.getId(), a.getScore(), a.getCorrectCount(), a.getTotalQuestions(), a.getSubmittedAt(), a.getQuiz().getId(), a.getStatus(), Boolean.TRUE.equals(a.getQuiz().getIsDeleted())))
                 .collect(Collectors.toList());
     }
 
