@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('INSTRUCTOR')")
+@PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
 public class ChapterController {
 
     private final ChapterService chapterService;

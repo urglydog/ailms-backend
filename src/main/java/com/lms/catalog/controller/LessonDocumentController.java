@@ -14,7 +14,7 @@ import org.springframework.web.multipart.MultipartFile;
 /** Tài liệu đính kèm bài học (Giai đoạn 4, UC35). */
 @RestController
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('INSTRUCTOR')")
+@PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
 public class LessonDocumentController {
 
     private final LessonDocumentService lessonDocumentService;

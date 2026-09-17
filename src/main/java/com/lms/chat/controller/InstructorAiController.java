@@ -21,14 +21,14 @@ import java.util.Map;
  *   <li>Hỗ trợ tạo mô tả, tiêu đề hấp dẫn cho khóa học</li>
  * </ul>
  *
- * <p><b>Bảo mật:</b> {@code @PreAuthorize("hasRole('INSTRUCTOR')")} — chỉ Instructor truy cập được.
+ * <p><b>Bảo mật:</b> {@code @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")} — chỉ Instructor truy cập được.
  * Student gọi vào đây sẽ nhận 403.
  */
 @Slf4j
 @RestController
 @RequestMapping("/api/v1/instructor/ai-assistant")
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('INSTRUCTOR')")
+@PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
 public class InstructorAiController {
 
     private final RestTemplate restTemplate;

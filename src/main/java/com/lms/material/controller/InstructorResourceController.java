@@ -47,7 +47,7 @@ public class InstructorResourceController {
     );
 
     @PostMapping("/courses/{courseId}/upload")
-    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     @Transactional
     public ResponseEntity<Map<String, Object>> uploadResource(
             Principal principal,
@@ -147,7 +147,7 @@ public class InstructorResourceController {
     }
     
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     @Transactional
     public ResponseEntity<Map<String, String>> deleteResource(Principal principal, @PathVariable Long id) {
         CourseResource resource = courseResourceRepository.findById(id)

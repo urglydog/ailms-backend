@@ -19,14 +19,14 @@ public class QuizController {
     private final QuizService quizService;
 
     @PutMapping("/instructor/quizzes/{quizId}/set-official")
-    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     public ResponseEntity<Map<String, String>> setOfficial(Principal principal, @PathVariable Long quizId, @RequestParam(required = false) Boolean isOfficial) {
         quizService.setOfficial(principal.getName(), quizId, isOfficial);
         return ResponseEntity.ok(Map.of("message", Boolean.TRUE.equals(isOfficial) ? "Đã phát hành học liệu chính thức" : "Đã chuyển về bản nháp"));
     }
 
     @PutMapping("/instructor/quizzes/{quizId}/settings")
-    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     public ResponseEntity<Map<String, String>> updateQuizSettings(
             Principal principal, 
             @PathVariable Long quizId, 
@@ -36,7 +36,7 @@ public class QuizController {
     }
 
     @PutMapping("/instructor/quizzes/questions/{questionId}")
-    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     public ResponseEntity<Map<String, String>> updateQuestion(
             Principal principal,
             @PathVariable Long questionId,
@@ -46,7 +46,7 @@ public class QuizController {
     }
 
     @PostMapping("/instructor/quizzes/{quizId}/questions")
-    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     public ResponseEntity<Map<String, String>> addQuestion(
             Principal principal,
             @PathVariable Long quizId,
@@ -56,7 +56,7 @@ public class QuizController {
     }
 
     @DeleteMapping("/instructor/quizzes/questions/{questionId}")
-    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     public ResponseEntity<Map<String, String>> deleteQuestion(
             Principal principal,
             @PathVariable Long questionId) {
