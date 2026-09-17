@@ -385,8 +385,19 @@ public class QuizService {
             throw new AccessDeniedDomainException("Bai thi nay da duoc nop");
         }
         
+        boolean isArchived = false;
         if (Boolean.TRUE.equals(attempt.getQuiz().getIsDeleted())) {
-            throw new com.lms.common.exception.ResourceGoneException("Bài tập này đã được giảng viên thu hồi.");
+            if (attempt.getQuiz().getDeletedAt() != null && attempt.getCreatedAt() != null) {
+                long createdMillis = attempt.getCreatedAt().atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
+                long deletedMillis = attempt.getQuiz().getDeletedAt().atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
+                if (createdMillis < deletedMillis) {
+                    isArchived = true;
+                } else {
+                    throw new com.lms.common.exception.ResourceGoneException("Bài tập này đã được giảng viên thu hồi.");
+                }
+            } else {
+                throw new com.lms.common.exception.ResourceGoneException("Bài tập này đã được giảng viên thu hồi.");
+            }
         }
         
         List<QuizAnswer> answers = quizAnswerRepository.findByQuizAttempt_Id(attemptId);
@@ -441,7 +452,7 @@ public class QuizService {
         attempt.setSubmittedAt(LocalDateTime.now());
         quizAttemptRepository.save(attempt);
         
-        return new QuizAttemptDto.SubmitRes(attemptId, score, correctCount, attempt.getTotalQuestions(), details);
+        return new QuizAttemptDto.SubmitRes(attemptId, score, correctCount, attempt.getTotalQuestions(), details, isArchived);
     }
 
     @Transactional(readOnly = true)
@@ -483,7 +494,7 @@ public class QuizService {
             ));
         }
         
-        return new QuizAttemptDto.SubmitRes(attemptId, attempt.getScore(), attempt.getCorrectCount(), attempt.getTotalQuestions(), details);
+        return new QuizAttemptDto.SubmitRes(attemptId, attempt.getScore(), attempt.getCorrectCount(), attempt.getTotalQuestions(), details, Boolean.TRUE.equals(attempt.getQuiz().getIsDeleted()));
     }
 
 

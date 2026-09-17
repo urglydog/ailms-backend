@@ -50,7 +50,8 @@ public class QuizAttemptDto {
             BigDecimal score,
             Integer correctCount,
             Integer totalQuestions,
-            List<AnswerDetailDto> details
+            List<AnswerDetailDto> details,
+            Boolean isArchived
     ) {}
 
     public record ExplainReq(
