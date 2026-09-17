@@ -165,6 +165,10 @@ public class MaterialGenerationService {
                 .orElseThrow(() -> new ResourceNotFoundException("User", email));
         MaterialGeneration generation = materialGenerationRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("MaterialGeneration", id));
+                
+        if (Boolean.TRUE.equals(generation.getIsDeleted())) {
+            throw new ResourceNotFoundException("MaterialGeneration", id);
+        }
         
         boolean isOfficial = false;
         
