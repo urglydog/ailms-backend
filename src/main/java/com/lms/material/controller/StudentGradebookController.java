@@ -77,12 +77,23 @@ public class StudentGradebookController {
                     .max(Comparator.comparing(QuizAttempt::getSubmittedAt))
                     .orElse(attempts.get(0));
 
+            String location = "";
+            if (quiz.getMaterialGeneration().getLesson() != null) {
+                location = "Bài: " + quiz.getMaterialGeneration().getLesson().getTitle();
+            } else if (quiz.getMaterialGeneration().getChapter() != null) {
+                location = "Chương: " + quiz.getMaterialGeneration().getChapter().getTitle();
+            } else {
+                location = "Khóa học";
+            }
+
             quizGrades.add(QuizGradeDto.builder()
                     .quizId(quiz.getId())
                     .quizTitle(quiz.getMaterialGeneration().getTitle())
+                    .location(location)
                     .isOfficial(quiz.getIsOfficial())
                     .isDeleted(quiz.getIsDeleted())
                     .attemptCount(attempts.size())
+                    .maxAttempts(quiz.getMaxAttempts())
                     .highestScore(maxScore)
                     .latestScore(latestAttempt.getScore())
                     .latestSubmittedAt(latestAttempt.getSubmittedAt())
@@ -97,6 +108,8 @@ public class StudentGradebookController {
                             .build()).collect(Collectors.toList()))
                     .build());
         }
+        
+        quizGrades.sort((a, b) -> b.getLatestSubmittedAt().compareTo(a.getLatestSubmittedAt()));
 
         StudentCourseGradebookRes res = StudentCourseGradebookRes.builder()
                 .courseId(courseId)
@@ -120,9 +133,11 @@ public class StudentGradebookController {
     public static class QuizGradeDto {
         private Long quizId;
         private String quizTitle;
+        private String location;
         private Boolean isOfficial;
         private Boolean isDeleted;
         private int attemptCount;
+        private Integer maxAttempts;
         private BigDecimal highestScore;
         private BigDecimal latestScore;
         private LocalDateTime latestSubmittedAt;

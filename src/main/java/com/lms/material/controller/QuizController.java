@@ -20,9 +20,9 @@ public class QuizController {
 
     @PutMapping("/instructor/quizzes/{quizId}/set-official")
     @PreAuthorize("hasRole('INSTRUCTOR')")
-    public ResponseEntity<Map<String, String>> setOfficial(Principal principal, @PathVariable Long quizId) {
-        quizService.setOfficial(principal.getName(), quizId);
-        return ResponseEntity.ok(Map.of("message", "Đã đánh dấu là học liệu chính thức"));
+    public ResponseEntity<Map<String, String>> setOfficial(Principal principal, @PathVariable Long quizId, @RequestParam(required = false) Boolean isOfficial) {
+        quizService.setOfficial(principal.getName(), quizId, isOfficial);
+        return ResponseEntity.ok(Map.of("message", Boolean.TRUE.equals(isOfficial) ? "Đã phát hành học liệu chính thức" : "Đã chuyển về bản nháp"));
     }
 
     @PutMapping("/instructor/quizzes/{quizId}/settings")
