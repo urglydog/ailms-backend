@@ -41,7 +41,7 @@ public class QuizAttemptDto {
             String content,
             List<Long> selectedOptionIds,
             List<Long> correctOptionIds,
-            boolean isCorrect,
+            Boolean isCorrect,
             List<OptionDto> options
     ) {}
 
@@ -70,6 +70,7 @@ public class QuizAttemptDto {
             Integer totalQuestions,
             LocalDateTime submittedAt,
             Long quizId,
-            String status
+            String status,
+            Boolean isArchived
     ) {}
 }

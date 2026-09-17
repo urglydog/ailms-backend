@@ -35,14 +35,24 @@ public class InstructorResourceController {
     private final LessonRepository lessonRepository;
     private final StorageService storageService;
 
+    private static final java.util.Set<String> ALLOWED_MIME_TYPES = java.util.Set.of(
+        "application/pdf", 
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "application/vnd.ms-powerpoint",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/msword",
+        "application/zip",
+        "application/x-zip-compressed",
+        "application/vnd.rar"
+    );
+
     @PostMapping("/courses/{courseId}/upload")
     @PreAuthorize("hasRole('INSTRUCTOR')")
     @Transactional
     public ResponseEntity<Map<String, Object>> uploadResource(
             Principal principal,
             @PathVariable Long courseId,
-            @RequestParam("file") MultipartFile file,
-            @RequestParam("title") String title,
+            @RequestParam("files") MultipartFile[] files,
             @RequestParam(value = "chapterId", required = false) Long chapterId,
             @RequestParam(value = "lessonId", required = false) Long lessonId) {
 
@@ -51,38 +61,66 @@ public class InstructorResourceController {
         if (!course.getInstructor().getEmail().equals(principal.getName())) {
             throw new AccessDeniedDomainException("Ban khong co quyen");
         }
-
-        String key = "resources/" + UUID.randomUUID() + "-" + file.getOriginalFilename();
-        String url;
-        try {
-            url = storageService.upload(key, file.getInputStream(), file.getSize(), file.getContentType());
-        } catch (java.io.IOException e) {
-            throw new RuntimeException("Upload failed", e);
+        
+        if (files == null || files.length == 0) {
+            throw new com.lms.common.exception.InvalidRequestException("Danh sách file trống");
         }
 
-        CourseResource resource = new CourseResource();
-        resource.setCourse(course);
-        resource.setTitle(title);
-        resource.setFileUrl(url);
-        resource.setFileSize(file.getSize());
-        resource.setFileType(file.getContentType());
+        List<Map<String, Object>> successes = new java.util.ArrayList<>();
+        List<Map<String, String>> failures = new java.util.ArrayList<>();
 
-        if (lessonId != null) {
-            Lesson lesson = lessonRepository.findById(lessonId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Lesson", lessonId));
-            resource.setLesson(lesson);
-        } else if (chapterId != null) {
-            Chapter chapter = chapterRepository.findById(chapterId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Chapter", chapterId));
-            resource.setChapter(chapter);
+        for (MultipartFile file : files) {
+            String originalName = file.getOriginalFilename();
+            if (originalName == null) originalName = "unknown";
+            
+            if (file.isEmpty()) {
+                failures.add(Map.of("file", originalName, "reason", "File trống"));
+                continue;
+            }
+            
+            if (file.getContentType() != null && !ALLOWED_MIME_TYPES.contains(file.getContentType())) {
+                failures.add(Map.of("file", originalName, "reason", "Định dạng không hợp lệ"));
+                continue;
+            }
+
+            String key = "resources/" + UUID.randomUUID() + "-" + originalName;
+            String url;
+            try {
+                url = storageService.upload(key, file.getInputStream(), file.getSize(), file.getContentType());
+            } catch (java.io.IOException e) {
+                failures.add(Map.of("file", originalName, "reason", "Lỗi upload: " + e.getMessage()));
+                continue;
+            }
+
+            CourseResource resource = new CourseResource();
+            resource.setCourse(course);
+            resource.setTitle(originalName);
+            resource.setFileUrl(url);
+            resource.setFileSize(file.getSize());
+            resource.setFileType(file.getContentType());
+
+            if (lessonId != null) {
+                Lesson lesson = lessonRepository.findById(lessonId)
+                        .orElseThrow(() -> new ResourceNotFoundException("Lesson", lessonId));
+                resource.setLesson(lesson);
+            } else if (chapterId != null) {
+                Chapter chapter = chapterRepository.findById(chapterId)
+                        .orElseThrow(() -> new ResourceNotFoundException("Chapter", chapterId));
+                resource.setChapter(chapter);
+            }
+
+            courseResourceRepository.save(resource);
+            
+            successes.add(Map.of(
+                    "id", resource.getId(),
+                    "title", resource.getTitle(),
+                    "fileUrl", resource.getFileUrl()
+            ));
         }
-
-        courseResourceRepository.save(resource);
 
         return ResponseEntity.ok(Map.of(
-                "id", resource.getId(),
-                "title", resource.getTitle(),
-                "fileUrl", resource.getFileUrl()
+                "successes", successes,
+                "failures", failures
         ));
     }
 
