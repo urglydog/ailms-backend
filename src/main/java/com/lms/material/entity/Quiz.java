@@ -81,4 +81,19 @@ public class Quiz extends BaseEntity {
     @OneToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "material_generation_id", nullable = false, unique = true)
     private MaterialGeneration materialGeneration;
+
+    public Boolean getAllowReview() {
+        if (this.quizType == QuizType.LECTURE_QUIZ) return true;
+        return allowReview;
+    }
+
+    public Integer getDurationMinutes() {
+        if (this.quizType == QuizType.LECTURE_QUIZ) return null;
+        return durationMinutes;
+    }
+
+    public Integer getMaxAttempts() {
+        if (this.quizType == QuizType.LECTURE_QUIZ) return null;
+        return maxAttempts;
+    }
 }
