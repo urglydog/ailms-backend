@@ -131,3 +131,6 @@ Key: user_stream:{userId} -> Value: {sessionId, deviceName, timestamp} (TTL = 30
 | **Task 10 (Multi-device)** | Thay nút "Ban thiết bị" thủ công bằng **Chặn phát video đồng thời tự động (Heartbeat Redis)** | Cao (Bảo vệ nội dung khóa học) |
 | **Task 11B (Onboarding)** | Triển khai Onboarding Profile Wizard 3 bước trước khi tạo khóa học đầu tiên | Cao (Chặn spam tài khoản) |
 | **Task 11A (Admin)** | Rate-limit AI dạng quota hàng ngày; Dashboard tập trung vào Moderation Queue & Token usage | Trung bình |
+
+
+hiện đã stopbackend do lỗi migration ở V106 chưa fix 
