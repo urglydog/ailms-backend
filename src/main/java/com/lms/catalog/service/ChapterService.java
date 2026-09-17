@@ -8,6 +8,7 @@ import com.lms.catalog.repository.ChapterRepository;
 import com.lms.catalog.repository.CourseRepository;
 import com.lms.catalog.repository.LessonRepository;
 import com.lms.common.exception.AccessDeniedDomainException;
+import com.lms.common.exception.BusinessRuleViolationException;
 import com.lms.common.exception.InvalidRequestException;
 import com.lms.common.exception.ResourceNotFoundException;
 import java.util.HashMap;
@@ -85,6 +86,9 @@ public class ChapterService {
         if (!course.getInstructor().getEmail().equals(instructorEmail)) {
             throw new AccessDeniedDomainException("Bạn không có quyền thao tác trên khóa học này");
         }
+        if (course.getStatus() == com.lms.common.enums.CourseStatus.PENDING || course.getStatus() == com.lms.common.enums.CourseStatus.PUBLISHED) {
+            throw new BusinessRuleViolationException("Khóa học đang ở trạng thái không thể chỉnh sửa");
+        }
         return course;
     }
 
@@ -93,6 +97,9 @@ public class ChapterService {
                 .orElseThrow(() -> new ResourceNotFoundException("Chapter", chapterId));
         if (!chapter.getCourse().getInstructor().getEmail().equals(instructorEmail)) {
             throw new AccessDeniedDomainException("Bạn không có quyền thao tác trên chương này");
+        }
+        if (chapter.getCourse().getStatus() == com.lms.common.enums.CourseStatus.PENDING || chapter.getCourse().getStatus() == com.lms.common.enums.CourseStatus.PUBLISHED) {
+            throw new BusinessRuleViolationException("Khóa học đang ở trạng thái không thể chỉnh sửa");
         }
         return chapter;
     }

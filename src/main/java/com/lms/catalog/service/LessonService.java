@@ -258,6 +258,9 @@ public class LessonService {
         if (!chapter.getCourse().getInstructor().getEmail().equals(instructorEmail)) {
             throw new AccessDeniedDomainException("Bạn không có quyền thao tác trên chương này");
         }
+        if (chapter.getCourse().getStatus() == CourseStatus.PENDING || chapter.getCourse().getStatus() == CourseStatus.PUBLISHED) {
+            throw new BusinessRuleViolationException("Khóa học đang ở trạng thái không thể chỉnh sửa");
+        }
         return chapter;
     }
 
@@ -267,6 +270,9 @@ public class LessonService {
                 .orElseThrow(() -> new ResourceNotFoundException("Lesson", lessonId));
         if (!lesson.getChapter().getCourse().getInstructor().getEmail().equals(instructorEmail)) {
             throw new AccessDeniedDomainException("Bạn không có quyền thao tác trên bài học này");
+        }
+        if (lesson.getChapter().getCourse().getStatus() == CourseStatus.PENDING || lesson.getChapter().getCourse().getStatus() == CourseStatus.PUBLISHED) {
+            throw new BusinessRuleViolationException("Khóa học đang ở trạng thái không thể chỉnh sửa");
         }
         return lesson;
     }

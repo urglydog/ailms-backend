@@ -126,6 +126,12 @@ public class UserService {
         if (req.avatarUrl() != null && !req.avatarUrl().isBlank()) {
             user.setAvatarUrl(req.avatarUrl());
         }
+        if (req.headline() != null && !req.headline().isBlank()) {
+            user.setHeadline(req.headline());
+        }
+        if (req.bio() != null && !req.bio().isBlank()) {
+            user.setBio(req.bio());
+        }
         if (req.preferredLanguage() != null && !req.preferredLanguage().isBlank()) {
             user.setPreferredLanguage(req.preferredLanguage());
         }
@@ -217,8 +223,9 @@ public class UserService {
                 : null;
 
         return new PublicProfileRes(
-                user.getId(), user.getFullName(), user.getAvatarUrl(), user.getRole(),
-                user.getCreatedAt(), courses, wishlist
+                user.getId(), user.getFullName(), user.getAvatarUrl(),
+                user.getHeadline(), user.getBio(),
+                user.getRole(), user.getCreatedAt(), courses, wishlist
         );
     }
 
@@ -236,6 +243,8 @@ public class UserService {
                 user.getEmail(),
                 user.getFullName(),
                 user.getAvatarUrl(),
+                user.getHeadline(),
+                user.getBio(),
                 user.getRole(),
                 user.getAuthProvider(),
                 user.getPreferredLanguage(),
