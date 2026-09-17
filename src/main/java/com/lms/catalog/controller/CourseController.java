@@ -31,13 +31,13 @@ public class CourseController {
     private final CourseService courseService;
 
     @PostMapping
-    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     public ResponseEntity<DetailRes> create(Principal principal, @Valid @RequestBody CreateReq req) {
         return ResponseEntity.ok(courseService.create(principal.getName(), req));
     }
 
     @GetMapping("/mine")
-    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     public ResponseEntity<Page<SummaryRes>> getMine(
             Principal principal,
             @RequestParam(required = false) CourseStatus status,
@@ -46,13 +46,13 @@ public class CourseController {
     }
 
     @GetMapping("/mine/{id}")
-    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     public ResponseEntity<DetailRes> getMineDetail(Principal principal, @PathVariable Long id) {
         return ResponseEntity.ok(courseService.getMineDetail(principal.getName(), id));
     }
 
     @PutMapping("/mine/{id}")
-    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     public ResponseEntity<DetailRes> update(
             Principal principal, @PathVariable Long id, @Valid @RequestBody UpdateReq req) {
         return ResponseEntity.ok(courseService.update(principal.getName(), id, req));
@@ -60,20 +60,20 @@ public class CourseController {
 
     /** Giai đoạn 4 — upload ảnh bìa thật lên B2, thay ô nhập URL text tạm thời của F2.1. */
     @PostMapping(value = "/mine/{id}/thumbnail", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     public ResponseEntity<DetailRes> uploadThumbnail(
             Principal principal, @PathVariable Long id, @RequestPart("file") MultipartFile file) {
         return ResponseEntity.ok(courseService.uploadThumbnail(principal.getName(), id, file));
     }
 
     @PostMapping("/mine/{id}/submit")
-    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     public ResponseEntity<DetailRes> submit(Principal principal, @PathVariable Long id) {
         return ResponseEntity.ok(courseService.submitForReview(principal.getName(), id));
     }
 
     @DeleteMapping("/mine/{id}")
-    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     public ResponseEntity<Void> delete(Principal principal, @PathVariable Long id) {
         courseService.delete(principal.getName(), id);
         return ResponseEntity.noContent().build();

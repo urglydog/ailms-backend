@@ -23,7 +23,7 @@ import org.springframework.web.multipart.MultipartFile;
  */
 @RestController
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('INSTRUCTOR')")
+@PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
 @RequestMapping("/api/v1/live-sessions")
 public class LiveSessionController {
 

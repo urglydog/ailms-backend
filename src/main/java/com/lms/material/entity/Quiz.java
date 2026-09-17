@@ -93,7 +93,7 @@ public class Quiz extends BaseEntity {
     }
 
     public Integer getMaxAttempts() {
-        if (this.quizType == QuizType.LECTURE_QUIZ) return null;
+        if (this.quizType == QuizType.LECTURE_QUIZ) return 1;
         return maxAttempts;
     }
 }

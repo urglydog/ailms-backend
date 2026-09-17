@@ -35,7 +35,7 @@ public class InstructorMaterialController {
     private final CourseRepository courseRepository;
 
     @PutMapping("/{id}/attach-lesson")
-    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     @Transactional
     public ResponseEntity<java.util.Map<String, String>> attachToLesson(Principal principal, @PathVariable Long id, @RequestBody java.util.Map<String, Long> payload) {
         com.lms.material.entity.MaterialGeneration gen = materialGenerationRepository.findById(id)
@@ -67,7 +67,7 @@ public class InstructorMaterialController {
     }
 
     @PutMapping("/mindmaps/{id}/set-official")
-    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     @Transactional
     public ResponseEntity<java.util.Map<String, String>> setMindmapOfficial(Principal principal, @PathVariable Long id, @RequestParam(defaultValue = "true") boolean isOfficial) {
         Mindmap mindmap = mindmapRepository.findById(id)
@@ -92,7 +92,7 @@ public class InstructorMaterialController {
     }
 
     @PutMapping("/flashcards/{id}/set-official")
-    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     @Transactional
     public ResponseEntity<java.util.Map<String, String>> setFlashcardOfficial(Principal principal, @PathVariable Long id, @RequestParam(defaultValue = "true") boolean isOfficial) {
         FlashcardDeck deck = flashcardDeckRepository.findById(id)
@@ -117,7 +117,7 @@ public class InstructorMaterialController {
     }
 
     @PostMapping("/courses/{courseId}/manual")
-    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     @Transactional
     public ResponseEntity<java.util.Map<String, Object>> createManualMaterial(Principal principal, @PathVariable Long courseId, @RequestBody java.util.Map<String, String> payload) {
         Course course = courseRepository.findById(courseId)

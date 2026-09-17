@@ -85,7 +85,7 @@ public class DashboardController {
      * viên" (0 khóa học) vẫn thấy số liệu giả của người khác. Tính lại bằng dữ liệu thật.
      */
     @GetMapping("/instructor")
-    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     public ResponseEntity<Map<String, Object>> getInstructorDashboard(java.security.Principal principal) {
         User instructor = userRepository.findByEmail(principal.getName()).orElseThrow();
         String email = instructor.getEmail();

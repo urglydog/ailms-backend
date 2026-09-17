@@ -33,7 +33,7 @@ import java.util.*;
 @RestController
 @RequestMapping("/api/v1/instructor/courses/{courseId}/gradebook")
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('INSTRUCTOR')")
+@PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
 public class InstructorGradebookController {
 
     private final CourseRepository courseRepository;
