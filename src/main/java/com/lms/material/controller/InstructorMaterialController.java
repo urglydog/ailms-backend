@@ -186,6 +186,17 @@ public class InstructorMaterialController {
             } else {
                 quiz.setQuizType(com.lms.common.enums.QuizType.OFFICIAL_EXAM);
             }
+            
+            if (payload.containsKey("allowReview") && payload.get("allowReview") != null) {
+                quiz.setAllowReview(Boolean.parseBoolean(payload.get("allowReview")));
+            }
+            if (payload.containsKey("maxAttempts") && payload.get("maxAttempts") != null && !payload.get("maxAttempts").trim().isEmpty()) {
+                quiz.setMaxAttempts(Integer.parseInt(payload.get("maxAttempts")));
+            }
+            if (payload.containsKey("durationMinutes") && payload.get("durationMinutes") != null && !payload.get("durationMinutes").trim().isEmpty()) {
+                quiz.setDurationMinutes(Integer.parseInt(payload.get("durationMinutes")));
+            }
+            
             quiz = quizRepository.save(quiz);
             materialId = quiz.getId();
         } else if (materialType == com.lms.common.enums.MaterialType.FLASHCARD) {
