@@ -12,6 +12,8 @@ public class UserDto {
             String email,
             String fullName,
             String avatarUrl,
+            String headline,
+            String bio,
             Role role,
             String authProvider,
             String preferredLanguage,
@@ -37,6 +39,8 @@ public class UserDto {
     public record UpdateMyProfileReq(
             String fullName,
             String avatarUrl,
+            String headline,
+            String bio,
             String preferredLanguage
     ) {}
 
@@ -74,6 +78,8 @@ public class UserDto {
             Long id,
             String fullName,
             String avatarUrl,
+            String headline,
+            String bio,
             Role role,
             LocalDateTime memberSince,
             List<PublicCourseRes> courses,

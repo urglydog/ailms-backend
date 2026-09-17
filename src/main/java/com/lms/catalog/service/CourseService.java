@@ -50,7 +50,7 @@ public class CourseService {
     private static final Set<String> ALLOWED_LEVELS = Set.of("BEGINNER", "INTERMEDIATE", "ADVANCED");
     private static final int MAX_RESUBMIT_COUNT = 5;
     private static final int MIN_CHAPTERS_TO_SUBMIT = 1;
-    private static final int MIN_LESSONS_TO_SUBMIT = 3;
+    private static final int MIN_LESSONS_TO_SUBMIT = 1;
 
     private final CourseRepository courseRepository;
     private final CategoryRepository categoryRepository;
@@ -66,6 +66,11 @@ public class CourseService {
     public DetailRes create(String instructorEmail, CreateReq req) {
         User instructor = userRepository.findByEmail(instructorEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("User", instructorEmail));
+
+        if (instructor.getHeadline() == null || instructor.getHeadline().trim().isEmpty() 
+            || instructor.getBio() == null || instructor.getBio().trim().length() < 20) {
+            throw new BusinessRuleViolationException("PROFILE_INCOMPLETE", "Vui lòng hoàn thiện chức danh và tiểu sử giảng viên (tối thiểu 20 ký tự).");
+        }
 
         Category category = categoryRepository.findById(req.categoryId())
                 .orElseThrow(() -> new ResourceNotFoundException("Category", req.categoryId()));

@@ -162,6 +162,8 @@ class UserServiceTest {
         UpdateMyProfileReq req = new UpdateMyProfileReq(
             "Nguyễn Văn A",
             "https://new-avatar.url",
+            null,
+            null,
             "vi"
         );
         UserRes result = userService.updateMyProfile(email, req);
@@ -188,7 +190,7 @@ class UserServiceTest {
         when(userRepository.findByEmail(email)).thenReturn(Optional.of(user));
         when(userRepository.save(any(User.class))).thenReturn(user);
 
-        UpdateMyProfileReq req = new UpdateMyProfileReq("New Name", null, null);
+        UpdateMyProfileReq req = new UpdateMyProfileReq("New Name", null, null, null, null);
         UserRes result = userService.updateMyProfile(email, req);
 
         assertEquals("New Name", result.fullName());
@@ -213,7 +215,7 @@ class UserServiceTest {
         when(userRepository.findByEmail(email)).thenReturn(Optional.of(user));
         when(userRepository.save(any(User.class))).thenReturn(user);
 
-        UpdateMyProfileReq req = new UpdateMyProfileReq("  ", "", null);
+        UpdateMyProfileReq req = new UpdateMyProfileReq("  ", "", null, null, null);
         UserRes result = userService.updateMyProfile(email, req);
 
         assertEquals("Original Name", result.fullName());
@@ -227,7 +229,7 @@ class UserServiceTest {
         when(userRepository.findByEmail("nonexistent@lms.local"))
             .thenReturn(Optional.empty());
 
-        UpdateMyProfileReq req = new UpdateMyProfileReq("Name", "url", "en");
+        UpdateMyProfileReq req = new UpdateMyProfileReq("Name", "url", null, null, "en");
         assertThrows(RuntimeException.class, () ->
             userService.updateMyProfile("nonexistent@lms.local", req)
         );
