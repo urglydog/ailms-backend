@@ -504,7 +504,7 @@ public class QuizService {
                 .orElseThrow(() -> new ResourceNotFoundException("Quiz", quizId));
         
         return quizAttemptRepository.findByUser_EmailAndQuiz_IdOrderByScoreDesc(studentEmail, quiz.getId()).stream()
-                .map(a -> new QuizAttemptDto.HistoryRes(a.getId(), a.getScore(), a.getCorrectCount(), a.getTotalQuestions(), a.getSubmittedAt(), a.getQuiz().getId(), a.getStatus(), Boolean.TRUE.equals(a.getQuiz().getIsDeleted())))
+                .map(a -> new QuizAttemptDto.HistoryRes(a.getId(), a.getScore(), a.getCorrectCount(), a.getTotalQuestions(), a.getSubmittedAt(), a.getQuiz().getId(), a.getStatus(), Boolean.TRUE.equals(a.getQuiz().getIsDeleted()), Boolean.TRUE.equals(a.getQuiz().getAllowReview())))
                 .collect(Collectors.toList());
     }
 
@@ -518,6 +518,10 @@ public class QuizService {
         
         QuizQuestion question = quizQuestionRepository.findById(req.questionId())
                 .orElseThrow(() -> new ResourceNotFoundException("QuizQuestion", req.questionId()));
+                
+        if (Boolean.FALSE.equals(question.getQuiz().getAllowReview())) {
+            throw new AccessDeniedDomainException("Bai thi nay khong cho phep xem lai dap an");
+        }
                 
         // Ensure student actually took this quiz (basic authorization)
         // For simplicity, we just pass the question directly to AI

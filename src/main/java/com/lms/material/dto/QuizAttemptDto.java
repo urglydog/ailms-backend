@@ -71,6 +71,7 @@ public class QuizAttemptDto {
             LocalDateTime submittedAt,
             Long quizId,
             String status,
-            Boolean isArchived
+            Boolean isArchived,
+            Boolean allowReview
     ) {}
 }

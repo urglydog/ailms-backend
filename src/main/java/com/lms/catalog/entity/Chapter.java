@@ -28,5 +28,6 @@ public class Chapter extends BaseEntity {
     private Course course;
 
     @OneToMany(mappedBy = "chapter", fetch = FetchType.LAZY)
+    @OrderBy("displayOrder ASC")
     private java.util.List<Lesson> lessons = new java.util.ArrayList<>();
 }

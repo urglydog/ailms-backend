@@ -18,6 +18,7 @@ public interface ChapterRepository extends JpaRepository<Chapter, Long> {
 
     List<Chapter> findByCourseIdOrderByDisplayOrderAsc(Long courseId);
 
-    @org.springframework.data.jpa.repository.Query("SELECT DISTINCT c FROM Chapter c LEFT JOIN FETCH c.lessons l WHERE c.course.id = :courseId ORDER BY c.displayOrder ASC, l.displayOrder ASC")
+    @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"lessons"})
+    @org.springframework.data.jpa.repository.Query("SELECT c FROM Chapter c WHERE c.course.id = :courseId ORDER BY c.displayOrder ASC")
     List<Chapter> findChaptersWithLessonsByCourseId(@org.springframework.data.repository.query.Param("courseId") Long courseId);
 }
