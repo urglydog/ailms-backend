@@ -117,6 +117,9 @@ public class MaterialGeneration extends BaseEntity {
     @JoinColumn(name = "parent_generation_id")
     private MaterialGeneration parentGeneration;
 
+    @OneToMany(mappedBy = "material", cascade = CascadeType.ALL, orphanRemoval = true)
+    private java.util.List<MaterialAssignment> assignments = new java.util.ArrayList<>();
+
     /** BR-MAT-01: Cho phép người tạo hoặc Giảng viên sở hữu khóa học được xem/sử dụng học liệu. */
     public boolean isReusableBy(User other) {
         if (user == null || other == null) return false;

@@ -24,6 +24,100 @@ import java.security.Principal;
 @RequiredArgsConstructor
 public class InstructorMaterialController {
 
+    @PostMapping("/{id}/versioning-overwrite")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
+    @Transactional
+    public ResponseEntity<java.util.Map<String, Object>> versioningOverwrite(Principal principal, @PathVariable Long id, @RequestBody java.util.Map<String, Long> payload) {
+        com.lms.material.entity.MaterialGeneration gen = materialGenerationRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("MaterialGeneration", id));
+        if (!gen.getCourse().getInstructor().getEmail().equals(principal.getName())) {
+            throw new AccessDeniedDomainException("Ban khong co quyen");
+        }
+        
+        Long targetLessonId = payload.get("targetLessonId");
+        Long targetChapterId = payload.get("targetChapterId");
+        
+        // 1. Clone V1 -> V2
+        int nextVersion = materialGenerationRepository.findTopByUser_IdAndCourse_IdAndIsDeletedFalseOrderByVersionNoDesc(gen.getUser().getId(), gen.getCourse().getId())
+                .map(mg -> mg.getVersionNo() + 1)
+                .orElse(1);
+                
+        com.lms.material.entity.MaterialGeneration newGen = new com.lms.material.entity.MaterialGeneration();
+        newGen.setUser(gen.getUser());
+        newGen.setCourse(gen.getCourse());
+        newGen.setMaterialType(gen.getMaterialType());
+        newGen.setLanguage(gen.getLanguage());
+        newGen.setTitle(gen.getTitle() + " (V2)");
+        newGen.setScopeType(gen.getScopeType());
+        newGen.setScopeRefId(gen.getScopeRefId());
+        newGen.setCustomLessonIds(gen.getCustomLessonIds());
+        newGen.setQuantityLevel(gen.getQuantityLevel());
+        newGen.setDifficultyLevel(gen.getDifficultyLevel());
+        newGen.setVersionNo(nextVersion);
+        newGen.setStatus(gen.getStatus());
+        newGen.setParentGeneration(gen);
+        
+        materialGenerationRepository.save(newGen);
+        
+        Long newMaterialId = null;
+        
+        // Clone specific material
+        if (gen.getMaterialType() == com.lms.common.enums.MaterialType.QUIZ) {
+            com.lms.material.entity.Quiz oldQuiz = quizRepository.findByMaterialGeneration_IdAndIsDeletedFalse(gen.getId()).orElse(null);
+            if (oldQuiz != null) {
+                com.lms.material.entity.Quiz newQuiz = new com.lms.material.entity.Quiz();
+                newQuiz.setMaterialGeneration(newGen);
+                newQuiz.setQuestionCount(oldQuiz.getQuestionCount());
+                newQuiz.setIsOfficial(oldQuiz.getIsOfficial());
+                newQuiz.setQuizType(oldQuiz.getQuizType());
+                newQuiz.setAllowReview(oldQuiz.getAllowReview());
+                newQuiz.setMaxAttempts(oldQuiz.getMaxAttempts());
+                newQuiz.setDurationMinutes(oldQuiz.getDurationMinutes());
+                quizRepository.save(newQuiz);
+                newMaterialId = newQuiz.getId();
+            }
+        } else if (gen.getMaterialType() == com.lms.common.enums.MaterialType.FLASHCARD) {
+            FlashcardDeck oldDeck = flashcardDeckRepository.findByMaterialGeneration_Id(gen.getId()).orElse(null);
+            if (oldDeck != null) {
+                FlashcardDeck newDeck = new FlashcardDeck();
+                newDeck.setMaterialGeneration(newGen);
+                newDeck.setCardCount(oldDeck.getCardCount());
+                newDeck.setIsOfficial(oldDeck.getIsOfficial());
+                flashcardDeckRepository.save(newDeck);
+                newMaterialId = newDeck.getId();
+            }
+        } else if (gen.getMaterialType() == com.lms.common.enums.MaterialType.MINDMAP) {
+            Mindmap oldMindmap = mindmapRepository.findByMaterialGeneration_Id(gen.getId()).orElse(null);
+            if (oldMindmap != null) {
+                Mindmap newMindmap = new Mindmap();
+                newMindmap.setMaterialGeneration(newGen);
+                newMindmap.setNodeCount(oldMindmap.getNodeCount());
+                newMindmap.setMermaidCode(oldMindmap.getMermaidCode());
+                newMindmap.setIsOfficial(oldMindmap.getIsOfficial());
+                mindmapRepository.save(newMindmap);
+                newMaterialId = newMindmap.getId();
+            }
+        }
+        
+        // 2. Set is_archived = true cho V1
+        gen.setIsArchived(true);
+        materialGenerationRepository.save(gen);
+        
+        // 3. Chuyển các assignment của V1 sang V2
+        materialAssignmentService.transferAssignments(gen.getId(), newGen.getId());
+        
+        // Force the assignment to the target
+        materialAssignmentService.assignMaterial(newGen.getId(), gen.getCourse().getId(), targetChapterId, targetLessonId);
+        
+        java.util.Map<String, Object> response = new java.util.HashMap<>();
+        response.put("id", newGen.getId());
+        response.put("materialId", newMaterialId);
+        response.put("message", "Đã tạo phiên bản mới và ghi đè thành công");
+        
+        return ResponseEntity.ok(response);
+    }
+
+
     private final MindmapRepository mindmapRepository;
     private final FlashcardDeckRepository flashcardDeckRepository;
     private final com.lms.material.repository.MaterialGenerationRepository materialGenerationRepository;
@@ -225,8 +319,25 @@ public class InstructorMaterialController {
             
             boolean isOfficial = false;
             Long materialId = null;
-            Long chapterId = gen.getChapter() != null ? gen.getChapter().getId() : null;
-            Long lessonId = gen.getLesson() != null ? gen.getLesson().getId() : null;
+
+            java.util.List<java.util.Map<String, Object>> assignments = new java.util.ArrayList<>();
+            if (gen.getAssignments() != null) {
+                for (com.lms.material.entity.MaterialAssignment assignment : gen.getAssignments()) {
+                    java.util.Map<String, Object> assignmentMap = new java.util.HashMap<>();
+                    assignmentMap.put("id", assignment.getId());
+                    if (assignment.getLesson() != null) {
+                        assignmentMap.put("lessonId", assignment.getLesson().getId());
+                    }
+                    if (assignment.getChapter() != null) {
+                        assignmentMap.put("chapterId", assignment.getChapter().getId());
+                    }
+                    if (assignment.getCourse() != null) {
+                        assignmentMap.put("courseId", assignment.getCourse().getId());
+                    }
+                    assignments.add(assignmentMap);
+                }
+            }
+
             String quizType = "OFFICIAL_EXAM";
             Integer questionCount = 0;
             Integer randomPickCount = null;
@@ -290,8 +401,7 @@ public class InstructorMaterialController {
                         java.util.Map.entry("status", gen.getStatus().name()),
                         java.util.Map.entry("isOfficial", isOfficial),
                         java.util.Map.entry("versionNo", gen.getVersionNo()),
-                        java.util.Map.entry("chapterId", chapterId != null ? chapterId : ""),
-                        java.util.Map.entry("lessonId", lessonId != null ? lessonId : ""),
+                        java.util.Map.entry("assignments", assignments),
                         java.util.Map.entry("quizType", quizType),
                         java.util.Map.entry("materialId", materialId != null ? materialId : ""),
                         java.util.Map.entry("questionCount", questionCount != null ? questionCount : 0),

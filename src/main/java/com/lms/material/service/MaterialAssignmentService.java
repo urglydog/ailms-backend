@@ -45,7 +45,23 @@ public class MaterialAssignmentService {
             Course course = courseRepository.findById(courseId)
                     .orElseThrow(() -> new ResourceNotFoundException("Course", courseId));
             assignment.setCourse(course);
+        
+    @Transactional
+    public void transferAssignments(Long oldMaterialId, Long newMaterialId) {
+        MaterialGeneration oldMaterial = generationRepository.findById(oldMaterialId)
+                .orElseThrow(() -> new ResourceNotFoundException("MaterialGeneration", oldMaterialId));
+        MaterialGeneration newMaterial = generationRepository.findById(newMaterialId)
+                .orElseThrow(() -> new ResourceNotFoundException("MaterialGeneration", newMaterialId));
+        
+        java.util.List<MaterialAssignment> assignments = assignmentRepository.findAll();
+        for (MaterialAssignment assignment : assignments) {
+            if (assignment.getMaterial() != null && assignment.getMaterial().getId().equals(oldMaterialId)) {
+                assignment.setMaterial(newMaterial);
+                assignmentRepository.save(assignment);
+            }
         }
+    }
+}
         if (chapterId != null) {
             Chapter chapter = chapterRepository.findById(chapterId)
                     .orElseThrow(() -> new ResourceNotFoundException("Chapter", chapterId));
