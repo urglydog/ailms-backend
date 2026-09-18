@@ -30,6 +30,7 @@ public class InstructorMaterialController {
     private final com.lms.material.repository.QuizRepository quizRepository;
     private final com.lms.material.repository.QuizAttemptRepository quizAttemptRepository;
     private final com.lms.material.repository.FlashcardReviewRepository flashcardReviewRepository;
+    private final com.lms.material.service.MaterialAssignmentService materialAssignmentService;
     private final NotificationService notificationService;
     private final EnrollmentRepository enrollmentRepository;
     private final CourseRepository courseRepository;
@@ -46,23 +47,10 @@ public class InstructorMaterialController {
         
         Long lessonId = payload.get("lessonId");
         Long chapterId = payload.get("chapterId");
+        Long courseId = payload.get("courseId");
         
-        if (lessonId != null) {
-            com.lms.catalog.entity.Lesson lesson = new com.lms.catalog.entity.Lesson();
-            lesson.setId(lessonId);
-            gen.setLesson(lesson);
-            gen.setChapter(null);
-        } else if (chapterId != null) {
-            com.lms.catalog.entity.Chapter chapter = new com.lms.catalog.entity.Chapter();
-            chapter.setId(chapterId);
-            gen.setChapter(chapter);
-            gen.setLesson(null);
-        } else {
-            gen.setLesson(null);
-            gen.setChapter(null);
-        }
+        materialAssignmentService.assignMaterial(id, courseId, chapterId, lessonId);
         
-        materialGenerationRepository.save(gen);
         return ResponseEntity.ok(java.util.Map.of("message", "Đã cập nhật đính kèm học liệu"));
     }
 
