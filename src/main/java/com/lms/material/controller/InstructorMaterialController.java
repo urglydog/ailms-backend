@@ -25,7 +25,7 @@ import java.security.Principal;
 public class InstructorMaterialController {
 
     @DeleteMapping("/assignments/{assignmentId}")
-    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<java.util.Map<String, String>> unassignMaterial(Principal principal, @PathVariable Long assignmentId) {
         // Validation of ownership could be added here if needed, but for simplicity assuming AssignmentService handles it or it's implicitly trusted by Instructor Role
         materialAssignmentService.unassignMaterial(assignmentId);
@@ -33,7 +33,7 @@ public class InstructorMaterialController {
     }
 
     @PutMapping("/{id}/move-to-folder")
-    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @PreAuthorize("isAuthenticated()")
     @Transactional
     public ResponseEntity<java.util.Map<String, String>> moveToFolder(Principal principal, @PathVariable Long id, @RequestBody java.util.Map<String, Long> payload) {
         com.lms.material.entity.MaterialGeneration gen = materialGenerationRepository.findById(id)
