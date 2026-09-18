@@ -170,8 +170,10 @@ public class InstructorMaterialController {
         // 3. Chuyển các assignment của V1 sang V2
         materialAssignmentService.transferAssignments(gen.getId(), newGen.getId());
         
-        // Force the assignment to the target
-        materialAssignmentService.assignMaterial(newGen.getId(), gen.getCourse().getId(), targetChapterId, targetLessonId);
+        // Force the assignment to the target ONLY if target is provided
+        if (targetChapterId != null || targetLessonId != null) {
+            materialAssignmentService.assignMaterial(newGen.getId(), gen.getCourse().getId(), targetChapterId, targetLessonId);
+        }
         
         java.util.Map<String, Object> response = new java.util.HashMap<>();
         response.put("id", newGen.getId());
@@ -403,7 +405,9 @@ public class InstructorMaterialController {
                     if (assignment.getCourse() != null) {
                         assignmentMap.put("courseId", assignment.getCourse().getId());
                     }
-                    assignments.add(assignmentMap);
+                    if (assignment.getLesson() != null || assignment.getChapter() != null) {
+                        assignments.add(assignmentMap);
+                    }
                 }
             }
 
