@@ -55,6 +55,7 @@ public class MaterialGenerationService {
     private final VoiceMappingRepository voiceMappingRepository;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
+    private final com.lms.dubbing.service.TranscriptExtractionService transcriptExtractionService;
 
     @Value("${lms.redis-keys.material-queue:lms:material:jobs}")
     private String queueKey;
@@ -97,14 +98,6 @@ public class MaterialGenerationService {
             throw new BusinessRuleViolationException("Ngôn ngữ này chưa được hệ thống hỗ trợ (BR-DUB-07)");
         }
 
-        // BR-MAT-01 — điều kiện DUY NHẤT còn lại: phạm vi được chọn phải có ít nhất 1 bài đã có
-        // transcript gốc (WhisperX/Groq chạy ngay lúc nạp video — xem TranscriptExtractionService).
-        if (!hasSourceTranscriptInScope(course.getId(), req)) {
-            throw new BusinessRuleViolationException(
-                    "Phạm vi này chưa có bài giảng nào sẵn sàng — transcript gốc có thể đang được "
-                            + "trích xuất sau khi nạp video, vui lòng thử lại sau ít phút");
-        }
-
         int nextVersion = materialGenerationRepository.findTopByUser_IdAndCourse_IdAndIsDeletedFalseOrderByVersionNoDesc(user.getId(), course.getId())
                 .map(mg -> mg.getVersionNo() + 1)
                 .orElse(1);
@@ -142,21 +135,45 @@ public class MaterialGenerationService {
         generation.setQuantityLevel(req.quantityLevel());
         generation.setDifficultyLevel(req.difficultyLevel());
         generation.setVersionNo(nextVersion);
-        generation.setStatus(GenStatus.PENDING);
+
+        java.util.List<com.lms.catalog.entity.Lesson> missingLessons = getMissingLessonsInScope(course.getId(), generation);
+        boolean isPendingTranscript = !missingLessons.isEmpty();
+        generation.setStatus(isPendingTranscript ? GenStatus.PENDING_TRANSCRIPT : GenStatus.PENDING);
 
         MaterialGeneration saved = materialGenerationRepository.save(generation);
 
-        String jsonPayload = toJson(saved);
         org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
                 new org.springframework.transaction.support.TransactionSynchronization() {
                     @Override
                     public void afterCommit() {
-                        redisTemplate.opsForList().leftPush(queueKey, jsonPayload);
+                        if (isPendingTranscript) {
+                            for (com.lms.catalog.entity.Lesson lesson : missingLessons) {
+                                transcriptExtractionService.requestExtraction(lesson);
+                            }
+                        } else {
+                            String jsonPayload = toJson(saved);
+                            redisTemplate.opsForList().leftPush(queueKey, jsonPayload);
+                        }
                     }
                 }
         );
 
         return toDto(saved);
+    }
+
+    @org.springframework.context.event.EventListener
+    @org.springframework.transaction.annotation.Transactional
+    public void onTranscriptExtracted(com.lms.common.event.TranscriptExtractedEvent event) {
+        java.util.List<MaterialGeneration> pendingGens = materialGenerationRepository.findByCourse_IdAndStatus(event.courseId(), GenStatus.PENDING_TRANSCRIPT);
+        for (MaterialGeneration gen : pendingGens) {
+            java.util.List<com.lms.catalog.entity.Lesson> missingLessons = getMissingLessonsInScope(event.courseId(), gen);
+            if (missingLessons.isEmpty()) {
+                gen.setStatus(GenStatus.PENDING);
+                MaterialGeneration saved = materialGenerationRepository.save(gen);
+                String jsonPayload = toJson(saved);
+                redisTemplate.opsForList().leftPush(queueKey, jsonPayload);
+            }
+        }
     }
 
     @org.springframework.transaction.annotation.Transactional(readOnly = true)
@@ -393,15 +410,37 @@ public class MaterialGenerationService {
         return java.util.Locale.forLanguageTag(languageCode).getDisplayName(java.util.Locale.forLanguageTag("vi-VN"));
     }
 
-    /** BR-MAT-01 — phạm vi được chọn phải có ít nhất 1 bài đã có transcript gốc. */
-    private boolean hasSourceTranscriptInScope(Long courseId, com.lms.material.dto.MaterialGenerationReq req) {
-        return switch (req.scopeType()) {
-            case WHOLE_COURSE -> transcriptRepository.existsSourceTranscriptByCourseId(courseId);
-            case CHAPTER -> req.scopeRefId() != null && transcriptRepository.existsSourceTranscriptByChapterId(req.scopeRefId());
-            case CUSTOM_LESSONS -> req.customLessonIds() != null && !req.customLessonIds().isEmpty()
-                    && transcriptRepository.existsSourceTranscriptByLessonIdIn(req.customLessonIds());
-            default -> false;
-        };
+    private java.util.List<com.lms.catalog.entity.Lesson> getMissingLessonsInScope(Long courseId, MaterialGeneration gen) {
+        java.util.List<com.lms.catalog.entity.Lesson> scopeLessons = new java.util.ArrayList<>();
+        switch (gen.getScopeType()) {
+            case WHOLE_COURSE -> {
+                chapterRepository.findByCourseIdOrderByDisplayOrderAsc(courseId).forEach(ch -> scopeLessons.addAll(lessonRepository.findByChapterIdOrderByDisplayOrderAsc(ch.getId())));
+            }
+            case CHAPTER -> {
+                if (gen.getScopeRefId() != null) {
+                    scopeLessons.addAll(lessonRepository.findByChapterIdOrderByDisplayOrderAsc(gen.getScopeRefId()));
+                }
+            }
+            case CUSTOM_LESSONS -> {
+                if (gen.getCustomLessonIds() != null && !gen.getCustomLessonIds().isEmpty()) {
+                    try {
+                        java.util.List<Long> customLessonIds = objectMapper.readValue(gen.getCustomLessonIds(), new com.fasterxml.jackson.core.type.TypeReference<java.util.List<Long>>(){});
+                        scopeLessons.addAll(lessonRepository.findAllById(customLessonIds));
+                    } catch (JsonProcessingException e) {
+                        // ignore
+                    }
+                } else if (gen.getLesson() != null) {
+                    scopeLessons.add(gen.getLesson());
+                }
+            }
+        }
+        
+        java.util.Set<Long> readyLessonIds = new java.util.HashSet<>(
+                transcriptRepository.findLessonIdsWithSourceTranscriptByCourseId(courseId));
+        
+        return scopeLessons.stream()
+                .filter(l -> !readyLessonIds.contains(l.getId()) && "READY".equals(l.getStatus()))
+                .toList();
     }
 
     /** UC24 — chọn phạm vi Chương/Bài tuỳ chọn: chỉ hiện bài ĐÃ có transcript gốc (sẵn sàng sinh

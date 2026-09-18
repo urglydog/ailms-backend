@@ -8,6 +8,7 @@ package com.lms.common.enums;
  * <p>Dùng bởi: MaterialGeneration</p>
  */
 public enum GenStatus {
+    PENDING_TRANSCRIPT,
     PENDING,
     PROCESSING,
     COMPLETED,

@@ -25,4 +25,6 @@ public interface MaterialGenerationRepository extends JpaRepository<MaterialGene
     List<MaterialGeneration> findByUser_IdAndCourse_IdAndIsDeletedFalseOrderByVersionNoDesc(Long userId, Long courseId);
 
     List<MaterialGeneration> findByCourse_IdAndIsDeletedFalseOrderByCreatedAtDesc(Long courseId);
+
+    List<MaterialGeneration> findByCourse_IdAndStatus(Long courseId, com.lms.common.enums.GenStatus status);
 }

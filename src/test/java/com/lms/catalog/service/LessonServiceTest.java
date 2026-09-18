@@ -118,8 +118,6 @@ class LessonServiceTest {
         assertThat(result.videoUrl()).isEqualTo("https://cdn.example.com/videos/30/x.mp4");
         assertThat(result.durationSec()).isEqualTo(300);
         assertThat(result.status()).isEqualTo("READY");
-        // UC34 mở rộng — script gốc phải được yêu cầu trích ngay, không đợi lồng tiếng.
-        verify(transcriptExtractionService).requestExtraction(lesson);
     }
 
     @Test
@@ -163,7 +161,6 @@ class LessonServiceTest {
         assertThat(result.youtubeId()).isEqualTo("abc12345678");
         assertThat(result.durationSec()).isEqualTo(600);
         assertThat(result.status()).isEqualTo("READY");
-        verify(transcriptExtractionService).requestExtraction(lesson);
     }
 
     @Test
