@@ -67,4 +67,20 @@ public class MaterialAssignmentService {
         }
         assignmentRepository.deleteById(assignmentId);
     }
+
+    @Transactional
+    public void transferAssignments(Long oldMaterialId, Long newMaterialId) {
+        MaterialGeneration oldMaterial = generationRepository.findById(oldMaterialId)
+                .orElseThrow(() -> new ResourceNotFoundException("MaterialGeneration", oldMaterialId));
+        MaterialGeneration newMaterial = generationRepository.findById(newMaterialId)
+                .orElseThrow(() -> new ResourceNotFoundException("MaterialGeneration", newMaterialId));
+        
+        java.util.List<MaterialAssignment> assignments = assignmentRepository.findAll();
+        for (MaterialAssignment assignment : assignments) {
+            if (assignment.getMaterial() != null && assignment.getMaterial().getId().equals(oldMaterialId)) {
+                assignment.setMaterial(newMaterial);
+                assignmentRepository.save(assignment);
+            }
+        }
+    }
 }
