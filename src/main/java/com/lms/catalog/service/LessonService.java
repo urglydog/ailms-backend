@@ -158,7 +158,6 @@ public class LessonService {
             lesson.setDurationSec(durationSec);
             lesson.setStatus("READY");
             Lesson saved = lessonRepository.save(lesson);
-            requestTranscriptExtractionAfterCommit(saved);
             return mapToRes(saved);
         } catch (IOException e) {
             throw new InvalidRequestException("Không tải được video lên kho lưu trữ: " + e.getMessage());
@@ -190,7 +189,6 @@ public class LessonService {
         lesson.setDurationSec(durationSec);
         lesson.setStatus("READY");
         Lesson saved = lessonRepository.save(lesson);
-        requestTranscriptExtractionAfterCommit(saved);
         return mapToRes(saved);
     }
 

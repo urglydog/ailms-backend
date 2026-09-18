@@ -41,6 +41,7 @@ public class TranscriptExtractionService {
     private final TranscriptPersistenceService transcriptPersistenceService;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
+    private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     @Value("${lms.redis-keys.transcript-queue:lms:transcript:jobs}")
     private String queueKey;
@@ -86,6 +87,7 @@ public class TranscriptExtractionService {
             transcriptPersistenceService.saveSourceSegments(lesson, detectedLanguage, segments);
             log.info("Da trich xong script goc cho lesson {} ({} cau, ngon ngu {})",
                     lessonId, segments.size(), detectedLanguage);
+            eventPublisher.publishEvent(new com.lms.common.event.TranscriptExtractedEvent(lessonId, lesson.getChapter().getCourse().getId()));
         } else if ("SKIPPED".equals(outcome)) {
             log.info("Bo qua trich script goc cho lesson {} (video khong co loi thoai dang ke): {}",
                     lessonId, errorMessage);
