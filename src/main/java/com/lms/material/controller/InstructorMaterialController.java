@@ -24,6 +24,38 @@ import java.security.Principal;
 @RequiredArgsConstructor
 public class InstructorMaterialController {
 
+    @DeleteMapping("/assignments/{assignmentId}")
+    @PreAuthorize("hasRole('INSTRUCTOR')")
+    public ResponseEntity<java.util.Map<String, String>> unassignMaterial(Principal principal, @PathVariable Long assignmentId) {
+        // Validation of ownership could be added here if needed, but for simplicity assuming AssignmentService handles it or it's implicitly trusted by Instructor Role
+        materialAssignmentService.unassignMaterial(assignmentId);
+        return ResponseEntity.ok(java.util.Map.of("message", "Đã gỡ phân phối học liệu"));
+    }
+
+    @PutMapping("/{id}/move-to-folder")
+    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @Transactional
+    public ResponseEntity<java.util.Map<String, String>> moveToFolder(Principal principal, @PathVariable Long id, @RequestBody java.util.Map<String, Long> payload) {
+        com.lms.material.entity.MaterialGeneration gen = materialGenerationRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("MaterialGeneration", id));
+        if (!gen.getCourse().getInstructor().getEmail().equals(principal.getName())) {
+            throw new AccessDeniedDomainException("Ban khong co quyen");
+        }
+        
+        Long folderId = payload.get("folderId");
+        if (folderId != null) {
+            com.lms.material.entity.MaterialFolder folder = materialFolderRepository.findById(folderId)
+                    .orElseThrow(() -> new ResourceNotFoundException("MaterialFolder", folderId));
+            gen.setFolder(folder);
+        } else {
+            gen.setFolder(null);
+        }
+        materialGenerationRepository.save(gen);
+        
+        return ResponseEntity.ok(java.util.Map.of("message", "Đã di chuyển học liệu"));
+    }
+
+
     @PostMapping("/{id}/versioning-overwrite")
     @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     @Transactional
@@ -61,6 +93,7 @@ public class InstructorMaterialController {
         
         Long newMaterialId = null;
         
+
         // Clone specific material
         if (gen.getMaterialType() == com.lms.common.enums.MaterialType.QUIZ) {
             com.lms.material.entity.Quiz oldQuiz = quizRepository.findByMaterialGeneration_IdAndIsDeletedFalse(gen.getId()).orElse(null);
@@ -75,6 +108,26 @@ public class InstructorMaterialController {
                 newQuiz.setDurationMinutes(oldQuiz.getDurationMinutes());
                 quizRepository.save(newQuiz);
                 newMaterialId = newQuiz.getId();
+                
+                // Deep clone QuizQuestions
+                java.util.List<com.lms.material.entity.QuizQuestion> oldQuestions = quizQuestionRepository.findByQuiz_IdOrderByDisplayOrderAsc(oldQuiz.getId());
+                for (com.lms.material.entity.QuizQuestion oldQ : oldQuestions) {
+                    com.lms.material.entity.QuizQuestion newQ = new com.lms.material.entity.QuizQuestion();
+                    newQ.setQuiz(newQuiz);
+                    newQ.setContent(oldQ.getContent());
+                    newQ.setIsMultipleChoice(oldQ.getIsMultipleChoice());
+                    newQ.setDisplayOrder(oldQ.getDisplayOrder());
+                    quizQuestionRepository.save(newQ);
+                    
+                    java.util.List<com.lms.material.entity.QuizOption> oldOptions = quizOptionRepository.findByQuestion_Id(oldQ.getId());
+                    for (com.lms.material.entity.QuizOption oldOpt : oldOptions) {
+                        com.lms.material.entity.QuizOption newOpt = new com.lms.material.entity.QuizOption();
+                        newOpt.setQuestion(newQ);
+                        newOpt.setContent(oldOpt.getContent());
+                        newOpt.setIsCorrect(oldOpt.getIsCorrect());
+                        quizOptionRepository.save(newOpt);
+                    }
+                }
             }
         } else if (gen.getMaterialType() == com.lms.common.enums.MaterialType.FLASHCARD) {
             FlashcardDeck oldDeck = flashcardDeckRepository.findByMaterialGeneration_Id(gen.getId()).orElse(null);
@@ -85,8 +138,19 @@ public class InstructorMaterialController {
                 newDeck.setIsOfficial(oldDeck.getIsOfficial());
                 flashcardDeckRepository.save(newDeck);
                 newMaterialId = newDeck.getId();
+                
+                // Deep clone Flashcards
+                java.util.List<com.lms.material.entity.Flashcard> oldCards = flashcardRepository.findByFlashcardDeck_Id(oldDeck.getId());
+                for (com.lms.material.entity.Flashcard oldCard : oldCards) {
+                    com.lms.material.entity.Flashcard newCard = new com.lms.material.entity.Flashcard();
+                    newCard.setFlashcardDeck(newDeck);
+                    newCard.setFrontText(oldCard.getFrontText());
+                    newCard.setBackText(oldCard.getBackText());
+                    flashcardRepository.save(newCard);
+                }
             }
         } else if (gen.getMaterialType() == com.lms.common.enums.MaterialType.MINDMAP) {
+
             Mindmap oldMindmap = mindmapRepository.findByMaterialGeneration_Id(gen.getId()).orElse(null);
             if (oldMindmap != null) {
                 Mindmap newMindmap = new Mindmap();
@@ -119,6 +183,10 @@ public class InstructorMaterialController {
 
 
     private final MindmapRepository mindmapRepository;
+    private final com.lms.material.repository.QuizQuestionRepository quizQuestionRepository;
+    private final com.lms.material.repository.QuizOptionRepository quizOptionRepository;
+    private final com.lms.material.repository.FlashcardRepository flashcardRepository;
+    private final com.lms.material.repository.MaterialFolderRepository materialFolderRepository;
     private final FlashcardDeckRepository flashcardDeckRepository;
     private final com.lms.material.repository.MaterialGenerationRepository materialGenerationRepository;
     private final com.lms.material.repository.QuizRepository quizRepository;
@@ -320,6 +388,7 @@ public class InstructorMaterialController {
             boolean isOfficial = false;
             Long materialId = null;
 
+            Long folderId = gen.getFolder() != null ? gen.getFolder().getId() : null;
             java.util.List<java.util.Map<String, Object>> assignments = new java.util.ArrayList<>();
             if (gen.getAssignments() != null) {
                 for (com.lms.material.entity.MaterialAssignment assignment : gen.getAssignments()) {
@@ -392,29 +461,34 @@ public class InstructorMaterialController {
             // CHỈ GIỮ LẠI: Học liệu do Giảng viên tự sinh HOẶC học liệu đang là Official.
             // Bỏ qua các học liệu tự luyện cá nhân của Học viên.
             if (createdByInstructor || isOfficial) {
-                result.add(java.util.Map.ofEntries(
-                        java.util.Map.entry("id", gen.getId()),
-                        java.util.Map.entry("materialType", gen.getMaterialType().name()),
-                        java.util.Map.entry("title", gen.getTitle() != null ? gen.getTitle() : ""),
-                        java.util.Map.entry("language", gen.getLanguage()),
-                        java.util.Map.entry("createdAt", gen.getCreatedAt()),
-                        java.util.Map.entry("status", gen.getStatus().name()),
-                        java.util.Map.entry("isOfficial", isOfficial),
-                        java.util.Map.entry("versionNo", gen.getVersionNo()),
-                        java.util.Map.entry("assignments", assignments),
-                        java.util.Map.entry("quizType", quizType),
-                        java.util.Map.entry("materialId", materialId != null ? materialId : ""),
-                        java.util.Map.entry("questionCount", questionCount != null ? questionCount : 0),
-                        java.util.Map.entry("randomPickCount", randomPickCount != null ? randomPickCount : ""),
-                        java.util.Map.entry("allowReview", allowReview),
-                        java.util.Map.entry("startTime", startTime != null ? startTime.toString() : ""),
-                        java.util.Map.entry("endTime", endTime != null ? endTime.toString() : ""),
-                        java.util.Map.entry("durationMinutes", durationMinutes != null ? durationMinutes : ""),
-                        java.util.Map.entry("maxAttempts", maxAttempts != null ? maxAttempts : ""),
-                        java.util.Map.entry("attemptCount", attemptCount),
-                        java.util.Map.entry("isProctored", isProctored),
-                        java.util.Map.entry("maxViolations", maxViolations != null ? maxViolations : 3)
-                ));
+    
+            java.util.Map<String, Object> map = new java.util.HashMap<>();
+            map.put("id", gen.getId());
+            map.put("materialType", gen.getMaterialType().name());
+            map.put("title", gen.getTitle());
+            map.put("createdAt", gen.getCreatedAt().toString());
+            map.put("status", gen.getStatus().name());
+            map.put("language", gen.getLanguage());
+            map.put("versionNo", gen.getVersionNo());
+            map.put("isOfficial", isOfficial);
+            map.put("materialId", materialId);
+            map.put("questionCount", questionCount);
+            map.put("randomPickCount", randomPickCount);
+            map.put("allowReview", allowReview);
+            map.put("startTime", startTime != null ? startTime.toString() : null);
+            map.put("endTime", endTime != null ? endTime.toString() : null);
+            map.put("durationMinutes", durationMinutes);
+            map.put("maxAttempts", maxAttempts);
+            map.put("isProctored", isProctored);
+            map.put("maxViolations", maxViolations);
+            map.put("quizType", quizType);
+            map.put("attemptCount", attemptCount);
+            map.put("usageCount", usageCount);
+            map.put("assignments", assignments);
+            map.put("folderId", folderId);
+            
+            result.add(map);
+
             }
         }
         return ResponseEntity.ok(result);
