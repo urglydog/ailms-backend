@@ -106,6 +106,17 @@ public class MaterialGeneration extends BaseEntity {
     @JoinColumn(name = "lesson_id")
     private Lesson lesson;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "folder_id")
+    private MaterialFolder folder;
+
+    @Column(name = "is_archived", nullable = false)
+    private Boolean isArchived = false;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_generation_id")
+    private MaterialGeneration parentGeneration;
+
     /** BR-MAT-01: Cho phép người tạo hoặc Giảng viên sở hữu khóa học được xem/sử dụng học liệu. */
     public boolean isReusableBy(User other) {
         if (user == null || other == null) return false;
