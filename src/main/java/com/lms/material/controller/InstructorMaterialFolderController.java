@@ -19,7 +19,7 @@ public class InstructorMaterialFolderController {
     private final MaterialFolderService materialFolderService;
 
     @GetMapping("/course/{courseId}")
-    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<MaterialFolderDto>> getFolders(
             @PathVariable Long courseId,
             @RequestParam(required = false) Long parentId) {
@@ -27,13 +27,13 @@ public class InstructorMaterialFolderController {
     }
 
     @PostMapping
-    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<MaterialFolderDto> createFolder(@Valid @RequestBody MaterialFolderReq req) {
         return ResponseEntity.ok(materialFolderService.createFolder(req));
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<MaterialFolderDto> updateFolder(
             @PathVariable Long id,
             @Valid @RequestBody MaterialFolderReq req) {
@@ -41,7 +41,7 @@ public class InstructorMaterialFolderController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Void> deleteFolder(@PathVariable Long id) {
         materialFolderService.deleteFolder(id);
         return ResponseEntity.ok().build();
