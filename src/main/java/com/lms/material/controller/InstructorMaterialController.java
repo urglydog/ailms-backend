@@ -119,10 +119,10 @@ public class InstructorMaterialController {
                     newQ.setDisplayOrder(oldQ.getDisplayOrder());
                     quizQuestionRepository.save(newQ);
                     
-                    java.util.List<com.lms.material.entity.QuizOption> oldOptions = quizOptionRepository.findByQuestion_Id(oldQ.getId());
+                    java.util.List<com.lms.material.entity.QuizOption> oldOptions = quizOptionRepository.findByQuizQuestion_Id(oldQ.getId());
                     for (com.lms.material.entity.QuizOption oldOpt : oldOptions) {
                         com.lms.material.entity.QuizOption newOpt = new com.lms.material.entity.QuizOption();
-                        newOpt.setQuestion(newQ);
+                        newOpt.setQuizQuestion(newQ);
                         newOpt.setContent(oldOpt.getContent());
                         newOpt.setIsCorrect(oldOpt.getIsCorrect());
                         quizOptionRepository.save(newOpt);
