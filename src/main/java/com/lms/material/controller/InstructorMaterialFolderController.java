@@ -1,0 +1,49 @@
+package com.lms.material.controller;
+
+import com.lms.material.dto.MaterialFolderDto;
+import com.lms.material.dto.MaterialFolderReq;
+import com.lms.material.service.MaterialFolderService;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/v1/instructor/material-folders")
+@RequiredArgsConstructor
+public class InstructorMaterialFolderController {
+
+    private final MaterialFolderService materialFolderService;
+
+    @GetMapping("/course/{courseId}")
+    @PreAuthorize("hasRole('INSTRUCTOR')")
+    public ResponseEntity<List<MaterialFolderDto>> getFolders(
+            @PathVariable Long courseId,
+            @RequestParam(required = false) Long parentId) {
+        return ResponseEntity.ok(materialFolderService.getFoldersByCourse(courseId, parentId));
+    }
+
+    @PostMapping
+    @PreAuthorize("hasRole('INSTRUCTOR')")
+    public ResponseEntity<MaterialFolderDto> createFolder(@Valid @RequestBody MaterialFolderReq req) {
+        return ResponseEntity.ok(materialFolderService.createFolder(req));
+    }
+
+    @PutMapping("/{id}")
+    @PreAuthorize("hasRole('INSTRUCTOR')")
+    public ResponseEntity<MaterialFolderDto> updateFolder(
+            @PathVariable Long id,
+            @Valid @RequestBody MaterialFolderReq req) {
+        return ResponseEntity.ok(materialFolderService.updateFolder(id, req));
+    }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('INSTRUCTOR')")
+    public ResponseEntity<Void> deleteFolder(@PathVariable Long id) {
+        materialFolderService.deleteFolder(id);
+        return ResponseEntity.ok().build();
+    }
+}
