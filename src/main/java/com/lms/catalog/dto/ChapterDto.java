@@ -13,7 +13,9 @@ public class ChapterDto {
 
     public record UpdateReq(
             @NotBlank(message = "Tiêu đề chương không được để trống")
-            String title
+            String title,
+            /** Nullable — Phần không bắt buộc phải có mô tả. */
+            String description
     ) {}
 
     public record ReorderReq(
@@ -25,6 +27,7 @@ public class ChapterDto {
             Long id,
             String title,
             Integer displayOrder,
-            List<LessonDto.Res> lessons
+            List<LessonDto.Res> lessons,
+            String description
     ) {}
 }

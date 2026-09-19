@@ -8,6 +8,7 @@ import com.lms.catalog.repository.ChapterRepository;
 import com.lms.catalog.repository.CourseRepository;
 import com.lms.catalog.repository.LessonRepository;
 import com.lms.common.enums.CourseStatus;
+import com.lms.common.enums.CourseVisibility;
 import com.lms.common.exception.AccessDeniedDomainException;
 import com.lms.common.exception.ResourceNotFoundException;
 import com.lms.coupon.dto.CouponDto.PriceRes;
@@ -42,6 +43,7 @@ public class CoursePublicService {
     private final AudioTrackRepository audioTrackRepository;
     private final EnrollmentRepository enrollmentRepository;
     private final CouponService couponService;
+    private final CourseAccessService courseAccessService;
 
     @Transactional(readOnly = true)
     public Page<SummaryRes> search(
@@ -119,12 +121,29 @@ public class CoursePublicService {
         return byPrefixMatch.thenComparing(SummaryRes::title, String.CASE_INSENSITIVE_ORDER);
     }
 
+    /**
+     * @param requesterEmail null nếu Guest chưa đăng nhập — vẫn xem được khóa PUBLIC/
+     *                       PRIVATE_PASSWORD (mật khẩu chỉ chặn lúc GHI DANH, không chặn xem
+     *                       trang chi tiết), nhưng KHÔNG xem được khóa PRIVATE_INVITE trừ khi
+     *                       email nằm trong danh sách mời (BR mới, 19/09/2026).
+     */
     @Transactional(readOnly = true)
-    public DetailRes getBySlug(String slug) {
+    public DetailRes getBySlug(String slug, String requesterEmail) {
         // Không phân biệt "không tồn tại" và "chưa PUBLISHED" — tránh lộ thông tin khóa
-        // DRAFT/PENDING/REJECTED cho Guest chỉ vì họ đoán đúng slug.
+        // DRAFT/PENDING/REJECTED cho Guest chỉ vì họ đoán đúng slug. Áp dụng cùng nguyên tắc cho
+        // PRIVATE_INVITE: người ngoài không được biết khóa "riêng tư mời" này có tồn tại hay không.
         Course course = courseRepository.findBySlugAndStatus(slug, CourseStatus.PUBLISHED)
                 .orElseThrow(() -> new ResourceNotFoundException("Course", slug));
+
+        if (course.getVisibility() == CourseVisibility.PRIVATE_INVITE) {
+            boolean allowed = courseAccessService.isInvited(course, requesterEmail)
+                    || (requesterEmail != null
+                            && enrollmentRepository.existsByUser_EmailAndCourse_Id(requesterEmail, course.getId()));
+            if (!allowed) {
+                throw new ResourceNotFoundException("Course", slug);
+            }
+        }
+
         return mapToDetailRes(course);
     }
 
@@ -135,11 +154,18 @@ public class CoursePublicService {
      * thời CHỈ mở nhánh Preview; khi có ghi danh thật, bổ sung nhánh "đã sở hữu khóa học" ở đây.
      */
     @Transactional(readOnly = true)
-    public PlayerRes getLessonForPlayback(Long lessonId) {
+    public PlayerRes getLessonForPlayback(Long lessonId, String requesterEmail) {
         Lesson lesson = lessonRepository.findById(lessonId)
                 .orElseThrow(() -> new ResourceNotFoundException("Lesson", lessonId));
         Course course = lesson.getChapter().getCourse();
         if (course.getStatus() != CourseStatus.PUBLISHED) {
+            throw new ResourceNotFoundException("Lesson", lessonId);
+        }
+        // (19/09/2026) — khóa "Riêng tư mời" không lộ preview cho người ngoài, cùng tinh thần
+        // với `getBySlug`. Khóa "Riêng tư mật khẩu" vẫn cho xem thử preview bình thường (mật
+        // khẩu chỉ chặn lúc ghi danh thật).
+        if (course.getVisibility() == CourseVisibility.PRIVATE_INVITE
+                && !courseAccessService.isInvited(course, requesterEmail)) {
             throw new ResourceNotFoundException("Lesson", lessonId);
         }
         if (!Boolean.TRUE.equals(lesson.getIsPreview())) {
@@ -239,7 +265,8 @@ public class CoursePublicService {
                 dubbedLanguages,
                 learnerCount,
                 price.finalPrice(),
-                price.discountPercent()
+                price.discountPercent(),
+                course.getVisibility() == CourseVisibility.PRIVATE_PASSWORD
         );
     }
 

@@ -4,6 +4,7 @@ import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
 import com.lms.catalog.entity.Course;
 import com.lms.catalog.repository.LessonRepository;
+import com.lms.catalog.service.CourseAccessService;
 import com.lms.common.exception.ResourceNotFoundException;
 import com.lms.enrollment.dto.EnrollmentDto.Res;
 import com.lms.enrollment.entity.Enrollment;
@@ -38,6 +39,7 @@ public class EnrollmentService {
     private final LessonRepository lessonRepository;
     private final LessonProgressRepository lessonProgressRepository;
     private final CartItemRepository cartItemRepository;
+    private final CourseAccessService courseAccessService;
 
     @Transactional(readOnly = true)
     public List<Res> getMyEnrollments(String email) {
@@ -84,11 +86,15 @@ public class EnrollmentService {
     }
 
     @Transactional
-    public void enrollFreeCourse(String email, Long courseId) {
+    public void enrollFreeCourse(String email, Long courseId, String password) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("User", email));
         Course course = courseRepository.findById(courseId)
                 .orElseThrow(() -> new ResourceNotFoundException("Course", courseId));
+
+        // "Đăng ký (Quyền riêng tư)" kiểu Udemy (19/09/2026) — PRIVATE_INVITE/PRIVATE_PASSWORD
+        // chặn NGAY TẠI ĐÂY, trước cả các điều kiện BR-ENROLL-01 bên dưới.
+        courseAccessService.verifyCanEnroll(course, email, password);
 
         if (course.getStatus() != CourseStatus.PUBLISHED) {
             throw new BusinessRuleViolationException("BR-ENROLL-01: Chỉ có thể ghi danh khóa học đã xuất bản.");

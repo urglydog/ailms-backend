@@ -23,6 +23,11 @@ public class Lesson extends BaseEntity {
     @Column(name = "title", nullable = false, length = 255)
     private String title;
 
+    /** Mô tả bài giảng (15/09/2026, mở rộng — giao diện tham khảo Udemy "Chương trình giảng
+     * dạy"): nêu rõ học viên sẽ làm được gì sau bài học, tách khỏi {@code title}. */
+    @Column(name = "description", columnDefinition = "TEXT")
+    private String description;
+
     /**
      * UPLOAD hoac YOUTUBE. NULL cho tới khi nạp video ở Giai đoạn 4 — F2.1 chỉ tạo
      * bài học với metadata (title), chưa xử lý video (UC33 tách khỏi UC34).

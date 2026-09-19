@@ -59,7 +59,11 @@ public class CoursePublicDto {
             Long learnerCount,
             /** UC57 mở rộng (15/09/2026) — xem {@code SummaryRes.finalPrice}. */
             BigDecimal finalPrice,
-            Integer discountPercent
+            Integer discountPercent,
+            /** "Đăng ký (Quyền riêng tư)" kiểu Udemy (19/09/2026) — {@code true} khi khóa học ở
+             * chế độ {@code PRIVATE_PASSWORD}, FE hiện ô nhập mật khẩu trước khi cho ghi danh.
+             * Không bao giờ trả mật khẩu/hash thật. */
+            boolean requiresPassword
     ) {}
 
     public record ChapterRes(

@@ -11,7 +11,9 @@ import com.lms.common.exception.ResourceNotFoundException;
 import com.lms.coupon.service.CouponService;
 import com.lms.enrollment.repository.EnrollmentRepository;
 import com.lms.enrollment.service.EnrollmentService;
+import com.lms.common.exception.AccessDeniedDomainException;
 import com.lms.payment.dto.PaymentDto.CreateBatchReq;
+import com.lms.payment.dto.PaymentDto.CreateReq;
 import com.lms.payment.entity.Payment;
 import com.lms.payment.repository.PaymentRepository;
 import java.math.BigDecimal;
@@ -33,6 +35,7 @@ import vn.payos.service.blocking.v2.paymentRequests.PaymentRequestsService;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -58,6 +61,7 @@ class PaymentServiceTest {
     @Mock private PayOS payOS;
     @Mock private PaymentRequestsService paymentRequestsService;
     @Mock private CouponService couponService;
+    @Mock private com.lms.catalog.service.CourseAccessService courseAccessService;
 
     @InjectMocks
     private PaymentService paymentService;
@@ -243,6 +247,30 @@ class PaymentServiceTest {
 
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.FAILED);
         verify(enrollmentService, never()).createFromPayment(any());
+    }
+
+    // ── "Đăng ký (Quyền riêng tư)" kiểu Udemy (19/09/2026) ─────────────────
+
+    @Test
+    void createPayment_courseAccessDenied_throwsAndNeverSavesPayment() {
+        doThrow(new AccessDeniedDomainException("Mật khẩu đăng ký không đúng."))
+                .when(courseAccessService).verifyCanEnroll(courseA, EMAIL, "sai-mat-khau");
+
+        assertThatThrownBy(() -> paymentService.createPayment(
+                EMAIL, new CreateReq(10L, "VNPAY", null, null, null, "sai-mat-khau")))
+                .isInstanceOf(AccessDeniedDomainException.class);
+        verify(paymentRepository, never()).save(any());
+    }
+
+    @Test
+    void createBatchPayment_courseAccessDenied_throwsWithoutSavingAnyPayment() {
+        doThrow(new AccessDeniedDomainException("Khóa học riêng tư có mật khẩu chỉ hỗ trợ mua trực tiếp, không thể thêm vào giỏ hàng."))
+                .when(courseAccessService).verifyCanAddToCart(courseA, EMAIL);
+
+        assertThatThrownBy(() -> paymentService.createBatchPayment(
+                EMAIL, new CreateBatchReq(List.of(10L, 20L), "PAYOS", null, null, null)))
+                .isInstanceOf(AccessDeniedDomainException.class);
+        verify(paymentRepository, never()).save(any());
     }
 
     private Payment pendingPayment(String txnRef, String orderGroupRef, Course course, BigDecimal amount) {

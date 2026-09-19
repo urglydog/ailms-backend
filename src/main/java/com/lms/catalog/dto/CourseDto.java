@@ -1,6 +1,7 @@
 package com.lms.catalog.dto;
 
 import com.lms.common.enums.CourseStatus;
+import com.lms.common.enums.CourseVisibility;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -51,6 +52,20 @@ public class CourseDto {
             String reason
     ) {}
 
+    /** "Đăng ký (Quyền riêng tư)" kiểu Udemy (19/09/2026) — {@code password} bắt buộc khi
+     * {@code visibility == PRIVATE_PASSWORD} VÀ chưa từng đặt mật khẩu; để trống thì giữ
+     * nguyên mật khẩu cũ (cho phép đổi các field khác mà không bắt nhập lại mật khẩu). */
+    public record VisibilityUpdateReq(
+            @NotNull(message = "Quyền riêng tư không được để trống")
+            CourseVisibility visibility,
+            String password
+    ) {}
+
+    public record InviteReq(
+            @NotBlank(message = "Email không được để trống")
+            String email
+    ) {}
+
     public record SummaryRes(
             Long id,
             String title,
@@ -62,7 +77,12 @@ public class CourseDto {
             Boolean isFree,
             BigDecimal avgRating,
             Integer totalLessons,
-            LocalDateTime createdAt
+            LocalDateTime createdAt,
+            /** % hồ sơ khóa học đã điền đủ (19/09/2026, mở rộng — giao diện tham khảo Udemy
+             * "Hoàn thành khóa học của bạn" ở trang danh sách): tiêu đề/mô tả/ảnh bìa/≥1
+             * chương/≥1 bài học sẵn sàng — KHÔNG tính điều kiện xác minh định danh (BR-VERIFY-01,
+             * đó là điều kiện CẤP TÀI KHOẢN, không phải nội dung riêng của khóa này). */
+            Integer completionPercent
     ) {}
 
     public record DetailRes(
@@ -83,6 +103,10 @@ public class CourseDto {
             String instructorName,
             List<ChapterDto.Res> chapters,
             List<String> missingConditions,
-            boolean canSubmit
+            boolean canSubmit,
+            /** "Đăng ký (Quyền riêng tư)" kiểu Udemy (19/09/2026). */
+            CourseVisibility visibility,
+            /** {@code true} nếu đã từng đặt mật khẩu — KHÔNG bao giờ trả mật khẩu/hash thật. */
+            boolean hasEnrollPassword
     ) {}
 }

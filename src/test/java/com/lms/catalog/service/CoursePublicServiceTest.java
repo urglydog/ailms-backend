@@ -10,6 +10,7 @@ import com.lms.catalog.repository.ChapterRepository;
 import com.lms.catalog.repository.CourseRepository;
 import com.lms.catalog.repository.LessonRepository;
 import com.lms.common.enums.CourseStatus;
+import com.lms.common.enums.CourseVisibility;
 import com.lms.common.exception.AccessDeniedDomainException;
 import com.lms.common.exception.ResourceNotFoundException;
 import com.lms.coupon.service.CouponService;
@@ -48,6 +49,7 @@ class CoursePublicServiceTest {
     @Mock private AudioTrackRepository audioTrackRepository;
     @Mock private EnrollmentRepository enrollmentRepository;
     @Mock private CouponService couponService;
+    @Mock private CourseAccessService courseAccessService;
 
     @InjectMocks
     private CoursePublicService coursePublicService;
@@ -57,7 +59,7 @@ class CoursePublicServiceTest {
         when(courseRepository.findBySlugAndStatus("khong-ton-tai", CourseStatus.PUBLISHED))
                 .thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> coursePublicService.getBySlug("khong-ton-tai"))
+        assertThatThrownBy(() -> coursePublicService.getBySlug("khong-ton-tai", null))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
@@ -86,11 +88,90 @@ class CoursePublicServiceTest {
         lenient().when(courseReviewRepository.countByCourse_IdAndIsHiddenFalse(5L)).thenReturn(2L);
         lenient().when(audioTrackRepository.findAvailableLanguagesByCourse(5L)).thenReturn(List.of());
 
-        DetailRes result = coursePublicService.getBySlug("khoa-hoc-test");
+        DetailRes result = coursePublicService.getBySlug("khoa-hoc-test", null);
 
         assertThat(result.title()).isEqualTo("Khoa hoc test");
         assertThat(result.reviewCount()).isEqualTo(2L);
         assertThat(result.categorySlug()).isEqualTo("lap-trinh-web");
+        assertThat(result.requiresPassword()).isFalse();
+    }
+
+    /** (19/09/2026) — "Riêng tư (mời)" giấu hẳn khóa với người ngoài, giống cách "chưa PUBLISHED"
+     * bị giấu — cùng một loại lỗi 404, không tiết lộ khóa "riêng tư" này có tồn tại hay không. */
+    @Test
+    void getBySlug_privateInvite_throwsNotFound_whenRequesterNotInvited() {
+        Course course = privateInviteCourseOf();
+        when(courseRepository.findBySlugAndStatus("khoa-rieng-tu", CourseStatus.PUBLISHED))
+                .thenReturn(Optional.of(course));
+        when(courseAccessService.isInvited(course, "nguoila@lms.local")).thenReturn(false);
+        lenient().when(enrollmentRepository.existsByUser_EmailAndCourse_Id("nguoila@lms.local", 5L)).thenReturn(false);
+
+        assertThatThrownBy(() -> coursePublicService.getBySlug("khoa-rieng-tu", "nguoila@lms.local"))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void getBySlug_privateInvite_returnsDetail_whenRequesterIsInvited() {
+        Course course = privateInviteCourseOf();
+        when(courseRepository.findBySlugAndStatus("khoa-rieng-tu", CourseStatus.PUBLISHED))
+                .thenReturn(Optional.of(course));
+        when(courseAccessService.isInvited(course, "duoc-moi@lms.local")).thenReturn(true);
+        lenient().when(chapterRepository.findByCourseIdOrderByDisplayOrderAsc(5L)).thenReturn(List.of());
+        lenient().when(courseReviewRepository.countByCourse_IdAndIsHiddenFalse(5L)).thenReturn(0L);
+        lenient().when(audioTrackRepository.findAvailableLanguagesByCourse(5L)).thenReturn(List.of());
+
+        DetailRes result = coursePublicService.getBySlug("khoa-rieng-tu", "duoc-moi@lms.local");
+
+        assertThat(result.title()).isEqualTo("Khoa rieng tu");
+    }
+
+    @Test
+    void getBySlug_privatePassword_stillReturnsDetail_andFlagsRequiresPassword() {
+        Category category = new Category();
+        category.setId(1L);
+        category.setName("Cat");
+        category.setSlug("cat");
+        var instructor = new com.lms.auth.entity.User();
+        instructor.setFullName("GV");
+
+        Course course = new Course();
+        course.setId(5L);
+        course.setTitle("Khoa mat khau");
+        course.setSlug("khoa-mat-khau");
+        course.setCategory(category);
+        course.setInstructor(instructor);
+        course.setStatus(CourseStatus.PUBLISHED);
+        course.setVisibility(CourseVisibility.PRIVATE_PASSWORD);
+        course.setEnrollPasswordHash("hashed");
+
+        when(courseRepository.findBySlugAndStatus("khoa-mat-khau", CourseStatus.PUBLISHED))
+                .thenReturn(Optional.of(course));
+        lenient().when(chapterRepository.findByCourseIdOrderByDisplayOrderAsc(5L)).thenReturn(List.of());
+        lenient().when(courseReviewRepository.countByCourse_IdAndIsHiddenFalse(5L)).thenReturn(0L);
+        lenient().when(audioTrackRepository.findAvailableLanguagesByCourse(5L)).thenReturn(List.of());
+
+        DetailRes result = coursePublicService.getBySlug("khoa-mat-khau", null);
+
+        assertThat(result.requiresPassword()).isTrue();
+    }
+
+    private Course privateInviteCourseOf() {
+        Category category = new Category();
+        category.setId(1L);
+        category.setName("Cat");
+        category.setSlug("cat");
+        var instructor = new com.lms.auth.entity.User();
+        instructor.setFullName("GV");
+
+        Course course = new Course();
+        course.setId(5L);
+        course.setTitle("Khoa rieng tu");
+        course.setSlug("khoa-rieng-tu");
+        course.setCategory(category);
+        course.setInstructor(instructor);
+        course.setStatus(CourseStatus.PUBLISHED);
+        course.setVisibility(CourseVisibility.PRIVATE_INVITE);
+        return course;
     }
 
     @Test
@@ -215,7 +296,7 @@ class CoursePublicServiceTest {
         Lesson lesson = previewLessonOf(CourseStatus.PUBLISHED);
         when(lessonRepository.findById(30L)).thenReturn(Optional.of(lesson));
 
-        PlayerRes result = coursePublicService.getLessonForPlayback(30L);
+        PlayerRes result = coursePublicService.getLessonForPlayback(30L, null);
 
         assertThat(result.videoSource()).isEqualTo("YOUTUBE");
         assertThat(result.videoUrl()).isEqualTo("https://www.youtube.com/watch?v=abc12345678");
@@ -228,7 +309,7 @@ class CoursePublicServiceTest {
         lesson.setIsPreview(false);
         when(lessonRepository.findById(30L)).thenReturn(Optional.of(lesson));
 
-        assertThatThrownBy(() -> coursePublicService.getLessonForPlayback(30L))
+        assertThatThrownBy(() -> coursePublicService.getLessonForPlayback(30L, null))
                 .isInstanceOf(AccessDeniedDomainException.class);
     }
 
@@ -237,7 +318,7 @@ class CoursePublicServiceTest {
         Lesson lesson = previewLessonOf(CourseStatus.PENDING);
         when(lessonRepository.findById(30L)).thenReturn(Optional.of(lesson));
 
-        assertThatThrownBy(() -> coursePublicService.getLessonForPlayback(30L))
+        assertThatThrownBy(() -> coursePublicService.getLessonForPlayback(30L, null))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
@@ -245,7 +326,18 @@ class CoursePublicServiceTest {
     void getLessonForPlayback_throwsNotFound_whenLessonMissing() {
         when(lessonRepository.findById(999L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> coursePublicService.getLessonForPlayback(999L))
+        assertThatThrownBy(() -> coursePublicService.getLessonForPlayback(999L, null))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void getLessonForPlayback_privateInvite_throwsNotFound_whenRequesterNotInvited() {
+        Lesson lesson = previewLessonOf(CourseStatus.PUBLISHED);
+        lesson.getChapter().getCourse().setVisibility(CourseVisibility.PRIVATE_INVITE);
+        when(lessonRepository.findById(30L)).thenReturn(Optional.of(lesson));
+        when(courseAccessService.isInvited(lesson.getChapter().getCourse(), "nguoila@lms.local")).thenReturn(false);
+
+        assertThatThrownBy(() -> coursePublicService.getLessonForPlayback(30L, "nguoila@lms.local"))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 

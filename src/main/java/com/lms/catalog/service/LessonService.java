@@ -69,6 +69,7 @@ public class LessonService {
         Lesson lesson = loadOwnedLesson(lessonId, instructorEmail);
         lesson.setTitle(req.title());
         lesson.setIsPreview(req.isPreview());
+        lesson.setDescription(req.description());
         return mapToRes(lessonRepository.save(lesson));
     }
 
@@ -301,7 +302,8 @@ public class LessonService {
                 lesson.getVideoSource(),
                 lesson.getVideoUrl(),
                 lesson.getYoutubeId(),
-                lesson.getDurationSec()
+                lesson.getDurationSec(),
+                lesson.getDescription()
         );
     }
 }

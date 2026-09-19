@@ -45,4 +45,18 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, Long> {
      * giảng viên, thay số "12450" gắn cứng cũ (đang chờ module Enrollment — module đã có thật). */
     long countByCourse_Instructor_Email(String email);
 
+    /** Trang "Hiệu suất" (19/09/2026, mở rộng) — lượt ghi danh MỚI trong khoảng thời gian chọn
+     * (7 ngày/30 ngày/12 tháng/mọi thời điểm), khác {@link #countByCourse_Instructor_Email}
+     * (tổng TOÀN BỘ, không lọc thời gian). */
+    long countByCourse_Instructor_EmailAndEnrolledAtAfter(String email, java.time.LocalDateTime after);
+
+    /** Trang "Học viên" — toàn bộ lượt ghi danh trên các khóa của giảng viên, mới nhất trước. */
+    @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"user", "course"})
+    List<Enrollment> findByCourse_Instructor_EmailOrderByEnrolledAtDesc(String email);
+
+    /** "Giao tiếp > Tin nhắn" (19/09/2026) — Giảng viên chỉ được nhắn tin cho học viên đã ghi
+     * danh ÍT NHẤT 1 khóa của MÌNH, dùng khi không chọn ngữ cảnh khóa cụ thể lúc bắt đầu hội
+     * thoại (tránh spam học viên hoàn toàn xa lạ). */
+    boolean existsByUser_IdAndCourse_Instructor_Email(Long userId, String instructorEmail);
+
 }

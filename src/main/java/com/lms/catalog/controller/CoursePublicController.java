@@ -2,6 +2,7 @@ package com.lms.catalog.controller;
 
 import com.lms.catalog.dto.CoursePublicDto.*;
 import com.lms.catalog.service.CoursePublicService;
+import java.security.Principal;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -40,14 +41,18 @@ public class CoursePublicController {
                 keyword, categorySlug, level, priceType, minRating, durationBucket, sortBy, pageable));
     }
 
+    /** {@code principal} có thể null (Guest chưa đăng nhập) — vẫn được phép vì route này
+     * permitAll; khi có JWT hợp lệ, Spring vẫn điền {@code Principal} dù endpoint không bắt
+     * buộc đăng nhập, dùng để kiểm khóa "Riêng tư mời" (xem {@code CoursePublicService}). */
     @GetMapping("/{slug}")
-    public ResponseEntity<DetailRes> getBySlug(@PathVariable String slug) {
-        return ResponseEntity.ok(coursePublicService.getBySlug(slug));
+    public ResponseEntity<DetailRes> getBySlug(@PathVariable String slug, Principal principal) {
+        return ResponseEntity.ok(coursePublicService.getBySlug(slug, principal == null ? null : principal.getName()));
     }
 
     /** UC11 — Học thử Preview: phát video của bài học đánh dấu Preview, không cần đăng nhập. */
     @GetMapping("/lessons/{lessonId}/player")
-    public ResponseEntity<PlayerRes> getLessonPlayer(@PathVariable Long lessonId) {
-        return ResponseEntity.ok(coursePublicService.getLessonForPlayback(lessonId));
+    public ResponseEntity<PlayerRes> getLessonPlayer(@PathVariable Long lessonId, Principal principal) {
+        return ResponseEntity.ok(
+                coursePublicService.getLessonForPlayback(lessonId, principal == null ? null : principal.getName()));
     }
 }

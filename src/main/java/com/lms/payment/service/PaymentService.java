@@ -4,6 +4,7 @@ import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
 import com.lms.catalog.entity.Course;
 import com.lms.catalog.repository.CourseRepository;
+import com.lms.catalog.service.CourseAccessService;
 import com.lms.common.enums.CourseStatus;
 import com.lms.common.enums.PaymentStatus;
 import com.lms.common.exception.BusinessRuleViolationException;
@@ -44,6 +45,7 @@ public class PaymentService {
     private final EnrollmentRepository enrollmentRepository;
     private final EnrollmentService enrollmentService;
     private final CouponService couponService;
+    private final CourseAccessService courseAccessService;
     private final PayOS payOS;
 
     @Value("${payment.vnpay.tmnCode:}")
@@ -70,6 +72,8 @@ public class PaymentService {
                 .orElseThrow(() -> new ResourceNotFoundException("User", email));
         Course course = courseRepository.findById(req.courseId())
                 .orElseThrow(() -> new ResourceNotFoundException("Course", req.courseId()));
+
+        courseAccessService.verifyCanEnroll(course, email, req.courseAccessPassword());
 
         if (course.getStatus() != CourseStatus.PUBLISHED) {
             throw new BusinessRuleViolationException("BR-PAY-01: Chỉ có thể thanh toán khóa học PUBLISHED.");
@@ -153,6 +157,10 @@ public class PaymentService {
                 .map(id -> courseRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Course", id)))
                 .toList();
         for (Course course : courses) {
+            // (19/09/2026) — cùng quy tắc với CartService.addItem: khóa "Riêng tư mật khẩu"
+            // không hỗ trợ thanh toán gộp (không có chỗ cho mật khẩu RIÊNG từng khóa trong 1
+            // lần checkout nhiều khóa) — học viên dùng "Mua ngay" riêng cho khóa đó.
+            courseAccessService.verifyCanAddToCart(course, email);
             if (course.getStatus() != CourseStatus.PUBLISHED) {
                 throw new BusinessRuleViolationException("BR-PAY-01: Khóa học \"" + course.getTitle() + "\" chưa được xuất bản.");
             }

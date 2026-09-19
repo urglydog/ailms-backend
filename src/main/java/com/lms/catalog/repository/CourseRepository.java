@@ -45,6 +45,9 @@ public interface CourseRepository extends JpaRepository<Course, Long> {
      * ở quy mô hiện tại (danh mục mẫu nhỏ), cần đánh index/denormalize nếu catalog lớn hơn nhiều.
      */
     @Query("SELECT c FROM Course c WHERE c.status = com.lms.common.enums.CourseStatus.PUBLISHED "
+            // (19/09/2026) — khóa "Riêng tư" (mời/mật khẩu) không hiện trong tìm kiếm/danh mục
+            // công khai, chỉ truy cập được qua link trực tiếp (xem CoursePublicService.getBySlug).
+            + "AND c.visibility = com.lms.common.enums.CourseVisibility.PUBLIC "
             + "AND (:keyword IS NULL OR LOWER(c.title) LIKE LOWER(CONCAT('%', :keyword, '%'))) "
             + "AND (:categorySlug IS NULL OR c.category.slug = :categorySlug) "
             + "AND (:level IS NULL OR c.level = :level) "

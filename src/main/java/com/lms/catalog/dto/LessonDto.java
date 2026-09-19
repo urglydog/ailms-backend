@@ -18,7 +18,10 @@ public class LessonDto {
             String title,
 
             @NotNull(message = "Trạng thái Preview không được để trống")
-            Boolean isPreview
+            Boolean isPreview,
+
+            /** Nullable — bài giảng không bắt buộc phải có mô tả. */
+            String description
     ) {}
 
     public record ReorderReq(
@@ -41,6 +44,7 @@ public class LessonDto {
             String videoSource,
             String videoUrl,
             String youtubeId,
-            Integer durationSec
+            Integer durationSec,
+            String description
     ) {}
 }

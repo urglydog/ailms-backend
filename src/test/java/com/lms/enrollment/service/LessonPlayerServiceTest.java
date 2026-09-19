@@ -212,6 +212,22 @@ class LessonPlayerServiceTest {
     }
 
     @Test
+    void giangVienSoHuuKhoaHoc_traVeEnrolledTrue_duChuaTungGhiDanh() {
+        // (19/09/2026) — nút "Xem trước > Với tư cách là Giảng viên" ở trang chỉnh sửa khóa học:
+        // Giảng viên chưa từng tự ghi danh khóa của MÌNH vẫn phải thấy đầy đủ trải nghiệm (Hỏi
+        // đáp/Học liệu/Bài tập/Gia sư AI), không bị khóa như khách lạ.
+        User instructor = new User();
+        instructor.setEmail(EMAIL);
+        lesson.getChapter().getCourse().setInstructor(instructor);
+        when(enrollmentSecurity.canAccessLesson(EMAIL, 21L, true)).thenReturn(true);
+        when(enrollmentRepository.existsByUser_EmailAndCourse_Id(EMAIL, 10L)).thenReturn(false);
+
+        Res res = service.getLessonForPlayback(EMAIL, 21L);
+
+        assertThat(res.enrolled()).isTrue();
+    }
+
+    @Test
     void traVeDanhSachChuongBai_theoThuTu_khongCoChapterThiRong() {
         when(enrollmentSecurity.canAccessLesson(EMAIL, 21L, true)).thenReturn(true);
 

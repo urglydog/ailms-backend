@@ -5,6 +5,7 @@ import com.lms.auth.repository.UserRepository;
 import com.lms.catalog.entity.Course;
 import com.lms.catalog.repository.CourseRepository;
 import com.lms.catalog.repository.LessonRepository;
+import com.lms.catalog.service.CourseAccessService;
 import com.lms.common.enums.CourseStatus;
 import com.lms.common.exception.BusinessRuleViolationException;
 import com.lms.common.exception.ResourceNotFoundException;
@@ -44,6 +45,7 @@ public class CartService {
     private final LessonRepository lessonRepository;
     private final CourseReviewRepository courseReviewRepository;
     private final CouponService couponService;
+    private final CourseAccessService courseAccessService;
 
     @Transactional(readOnly = true)
     public List<CartDto.ItemRes> getMyCart(String email) {
@@ -58,6 +60,8 @@ public class CartService {
         User user = requireUser(email);
         Course course = courseRepository.findById(courseId)
                 .orElseThrow(() -> new ResourceNotFoundException("Course", courseId));
+
+        courseAccessService.verifyCanAddToCart(course, email);
 
         if (course.getStatus() != CourseStatus.PUBLISHED) {
             throw new BusinessRuleViolationException("BR-CART-01: Chỉ có thể thêm khóa học đã xuất bản vào giỏ hàng.");

@@ -466,14 +466,16 @@ public class MaterialGenerationService {
                                     lesson.getVideoSource(),
                                     lesson.getVideoUrl(),
                                     lesson.getYoutubeId(),
-                                    lesson.getDurationSec()
+                                    lesson.getDurationSec(),
+                                    lesson.getDescription()
                             ))
                             .toList();
                     return new com.lms.catalog.dto.ChapterDto.Res(
                             chapter.getId(),
                             chapter.getTitle(),
                             chapter.getDisplayOrder(),
-                            filteredLessons
+                            filteredLessons,
+                            chapter.getDescription()
                     );
                 })
                 .filter(chapter -> !chapter.lessons().isEmpty())

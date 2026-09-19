@@ -3,6 +3,7 @@ package com.lms.catalog.entity;
 import com.lms.common.entity.BaseEntity;
 import com.lms.auth.entity.User;
 import com.lms.common.enums.CourseStatus;
+import com.lms.common.enums.CourseVisibility;
 import java.math.BigDecimal;
 import jakarta.persistence.*;
 import lombok.Getter;
@@ -76,4 +77,21 @@ public class Course extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "instructor_id", nullable = false)
     private User instructor;
+
+    /** "Đăng ký (Quyền riêng tư)" kiểu Udemy (19/09/2026) — xem {@link CourseVisibility}. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "visibility", nullable = false, length = 20)
+    private CourseVisibility visibility = CourseVisibility.PUBLIC;
+
+    /** Chỉ có giá trị khi {@code visibility == PRIVATE_PASSWORD} — luôn lưu HASH (cùng
+     * {@code PasswordEncoder} với mật khẩu tài khoản), không bao giờ lưu/trả plaintext. */
+    @Column(name = "enroll_password_hash", length = 255)
+    private String enrollPasswordHash;
+
+    /** (19/09/2026) — trạng thái NGAY TRƯỚC KHI archive, để "Kích hoạt lại" khôi phục đúng
+     * (DRAFT nếu chưa từng xuất bản, PUBLISHED nếu đã từng). Chỉ có giá trị khi
+     * {@code status == ARCHIVED}; null ở mọi trạng thái khác. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "previous_status", length = 20)
+    private CourseStatus previousStatus;
 }
