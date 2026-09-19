@@ -84,7 +84,7 @@ class LessonServiceTest {
 
     @Test
     void update_canEnablePreviewWithNoQuantityLimit() {
-        Res result = lessonService.update(OWNER_EMAIL, 30L, new UpdateReq("Bài 1", true));
+        Res result = lessonService.update(OWNER_EMAIL, 30L, new UpdateReq("Bài 1", true, null));
 
         assertThat(result.isPreview()).isTrue();
     }
@@ -93,14 +93,14 @@ class LessonServiceTest {
     void update_canDisablePreview() {
         lesson.setIsPreview(true);
 
-        Res result = lessonService.update(OWNER_EMAIL, 30L, new UpdateReq("Bài 1", false));
+        Res result = lessonService.update(OWNER_EMAIL, 30L, new UpdateReq("Bài 1", false, null));
 
         assertThat(result.isPreview()).isFalse();
     }
 
     @Test
     void update_throwsWhenCallerIsNotOwner() {
-        assertThatThrownBy(() -> lessonService.update("khac@lms.local", 30L, new UpdateReq("Bài 1", false)))
+        assertThatThrownBy(() -> lessonService.update("khac@lms.local", 30L, new UpdateReq("Bài 1", false, null)))
                 .isInstanceOf(AccessDeniedDomainException.class);
     }
 

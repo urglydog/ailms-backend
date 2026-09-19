@@ -35,4 +35,14 @@ public interface CourseReviewRepository extends JpaRepository<CourseReview, Long
     @Query("SELECT COALESCE(AVG(r.rating), 0) FROM CourseReview r "
             + "WHERE r.course.id = :courseId AND r.isHidden = false")
     Double findAverageRatingByCourseId(@Param("courseId") Long courseId);
+
+    /** Trang "Hiệu suất" > Tổng quan (19/09/2026, mở rộng) — điểm đánh giá trung bình của các
+     * đánh giá GỬI TRONG khoảng thời gian chọn, trên mọi khóa của giảng viên. */
+    @Query("SELECT COALESCE(AVG(r.rating), 0) FROM CourseReview r "
+            + "WHERE r.course.instructor.email = :email AND r.isHidden = false AND r.createdAt >= :after")
+    Double findAverageRatingByInstructorEmailSince(@Param("email") String email, @Param("after") java.time.LocalDateTime after);
+
+    /** Trang "Hiệu suất" > Đánh giá — toàn bộ đánh giá (không ẩn) trên các khóa của giảng viên. */
+    @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"user", "course"})
+    java.util.List<CourseReview> findByCourse_Instructor_EmailAndIsHiddenFalseOrderByCreatedAtDesc(String email);
 }

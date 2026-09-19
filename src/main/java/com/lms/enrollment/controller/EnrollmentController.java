@@ -28,8 +28,11 @@ public class EnrollmentController {
 
     @PostMapping("/free/{courseId}")
     @PreAuthorize("hasRole('STUDENT')")
-    public ResponseEntity<Void> enrollFreeCourse(Principal principal, @org.springframework.web.bind.annotation.PathVariable Long courseId) {
-        enrollmentService.enrollFreeCourse(principal.getName(), courseId);
+    public ResponseEntity<Void> enrollFreeCourse(
+            Principal principal,
+            @org.springframework.web.bind.annotation.PathVariable Long courseId,
+            @org.springframework.web.bind.annotation.RequestParam(required = false) String password) {
+        enrollmentService.enrollFreeCourse(principal.getName(), courseId, password);
         return ResponseEntity.ok().build();
     }
 }

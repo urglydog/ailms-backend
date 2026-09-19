@@ -6,6 +6,7 @@ import com.lms.catalog.repository.CourseRepository;
 import com.lms.common.enums.CourseStatus;
 import com.lms.enrollment.repository.EnrollmentRepository;
 import com.lms.payment.repository.PaymentRepository;
+import com.lms.catalog.service.DashboardService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
@@ -18,6 +19,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import com.lms.auth.entity.User;
 
@@ -33,6 +35,7 @@ public class DashboardController {
     private final UserRepository userRepository;
     private final EnrollmentRepository enrollmentRepository;
     private final PaymentRepository paymentRepository;
+    private final DashboardService dashboardService;
 
     @GetMapping("/admin")
     @PreAuthorize("hasRole('ADMIN')")
@@ -111,5 +114,43 @@ public class DashboardController {
                 "averageRating", averageRating,
                 "revenue", revenue
         ));
+    }
+
+    // ==================== Trang "Hiệu suất" (19/09/2026, mở rộng) ====================
+    // Trước đây chỉ là "Coming Soon" ở FE — logic tính toán nằm ở DashboardService (nhiều
+    // bước hơn 2 endpoint cũ ở trên nên tách hẳn theo đúng kiến trúc 3 tầng của dự án).
+
+    @GetMapping("/instructor/performance")
+    @PreAuthorize("hasRole('INSTRUCTOR')")
+    public ResponseEntity<Map<String, Object>> getPerformanceOverview(
+            java.security.Principal principal, @RequestParam(defaultValue = "30d") String range) {
+        return ResponseEntity.ok(dashboardService.getPerformanceOverview(principal.getName(), range));
+    }
+
+    @GetMapping("/instructor/revenue")
+    @PreAuthorize("hasRole('INSTRUCTOR')")
+    public ResponseEntity<List<Map<String, Object>>> getRevenueList(
+            java.security.Principal principal, @RequestParam(defaultValue = "30d") String range) {
+        return ResponseEntity.ok(dashboardService.getRevenueList(principal.getName(), range));
+    }
+
+    @GetMapping("/instructor/students")
+    @PreAuthorize("hasRole('INSTRUCTOR')")
+    public ResponseEntity<List<Map<String, Object>>> getStudents(
+            java.security.Principal principal, @RequestParam(required = false) Long courseId) {
+        return ResponseEntity.ok(dashboardService.getStudents(principal.getName(), courseId));
+    }
+
+    @GetMapping("/instructor/reviews")
+    @PreAuthorize("hasRole('INSTRUCTOR')")
+    public ResponseEntity<List<Map<String, Object>>> getReviews(
+            java.security.Principal principal, @RequestParam(required = false) Long courseId) {
+        return ResponseEntity.ok(dashboardService.getReviews(principal.getName(), courseId));
+    }
+
+    @GetMapping("/instructor/my-courses")
+    @PreAuthorize("hasRole('INSTRUCTOR')")
+    public ResponseEntity<List<Map<String, Object>>> getMyCoursesForFilter(java.security.Principal principal) {
+        return ResponseEntity.ok(dashboardService.getMyCoursesForFilter(principal.getName()));
     }
 }

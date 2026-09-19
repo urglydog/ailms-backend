@@ -47,6 +47,7 @@ public class ChapterService {
     public Res update(String instructorEmail, Long chapterId, UpdateReq req) {
         Chapter chapter = loadOwnedChapter(chapterId, instructorEmail);
         chapter.setTitle(req.title());
+        chapter.setDescription(req.description());
         return mapToRes(chapterRepository.save(chapter));
     }
 
@@ -116,9 +117,10 @@ public class ChapterService {
                         lesson.getVideoSource(),
                         lesson.getVideoUrl(),
                         lesson.getYoutubeId(),
-                        lesson.getDurationSec()
+                        lesson.getDurationSec(),
+                        lesson.getDescription()
                 ))
                 .toList();
-        return new Res(chapter.getId(), chapter.getTitle(), chapter.getDisplayOrder(), lessons);
+        return new Res(chapter.getId(), chapter.getTitle(), chapter.getDisplayOrder(), lessons, chapter.getDescription());
     }
 }

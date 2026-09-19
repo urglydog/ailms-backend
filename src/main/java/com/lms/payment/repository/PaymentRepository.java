@@ -44,4 +44,10 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
             + "WHERE p.course.instructor.email = :email AND p.status = com.lms.common.enums.PaymentStatus.PAID "
             + "AND p.paidAt >= :monthStart")
     BigDecimal sumInstructorEarningSince(@Param("email") String email, @Param("monthStart") LocalDateTime monthStart);
+
+    /** Trang "Hiệu suất" > Doanh thu (19/09/2026, mở rộng) — danh sách giao dịch THÀNH CÔNG
+     * trong khoảng thời gian chọn, trên mọi khóa của giảng viên. */
+    @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"course", "coupon"})
+    List<Payment> findByCourse_Instructor_EmailAndStatusAndPaidAtAfterOrderByPaidAtDesc(
+            String email, PaymentStatus status, LocalDateTime after);
 }

@@ -85,7 +85,12 @@ public class LessonPlayerService {
         // BR-ENROLL-02/03: sở hữu khóa học là điều kiện mở khoá Ghi chú/Học liệu AI/Socratic
         // Tutor — KHÔNG phải `lesson.isPreview` (một bài preview vẫn xem được bởi học viên đã
         // sở hữu đầy đủ khóa học, không có nghĩa nội dung nâng cao bị khoá với họ).
-        boolean enrolled = enrollmentRepository.existsByUser_EmailAndCourse_Id(email, course.getId());
+        //
+        // (19/09/2026) — Giảng viên sở hữu khóa cũng coi như "đã ghi danh" ở đây, để nút "Xem
+        // trước > Với tư cách là Giảng viên" (trang chỉnh sửa khóa học) thấy ĐẦY ĐỦ trải nghiệm
+        // (Hỏi đáp/Học liệu/Bài tập/Gia sư AI), không bị khóa như khách chưa mua.
+        boolean enrolled = enrollmentRepository.existsByUser_EmailAndCourse_Id(email, course.getId())
+                || (course.getInstructor() != null && course.getInstructor().getEmail().equals(email));
 
         return new Res(
                 lesson.getId(),

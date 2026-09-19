@@ -5,6 +5,7 @@ import com.lms.catalog.service.CourseService;
 import com.lms.common.enums.CourseStatus;
 import jakarta.validation.Valid;
 import java.security.Principal;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -76,6 +77,42 @@ public class CourseController {
     @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     public ResponseEntity<Void> delete(Principal principal, @PathVariable Long id) {
         courseService.delete(principal.getName(), id);
+        return ResponseEntity.noContent().build();
+    }
+
+    /** "Kích hoạt lại" (19/09/2026, tính năng mới) — khôi phục khóa đang ở trạng thái lưu trữ. */
+    @PostMapping("/mine/{id}/reactivate")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
+    public ResponseEntity<DetailRes> reactivate(Principal principal, @PathVariable Long id) {
+        return ResponseEntity.ok(courseService.reactivate(principal.getName(), id));
+    }
+
+    // ==================== "Đăng ký (Quyền riêng tư)" — Cài đặt khóa học (19/09/2026) ====================
+
+    @PutMapping("/mine/{id}/visibility")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
+    public ResponseEntity<DetailRes> updateVisibility(
+            Principal principal, @PathVariable Long id, @Valid @RequestBody VisibilityUpdateReq req) {
+        return ResponseEntity.ok(courseService.updateVisibility(principal.getName(), id, req));
+    }
+
+    @GetMapping("/mine/{id}/invites")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
+    public ResponseEntity<List<String>> listInvites(Principal principal, @PathVariable Long id) {
+        return ResponseEntity.ok(courseService.listInvites(principal.getName(), id));
+    }
+
+    @PostMapping("/mine/{id}/invites")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
+    public ResponseEntity<Void> addInvite(Principal principal, @PathVariable Long id, @Valid @RequestBody InviteReq req) {
+        courseService.addInvite(principal.getName(), id, req.email());
+        return ResponseEntity.ok().build();
+    }
+
+    @DeleteMapping("/mine/{id}/invites/{email}")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
+    public ResponseEntity<Void> removeInvite(Principal principal, @PathVariable Long id, @PathVariable String email) {
+        courseService.removeInvite(principal.getName(), id, email);
         return ResponseEntity.noContent().build();
     }
 

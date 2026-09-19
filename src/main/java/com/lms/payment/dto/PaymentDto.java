@@ -15,7 +15,10 @@ public class PaymentDto {
             String billingName,
             String billingPhone,
             /** UC57 mở rộng (15/09/2026) — mã giảm giá tự nhập, optional. */
-            String couponCode
+            String couponCode,
+            /** "Đăng ký (Quyền riêng tư)" kiểu Udemy (19/09/2026) — chỉ cần khi khóa học ở chế
+             * độ PRIVATE_PASSWORD, bỏ qua với mọi khóa khác. */
+            String courseAccessPassword
     ) {}
 
     /** Giỏ hàng (06/09/2026, mở rộng ngoài đặc tả gốc) — gộp thanh toán nhiều khóa học học

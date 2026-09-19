@@ -1,7 +1,9 @@
 package com.lms.catalog.controller;
 
+import com.lms.catalog.dto.LessonDocumentDto.AddLinkReq;
 import com.lms.catalog.dto.LessonDocumentDto.Res;
 import com.lms.catalog.service.LessonDocumentService;
+import jakarta.validation.Valid;
 import java.security.Principal;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +30,12 @@ public class LessonDocumentController {
     public ResponseEntity<Res> upload(
             Principal principal, @PathVariable Long lessonId, @RequestPart("file") MultipartFile file) {
         return ResponseEntity.ok(lessonDocumentService.upload(principal.getName(), lessonId, file));
+    }
+
+    @PostMapping("/api/v1/lessons/{lessonId}/documents/link")
+    public ResponseEntity<Res> addLink(
+            Principal principal, @PathVariable Long lessonId, @Valid @RequestBody AddLinkReq req) {
+        return ResponseEntity.ok(lessonDocumentService.addLink(principal.getName(), lessonId, req));
     }
 
     @DeleteMapping("/api/v1/lesson-documents/{documentId}")

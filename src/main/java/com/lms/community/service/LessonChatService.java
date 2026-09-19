@@ -4,10 +4,18 @@ import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
 import com.lms.catalog.entity.Lesson;
 import com.lms.catalog.repository.LessonRepository;
+import com.lms.common.exception.AccessDeniedDomainException;
+import com.lms.common.exception.ResourceNotFoundException;
 import com.lms.community.dto.ChatMessageDto;
+import com.lms.community.dto.LessonQaDto.AnswerRes;
+import com.lms.community.dto.LessonQaDto.QuestionRes;
+import com.lms.community.dto.LessonQaDto.ThreadRes;
 import com.lms.community.entity.LessonChat;
 import com.lms.community.repository.LessonChatRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,6 +28,7 @@ public class LessonChatService {
     private final LessonChatRepository chatRepository;
     private final LessonRepository lessonRepository;
     private final UserRepository userRepository;
+    private final SimpMessagingTemplate messagingTemplate;
 
     @Transactional(readOnly = true)
     public List<ChatMessageDto> getChatHistory(Long lessonId) {
@@ -51,5 +60,85 @@ public class LessonChatService {
         }
 
         chatRepository.save(chat);
+    }
+
+    // ==================== "Giao tiếp > Hỏi đáp" của Giảng viên (19/09/2026) ====================
+    // Tái dùng `lesson_chats` có sẵn thay vì tạo hẳn 1 mô hình Question/Answer song song: tin
+    // GỐC (parent == null) coi là "câu hỏi", tin trả lời (có parent) là "câu trả lời" — học viên
+    // vẫn thấy đúng luồng hội thoại quen thuộc ở tab "Hỏi đáp" của trang học bài, Giảng viên có
+    // thêm 1 hộp thư gộp tất cả câu hỏi từ MỌI khóa của mình để không phải mở từng bài học.
+
+    @Transactional(readOnly = true)
+    public Page<QuestionRes> listQuestionsForInstructor(
+            String email, Long courseId, boolean onlyUnanswered, Pageable pageable) {
+        Page<LessonChat> page = courseId != null
+                ? chatRepository.findByParentIsNullAndLesson_Chapter_Course_IdAndLesson_Chapter_Course_Instructor_EmailOrderByCreatedAtDesc(
+                        courseId, email, pageable)
+                : chatRepository.findByParentIsNullAndLesson_Chapter_Course_Instructor_EmailOrderByCreatedAtDesc(
+                        email, pageable);
+
+        List<QuestionRes> mapped = page.getContent().stream()
+                .map(this::toQuestionRes)
+                .filter(q -> !onlyUnanswered || q.answerCount() == 0)
+                .toList();
+        return new org.springframework.data.domain.PageImpl<>(mapped, pageable, page.getTotalElements());
+    }
+
+    @Transactional(readOnly = true)
+    public ThreadRes getThread(String email, String questionId) {
+        LessonChat question = loadOwnedQuestion(email, questionId);
+        List<AnswerRes> answers = chatRepository.findByParent_IdOrderByCreatedAtAsc(questionId).stream()
+                .map(a -> toAnswerRes(a, question))
+                .toList();
+        return new ThreadRes(toQuestionRes(question), answers);
+    }
+
+    @Transactional
+    public void postInstructorReply(String email, String questionId, String content) {
+        LessonChat question = loadOwnedQuestion(email, questionId);
+        User instructor = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User", email));
+
+        LessonChat reply = new LessonChat();
+        reply.setLesson(question.getLesson());
+        reply.setUser(instructor);
+        reply.setUserName(instructor.getFullName());
+        reply.setContent(content);
+        reply.setParent(question);
+        chatRepository.save(reply);
+
+        // Phát lại qua WebSocket để học viên đang mở tab "Hỏi đáp" của bài học thấy câu trả lời
+        // ngay lập tức, giống hệt luồng gửi trực tiếp từ `WebSocketChatController`.
+        ChatMessageDto broadcast = new ChatMessageDto(
+                instructor.getId().toString(), instructor.getFullName(), content,
+                reply.getCreatedAt().toString(), question.getId());
+        messagingTemplate.convertAndSend("/topic/lesson/" + question.getLesson().getId() + "/chat", broadcast);
+    }
+
+    private LessonChat loadOwnedQuestion(String email, String questionId) {
+        LessonChat question = chatRepository.findById(questionId)
+                .orElseThrow(() -> new ResourceNotFoundException("LessonChat", questionId));
+        if (!question.getLesson().getChapter().getCourse().getInstructor().getEmail().equals(email)) {
+            throw new AccessDeniedDomainException("Bạn không có quyền xem câu hỏi này");
+        }
+        return question;
+    }
+
+    private QuestionRes toQuestionRes(LessonChat q) {
+        long answerCount = chatRepository.countByParent_Id(q.getId());
+        Long instructorId = q.getLesson().getChapter().getCourse().getInstructor().getId();
+        boolean hasInstructorAnswer = answerCount > 0 && chatRepository.findByParent_IdOrderByCreatedAtAsc(q.getId())
+                .stream().anyMatch(a -> a.getUser().getId().equals(instructorId));
+        return new QuestionRes(
+                q.getId(), q.getLesson().getId(), q.getLesson().getTitle(),
+                q.getLesson().getChapter().getCourse().getId(), q.getLesson().getChapter().getCourse().getTitle(),
+                q.getUserName(), q.getContent(), q.getCreatedAt(), answerCount, hasInstructorAnswer);
+    }
+
+    private AnswerRes toAnswerRes(LessonChat a, LessonChat question) {
+        Long instructorId = question.getLesson().getChapter().getCourse().getInstructor().getId();
+        return new AnswerRes(
+                a.getId(), a.getUserName(), a.getContent(), a.getCreatedAt(),
+                a.getUser().getId().equals(instructorId));
     }
 }

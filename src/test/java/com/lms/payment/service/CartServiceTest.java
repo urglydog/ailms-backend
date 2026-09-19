@@ -50,6 +50,7 @@ class CartServiceTest {
     @Mock private LessonRepository lessonRepository;
     @Mock private CourseReviewRepository courseReviewRepository;
     @Mock private CouponService couponService;
+    @Mock private com.lms.catalog.service.CourseAccessService courseAccessService;
 
     @InjectMocks
     private CartService cartService;
@@ -170,5 +171,18 @@ class CartServiceTest {
         cartService.removeItem(EMAIL, 10L);
 
         verify(cartItemRepository).deleteByUser_IdAndCourse_Id(1L, 10L);
+    }
+
+    /** "Đăng ký (Quyền riêng tư)" kiểu Udemy (19/09/2026) — CartService.addItem ủy quyền kiểm
+     * tra cho CourseAccessService.verifyCanAddToCart TRƯỚC cả BR-CART-01. */
+    @Test
+    void addItem_courseAccessDenied_throwsWithoutSaving() {
+        org.mockito.Mockito.doThrow(new com.lms.common.exception.AccessDeniedDomainException(
+                        "Khóa học riêng tư có mật khẩu chỉ hỗ trợ mua trực tiếp, không thể thêm vào giỏ hàng."))
+                .when(courseAccessService).verifyCanAddToCart(paidCourse, EMAIL);
+
+        assertThatThrownBy(() -> cartService.addItem(EMAIL, 10L))
+                .isInstanceOf(com.lms.common.exception.AccessDeniedDomainException.class);
+        verify(cartItemRepository, never()).save(any());
     }
 }

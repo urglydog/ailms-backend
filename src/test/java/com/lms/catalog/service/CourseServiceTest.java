@@ -4,19 +4,20 @@ import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
 import com.lms.catalog.dto.CourseDto.*;
 import com.lms.catalog.entity.Category;
-import com.lms.catalog.entity.Chapter;
 import com.lms.catalog.entity.Course;
-import com.lms.catalog.entity.Lesson;
+import com.lms.catalog.entity.CourseInvite;
 import com.lms.catalog.repository.CategoryRepository;
 import com.lms.catalog.repository.ChapterRepository;
+import com.lms.catalog.repository.CourseInviteRepository;
 import com.lms.catalog.repository.CourseRepository;
 import com.lms.catalog.repository.LessonRepository;
 import com.lms.common.enums.CourseStatus;
+import com.lms.common.enums.CourseVisibility;
 import com.lms.common.exception.AccessDeniedDomainException;
 import com.lms.common.exception.BusinessRuleViolationException;
 import com.lms.common.exception.InvalidRequestException;
 import com.lms.common.storage.StorageService;
-import com.lms.enrollment.repository.EnrollmentRepository;
+import com.lms.instructor.repository.InstructorVerificationRepository;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
@@ -27,6 +28,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -52,10 +54,11 @@ class CourseServiceTest {
     @Mock private CategoryRepository categoryRepository;
     @Mock private ChapterRepository chapterRepository;
     @Mock private LessonRepository lessonRepository;
-    @Mock private EnrollmentRepository enrollmentRepository;
     @Mock private UserRepository userRepository;
     @Mock private StorageService storageService;
-    @Mock private LessonService lessonService;
+    @Mock private InstructorVerificationRepository instructorVerificationRepository;
+    @Mock private CourseInviteRepository courseInviteRepository;
+    @Mock private PasswordEncoder passwordEncoder;
 
     @InjectMocks
     private CourseService courseService;
@@ -86,6 +89,9 @@ class CourseServiceTest {
         when(courseRepository.findById(10L)).thenReturn(Optional.of(course));
         lenient().when(courseRepository.save(any(Course.class))).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(chapterRepository.findByCourseIdOrderByDisplayOrderAsc(anyLong())).thenReturn(List.of());
+        // BR-VERIFY-01 (19/09/2026, khôi phục) — mặc định coi như ĐÃ xác minh để không ảnh hưởng
+        // các test khác vốn kiểm tra BR-COURSE-01/04; có test riêng cho nhánh CHƯA xác minh bên dưới.
+        lenient().when(instructorVerificationRepository.existsByUser_Id(anyLong())).thenReturn(true);
     }
 
     @Test
@@ -157,7 +163,16 @@ class CourseServiceTest {
                 .isInstanceOf(BusinessRuleViolationException.class);
     }
 
+    @Test
+    void submitForReview_blocksWhenInstructorNotVerified() {
+        when(instructorVerificationRepository.existsByUser_Id(1L)).thenReturn(false);
 
+        assertThatThrownBy(() -> courseService.submitForReview(OWNER_EMAIL, 10L))
+                .isInstanceOf(BusinessRuleViolationException.class)
+                .hasMessageContaining("BR-VERIFY-01");
+
+        verify(courseRepository, never()).save(any());
+    }
 
     @Test
     void uploadThumbnail_validJpegSucceeds() {
@@ -186,58 +201,80 @@ class CourseServiceTest {
                 .isInstanceOf(AccessDeniedDomainException.class);
     }
 
-    @Test
-    void delete_hardDeletesDraftCourseWithoutEnrollments() {
-        when(enrollmentRepository.existsByCourseId(10L)).thenReturn(false);
-
-        courseService.delete(OWNER_EMAIL, 10L);
-
-        verify(courseRepository).delete(course);
-        verify(courseRepository, never()).save(any());
-    }
-
     /**
-     * Không có {@code ON DELETE CASCADE} ở tầng DB — xoá cứng phải tự dọn chương/bài học
-     * (kèm B2 qua {@link LessonService#deleteCascade}) và ảnh bìa trên B2 TRƯỚC khi xoá khóa học,
-     * nếu không sẽ vỡ ràng buộc khoá ngoại {@code fk_chapters_course_id}.
+     * "Gỡ bỏ khóa học" (19/09/2026, sửa lại theo yêu cầu nghiệp vụ) — KHÔNG BAO GIỜ xoá cứng
+     * dữ liệu nữa, dù khóa đang DRAFT và chưa có học viên nào — chỉ chuyển sang ARCHIVED, lưu
+     * lại {@code previousStatus} để {@link CourseService#reactivate} khôi phục đúng.
      */
     @Test
-    void delete_cascadesChaptersLessonsAndThumbnailBeforeHardDelete() {
-        when(enrollmentRepository.existsByCourseId(10L)).thenReturn(false);
-        Chapter chapter = new Chapter();
-        chapter.setId(50L);
-        when(chapterRepository.findByCourseIdOrderByDisplayOrderAsc(10L)).thenReturn(List.of(chapter));
-        Lesson lesson = new Lesson();
-        lesson.setId(60L);
-        when(lessonRepository.findByChapterIdOrderByDisplayOrderAsc(50L)).thenReturn(List.of(lesson));
-
-        courseService.delete(OWNER_EMAIL, 10L);
-
-        verify(lessonService).deleteCascade(lesson);
-        verify(chapterRepository).deleteAll(List.of(chapter));
-        verify(storageService).delete("thumb.png");
-        verify(courseRepository).delete(course);
-    }
-
-    @Test
-    void delete_archivesDraftCourseWithEnrollments() {
-        when(enrollmentRepository.existsByCourseId(10L)).thenReturn(true);
-
+    void delete_neverHardDeletes_alwaysArchivesAndSavesPreviousStatus() {
         courseService.delete(OWNER_EMAIL, 10L);
 
         assertThat(course.getStatus()).isEqualTo(CourseStatus.ARCHIVED);
+        assertThat(course.getPreviousStatus()).isEqualTo(CourseStatus.DRAFT);
         verify(courseRepository).save(course);
         verify(courseRepository, never()).delete(any(Course.class));
     }
 
     @Test
-    void delete_archivesPublishedCourseRegardlessOfEnrollments() {
+    void delete_publishedCourse_archivesAndRemembersPublishedAsPreviousStatus() {
         course.setStatus(CourseStatus.PUBLISHED);
 
         courseService.delete(OWNER_EMAIL, 10L);
 
         assertThat(course.getStatus()).isEqualTo(CourseStatus.ARCHIVED);
-        verify(courseRepository, never()).delete(any(Course.class));
+        assertThat(course.getPreviousStatus()).isEqualTo(CourseStatus.PUBLISHED);
+    }
+
+    @Test
+    void delete_alreadyArchived_throws() {
+        course.setStatus(CourseStatus.ARCHIVED);
+
+        assertThatThrownBy(() -> courseService.delete(OWNER_EMAIL, 10L))
+                .isInstanceOf(BusinessRuleViolationException.class);
+    }
+
+    @Test
+    void delete_notOwner_throwsAccessDenied() {
+        assertThatThrownBy(() -> courseService.delete("khac@lms.local", 10L))
+                .isInstanceOf(AccessDeniedDomainException.class);
+    }
+
+    @Test
+    void reactivate_archivedDraftCourse_restoresDraftAndClearsPreviousStatus() {
+        course.setStatus(CourseStatus.ARCHIVED);
+        course.setPreviousStatus(CourseStatus.DRAFT);
+
+        DetailRes result = courseService.reactivate(OWNER_EMAIL, 10L);
+
+        assertThat(result.status()).isEqualTo(CourseStatus.DRAFT);
+        assertThat(course.getPreviousStatus()).isNull();
+    }
+
+    @Test
+    void reactivate_archivedPublishedCourse_restoresPublished() {
+        course.setStatus(CourseStatus.ARCHIVED);
+        course.setPreviousStatus(CourseStatus.PUBLISHED);
+
+        DetailRes result = courseService.reactivate(OWNER_EMAIL, 10L);
+
+        assertThat(result.status()).isEqualTo(CourseStatus.PUBLISHED);
+    }
+
+    @Test
+    void reactivate_notArchived_throws() {
+        course.setStatus(CourseStatus.DRAFT);
+
+        assertThatThrownBy(() -> courseService.reactivate(OWNER_EMAIL, 10L))
+                .isInstanceOf(BusinessRuleViolationException.class);
+    }
+
+    @Test
+    void reactivate_notOwner_throwsAccessDenied() {
+        course.setStatus(CourseStatus.ARCHIVED);
+
+        assertThatThrownBy(() -> courseService.reactivate("khac@lms.local", 10L))
+                .isInstanceOf(AccessDeniedDomainException.class);
     }
 
     @Test
@@ -274,5 +311,97 @@ class CourseServiceTest {
         DetailRes result = courseService.approve(10L);
 
         assertThat(result.status()).isEqualTo(CourseStatus.PUBLISHED);
+    }
+
+    // ==================== "Đăng ký (Quyền riêng tư)" (19/09/2026) ====================
+
+    @Test
+    void updateVisibility_toPrivatePassword_hashesPassword() {
+        when(passwordEncoder.encode("bimat123")).thenReturn("hashed-bimat123");
+
+        DetailRes result = courseService.updateVisibility(
+                OWNER_EMAIL, 10L, new VisibilityUpdateReq(CourseVisibility.PRIVATE_PASSWORD, "bimat123"));
+
+        assertThat(result.visibility()).isEqualTo(CourseVisibility.PRIVATE_PASSWORD);
+        assertThat(result.hasEnrollPassword()).isTrue();
+        assertThat(course.getEnrollPasswordHash()).isEqualTo("hashed-bimat123");
+    }
+
+    @Test
+    void updateVisibility_toPrivatePassword_firstTimeWithoutPassword_throws() {
+        assertThatThrownBy(() -> courseService.updateVisibility(
+                OWNER_EMAIL, 10L, new VisibilityUpdateReq(CourseVisibility.PRIVATE_PASSWORD, null)))
+                .isInstanceOf(InvalidRequestException.class);
+    }
+
+    @Test
+    void updateVisibility_toPrivatePassword_blankPasswordKeepsExistingHash() {
+        course.setEnrollPasswordHash("hash-cu");
+
+        DetailRes result = courseService.updateVisibility(
+                OWNER_EMAIL, 10L, new VisibilityUpdateReq(CourseVisibility.PRIVATE_PASSWORD, "  "));
+
+        assertThat(result.hasEnrollPassword()).isTrue();
+        assertThat(course.getEnrollPasswordHash()).isEqualTo("hash-cu");
+    }
+
+    @Test
+    void updateVisibility_toPublic_clearsPasswordHash() {
+        course.setEnrollPasswordHash("hash-cu");
+        course.setVisibility(CourseVisibility.PRIVATE_PASSWORD);
+
+        DetailRes result = courseService.updateVisibility(
+                OWNER_EMAIL, 10L, new VisibilityUpdateReq(CourseVisibility.PUBLIC, null));
+
+        assertThat(result.visibility()).isEqualTo(CourseVisibility.PUBLIC);
+        assertThat(result.hasEnrollPassword()).isFalse();
+        assertThat(course.getEnrollPasswordHash()).isNull();
+    }
+
+    @Test
+    void updateVisibility_notOwner_throwsAccessDenied() {
+        assertThatThrownBy(() -> courseService.updateVisibility(
+                "khac@lms.local", 10L, new VisibilityUpdateReq(CourseVisibility.PRIVATE_INVITE, null)))
+                .isInstanceOf(AccessDeniedDomainException.class);
+    }
+
+    @Test
+    void addInvite_savesNormalizedLowercaseEmail() {
+        when(courseInviteRepository.existsByCourse_IdAndEmail(10L, "hocvien@lms.local")).thenReturn(false);
+
+        courseService.addInvite(OWNER_EMAIL, 10L, "  HocVien@LMS.local  ");
+
+        org.mockito.ArgumentCaptor<CourseInvite> captor = org.mockito.ArgumentCaptor.forClass(CourseInvite.class);
+        verify(courseInviteRepository).save(captor.capture());
+        assertThat(captor.getValue().getEmail()).isEqualTo("hocvien@lms.local");
+        assertThat(captor.getValue().getCourse()).isEqualTo(course);
+    }
+
+    @Test
+    void addInvite_alreadyInvited_doesNotSaveDuplicate() {
+        when(courseInviteRepository.existsByCourse_IdAndEmail(10L, "hocvien@lms.local")).thenReturn(true);
+
+        courseService.addInvite(OWNER_EMAIL, 10L, "hocvien@lms.local");
+
+        verify(courseInviteRepository, never()).save(any());
+    }
+
+    @Test
+    void removeInvite_notOwner_throwsAccessDenied() {
+        assertThatThrownBy(() -> courseService.removeInvite("khac@lms.local", 10L, "hocvien@lms.local"))
+                .isInstanceOf(AccessDeniedDomainException.class);
+        verify(courseInviteRepository, never()).deleteByCourse_IdAndEmail(anyLong(), anyString());
+    }
+
+    @Test
+    void listInvites_returnsEmailsOfOwnedCourse() {
+        CourseInvite invite = new CourseInvite();
+        invite.setCourse(course);
+        invite.setEmail("hocvien@lms.local");
+        when(courseInviteRepository.findByCourse_IdOrderByCreatedAtDesc(10L)).thenReturn(List.of(invite));
+
+        List<String> result = courseService.listInvites(OWNER_EMAIL, 10L);
+
+        assertThat(result).containsExactly("hocvien@lms.local");
     }
 }

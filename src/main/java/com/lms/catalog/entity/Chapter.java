@@ -20,6 +20,11 @@ public class Chapter extends BaseEntity {
     @Column(name = "title", nullable = false, length = 255)
     private String title;
 
+    /** Mục tiêu học tập của phần này (15/09/2026, mở rộng — giao diện tham khảo Udemy "Sau khi
+     * hoàn thành phần này, sinh viên sẽ có thể làm được những gì?"). */
+    @Column(name = "description", columnDefinition = "TEXT")
+    private String description;
+
     @Column(name = "display_order", nullable = false)
     private Integer displayOrder = 0;
 
