@@ -21,17 +21,15 @@ import lombok.Setter;
  * tồn tại bản ghi cho user này chưa" ({@code existsByUser_Id}) thay vì đếm số khóa học đã gửi
  * trước đó.
  *
- * <p><b>Ngoài phạm vi đồ án</b>: hệ thống chỉ THU THẬP thông tin định danh (số CCCD, ảnh, địa
- * chỉ) — KHÔNG gọi bất kỳ API eKYC/định danh điện tử của chính phủ nào để xác thực thật. Việc
- * "xác minh" ở đây chỉ dừng ở mức thu thập đủ hồ sơ.
+ * <p><b>Ngoài phạm vi đồ án</b>: hệ thống chỉ THU THẬP thông tin định danh (số CCCD, địa chỉ) —
+ * KHÔNG gọi bất kỳ API eKYC/định danh điện tử của chính phủ nào để xác thực thật. Việc "xác
+ * minh" ở đây chỉ dừng ở mức thu thập đủ hồ sơ.
  *
- * <p><b>Bảo mật ảnh CCCD</b> ({@code idPhotoUrl}): ảnh được lưu trên CÙNG bucket B2 công khai
- * dùng chung cho toàn hệ thống (thumbnail khóa học, tài liệu đính kèm...) — dự án KHÔNG dựng hạ
- * tầng bucket riêng/presigned-URL cho dữ liệu nhạy cảm này (quyết định đã chốt cho phạm vi đồ
- * án, xem lịch sử trao đổi). Việc chống lộ ảnh CHỈ được thực hiện ở TẦNG ỨNG DỤNG: endpoint
- * {@code GET /verification/me} chỉ trả về cho đúng chủ tài khoản (so khớp {@code principal}),
- * không có endpoint công khai nào khác trả về trường này. Đây là hạn chế đã biết (known
- * limitation), không phải sơ suất.
+ * <p>(20/09/2026, theo yêu cầu) — bỏ hẳn bước upload ảnh CCCD ({@code idPhotoUrl}, cột
+ * {@code id_photo_url}): rủi ro lưu ảnh giấy tờ tùy thân trên bucket B2 công khai dùng chung
+ * cho toàn hệ thống (không có hạ tầng presigned-URL/bucket riêng cho dữ liệu nhạy cảm) không
+ * đáng để đổi lấy giá trị nghiệp vụ của bước này trong phạm vi đồ án — form giờ chỉ còn số
+ * CCCD/CMND, địa chỉ, và xác nhận quyền sở hữu nội dung.
  */
 @Entity
 @Table(name = "instructor_verifications")
@@ -45,10 +43,6 @@ public class InstructorVerification extends BaseEntity {
 
     @Column(name = "id_number", nullable = false, length = 50)
     private String idNumber;
-
-    /** Xem docblock lớp — lưu trên bucket B2 công khai chung, chỉ chặn lộ ở tầng ứng dụng. */
-    @Column(name = "id_photo_url", nullable = false, length = 500)
-    private String idPhotoUrl;
 
     @Column(name = "address_text", nullable = false, length = 500)
     private String addressText;

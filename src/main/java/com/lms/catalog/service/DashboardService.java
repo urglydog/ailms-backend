@@ -76,6 +76,9 @@ public class DashboardService {
                     row.put("instructorEarning", p.getInstructorEarning());
                     row.put("paidAt", p.getPaidAt());
                     row.put("couponCode", p.getCoupon() != null ? p.getCoupon().getCode() : null);
+                    // Chia doanh thu 2 mức (20/09/2026) — để Giảng viên phân biệt giao dịch nào
+                    // đến từ liên kết giới thiệu riêng (97%) và tự tìm thấy trên nền tảng (37%).
+                    row.put("revenueSource", p.getRevenueSource());
                     return row;
                 })
                 .toList();

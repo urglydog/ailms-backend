@@ -18,10 +18,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+/** (20/09/2026, sửa lỗi) — {@code hasAnyRole} thay vì chỉ STUDENT: tài khoản đã lên Giảng viên
+ * vẫn cần xem được tài liệu của khóa đã mua từ lúc còn là Học viên (xem docblock
+ * {@code EnrollmentController.getMine}) — service bên dưới tự kiểm tra ghi danh thật. */
 @RestController
 @RequestMapping("/api/v1/student/courses/{courseId}/resources")
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('STUDENT')")
+@PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
 public class StudentResourceController {
 
     private final CourseResourceRepository courseResourceRepository;

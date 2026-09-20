@@ -107,6 +107,10 @@ public class CourseDto {
             /** "Đăng ký (Quyền riêng tư)" kiểu Udemy (19/09/2026). */
             CourseVisibility visibility,
             /** {@code true} nếu đã từng đặt mật khẩu — KHÔNG bao giờ trả mật khẩu/hash thật. */
-            boolean hasEnrollPassword
+            boolean hasEnrollPassword,
+            /** Chia doanh thu 2 mức (20/09/2026) — dựng liên kết giới thiệu
+             * {@code /courses/{slug}?ref={referralCode}}. Chỉ trả về ở đây (response cho CHÍNH
+             * chủ khóa học), không lộ qua bất kỳ API công khai nào khác. */
+            String referralCode
     ) {}
 }

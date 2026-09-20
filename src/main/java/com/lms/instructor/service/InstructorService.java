@@ -6,20 +6,14 @@ import com.lms.common.enums.Role;
 import com.lms.common.exception.BusinessRuleViolationException;
 import com.lms.common.exception.InvalidRequestException;
 import com.lms.common.exception.ResourceNotFoundException;
-import com.lms.common.storage.StorageService;
 import com.lms.instructor.dto.InstructorVerificationDto.Res;
 import com.lms.instructor.dto.InstructorVerificationDto.StatusRes;
 import com.lms.instructor.entity.InstructorVerification;
 import com.lms.instructor.repository.InstructorVerificationRepository;
-import java.io.IOException;
-import java.io.InputStream;
 import java.time.LocalDateTime;
-import java.util.UUID;
 import lombok.RequiredArgsConstructor;
-import org.apache.tika.Tika;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.multipart.MultipartFile;
 
 /**
  * "Trở thành Giảng viên" kiểu Udemy (15/09/2026, thiết kế lại — thay UC41 "Admin duyệt yêu cầu
@@ -31,8 +25,6 @@ public class InstructorService {
 
     private final UserRepository userRepository;
     private final InstructorVerificationRepository verificationRepository;
-    private final StorageService storageService;
-    private final Tika tika = new Tika();
 
     /**
      * Nâng cấp vai trò STUDENT -> INSTRUCTOR NGAY LẬP TỨC, không cần Admin duyệt.
@@ -69,7 +61,7 @@ public class InstructorService {
 
     /** BR-VERIFY-01 — chỉ nộp được đúng 1 LẦN/tài khoản. */
     @Transactional
-    public Res submit(String email, String idNumber, String addressText, Boolean contentOwnershipConfirmed, MultipartFile file) {
+    public Res submit(String email, String idNumber, String addressText, Boolean contentOwnershipConfirmed) {
         User user = requireUser(email);
         if (verificationRepository.existsByUser_Id(user.getId())) {
             throw new BusinessRuleViolationException("Tài khoản của bạn đã xác minh định danh trước đó rồi.");
@@ -84,53 +76,14 @@ public class InstructorService {
             throw new InvalidRequestException("Bạn cần xác nhận quyền sở hữu nội dung trước khi gửi.");
         }
 
-        String photoUrl = uploadIdPhoto(user.getId(), file);
-
         InstructorVerification verification = new InstructorVerification();
         verification.setUser(user);
         verification.setIdNumber(idNumber.trim());
         verification.setAddressText(addressText.trim());
         verification.setContentOwnershipConfirmed(true);
-        verification.setIdPhotoUrl(photoUrl);
         verification.setVerifiedAt(LocalDateTime.now());
 
         return toRes(verificationRepository.save(verification));
-    }
-
-    /**
-     * Ảnh CCCD (15/09/2026) — cùng khuôn Tika-sniff thật (không tin đuôi file) như
-     * {@code CourseService.uploadThumbnail}/{@code UserService.uploadAvatar}. Lưu trên CÙNG
-     * bucket B2 công khai (xem docblock {@link InstructorVerification} về hạn chế bảo mật đã
-     * biết), key ngẫu nhiên UUID để không đoán được đường dẫn.
-     */
-    private String uploadIdPhoto(Long userId, MultipartFile file) {
-        if (file == null || file.isEmpty()) {
-            throw new InvalidRequestException("Vui lòng chọn ảnh CCCD/CMND.");
-        }
-        long maxBytes = 5L * 1024 * 1024;
-        if (file.getSize() > maxBytes) {
-            throw new BusinessRuleViolationException("Ảnh CCCD vượt quá 5MB");
-        }
-
-        String detectedMime;
-        try (InputStream sniff = file.getInputStream()) {
-            detectedMime = tika.detect(sniff);
-        } catch (IOException e) {
-            throw new InvalidRequestException("Không đọc được file ảnh: " + e.getMessage());
-        }
-        String extension = switch (detectedMime) {
-            case "image/jpeg" -> "jpg";
-            case "image/png" -> "png";
-            case "image/webp" -> "webp";
-            default -> throw new InvalidRequestException("Chỉ chấp nhận ảnh JPEG/PNG/WEBP");
-        };
-
-        String key = "instructor-verification/" + userId + "/" + UUID.randomUUID() + "." + extension;
-        try (InputStream in = file.getInputStream()) {
-            return storageService.upload(key, in, file.getSize(), detectedMime);
-        } catch (IOException e) {
-            throw new InvalidRequestException("Không tải được ảnh lên kho lưu trữ: " + e.getMessage());
-        }
     }
 
     private User requireUser(String email) {
@@ -142,7 +95,6 @@ public class InstructorService {
         return new Res(
                 verification.getId(),
                 verification.getIdNumber(),
-                verification.getIdPhotoUrl(),
                 verification.getAddressText(),
                 verification.getContentOwnershipConfirmed(),
                 verification.getVerifiedAt()

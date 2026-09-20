@@ -14,15 +14,13 @@ public class WebSocketChatController {
 
     private final LessonChatService chatService;
 
+    /** (20/09/2026, sửa lỗi) — broadcast lại DTO đã LƯU (từ {@code saveMessage}), không còn echo
+     * nguyên văn payload thô client gửi lên — id/timestamp/isInstructor phải là dữ liệu THẬT từ
+     * DB, xem docblock {@link ChatMessageDto}. */
     @MessageMapping("/chat/{lessonId}")
     @SendTo("/topic/lesson/{lessonId}/chat")
     public ChatMessageDto handleChatMessage(@DestinationVariable Long lessonId, ChatMessageDto message) {
-        try {
-            Long userId = Long.parseLong(message.id());
-            chatService.saveMessage(lessonId, userId, message.senderName(), message.content(), message.parentId());
-        } catch (Exception e) {
-            // Ignore exception for demo if user is invalid, but still broadcast
-        }
-        return message;
+        Long userId = Long.parseLong(message.senderId());
+        return chatService.saveMessage(lessonId, userId, message.senderName(), message.content(), message.parentId());
     }
 }

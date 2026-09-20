@@ -27,6 +27,8 @@ public class MessageDto {
             Long id,
             Long senderId,
             String senderName,
+            /** (20/09/2026, tính năng mới) — hiển thị avatar người gửi trong khung chat. */
+            String senderAvatarUrl,
             String content,
             LocalDateTime createdAt,
             boolean mine

@@ -7,6 +7,7 @@ import com.lms.catalog.repository.CourseRepository;
 import com.lms.catalog.service.CourseAccessService;
 import com.lms.common.enums.CourseStatus;
 import com.lms.common.enums.PaymentStatus;
+import com.lms.common.enums.RevenueSource;
 import com.lms.common.exception.BusinessRuleViolationException;
 import com.lms.common.exception.ResourceNotFoundException;
 import com.lms.coupon.entity.Coupon;
@@ -103,6 +104,7 @@ public class PaymentService {
         payment.setCourse(course);
         payment.setBillingName(req.billingName());
         payment.setBillingPhone(req.billingPhone());
+        payment.setRevenueSource(resolveRevenueSource(course, req.referralCode()));
 
         paymentRepository.save(payment);
 
@@ -195,6 +197,8 @@ public class PaymentService {
             payment.setCourse(course);
             payment.setBillingName(req.billingName());
             payment.setBillingPhone(req.billingPhone());
+            String referralCode = req.referralCodes() != null ? req.referralCodes().get(course.getId()) : null;
+            payment.setRevenueSource(resolveRevenueSource(course, referralCode));
             paymentRepository.save(payment);
             totalAmount = totalAmount.add(pricing.finalPrice());
         }
@@ -222,6 +226,17 @@ public class PaymentService {
 
         // Fallback for Momo / Others
         return new PaymentDto.PaymentUrlRes("https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?vnp_TxnRef=" + orderGroupRef);
+    }
+
+    /** Chia doanh thu 2 mức (20/09/2026) — so khớp mã giới thiệu client gửi lên với
+     * {@code Course.referralCode} của ĐÚNG khóa đang mua. Không khớp/không gửi mã → coi là
+     * {@code ORGANIC}, KHÔNG ném lỗi (mã hết hạn/gõ sai không nên chặn thanh toán). */
+    private RevenueSource resolveRevenueSource(Course course, String referralCode) {
+        if (referralCode != null && !referralCode.isBlank()
+                && referralCode.trim().equalsIgnoreCase(course.getReferralCode())) {
+            return RevenueSource.INSTRUCTOR_REFERRAL;
+        }
+        return RevenueSource.ORGANIC;
     }
 
     /** Ghi lại coupon đã áp dụng (nếu có) vào 1 dòng {@link Payment} — dùng chung bởi cả
@@ -361,8 +376,13 @@ public class PaymentService {
             payment.setGatewayTxnNo(gatewayTxnNo);
             payment.setPaidAt(LocalDateTime.now());
 
-            // BR-PAY-05: Chốt cứng fee
-            BigDecimal platformFee = payment.getAmount().multiply(new BigDecimal("0.30"));
+            // BR-PAY-05 (chia doanh thu 2 mức, 20/09/2026): tỷ lệ theo revenueSource đã chốt
+            // lúc TẠO đơn (resolveRevenueSource) — ORGANIC 63% nền tảng, INSTRUCTOR_REFERRAL
+            // 3% nền tảng. Chốt cứng fee lúc PAID, không tính lại lúc hiển thị.
+            BigDecimal platformRate = payment.getRevenueSource() == RevenueSource.INSTRUCTOR_REFERRAL
+                    ? new BigDecimal("0.03")
+                    : new BigDecimal("0.63");
+            BigDecimal platformFee = payment.getAmount().multiply(platformRate);
             BigDecimal instructorEarning = payment.getAmount().subtract(platformFee);
             payment.setPlatformFee(platformFee);
             payment.setInstructorEarning(instructorEarning);
@@ -429,7 +449,8 @@ public class PaymentService {
                         p.getBillingPhone(),
                         p.getOriginalAmount(),
                         p.getDiscountAmount(),
-                        p.getCoupon() != null ? p.getCoupon().getCode() : null
+                        p.getCoupon() != null ? p.getCoupon().getCode() : null,
+                        p.getRevenueSource()
                 )).toList();
     }
 }

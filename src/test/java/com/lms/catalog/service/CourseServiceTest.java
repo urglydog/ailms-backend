@@ -86,12 +86,38 @@ class CourseServiceTest {
         course.setStatus(CourseStatus.DRAFT);
         course.setResubmitCount(0);
 
-        when(courseRepository.findById(10L)).thenReturn(Optional.of(course));
+        // lenient: test create() mới (chia doanh thu 2 mức) không thao tác khóa id=10L có sẵn.
+        lenient().when(courseRepository.findById(10L)).thenReturn(Optional.of(course));
         lenient().when(courseRepository.save(any(Course.class))).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(chapterRepository.findByCourseIdOrderByDisplayOrderAsc(anyLong())).thenReturn(List.of());
         // BR-VERIFY-01 (19/09/2026, khôi phục) — mặc định coi như ĐÃ xác minh để không ảnh hưởng
         // các test khác vốn kiểm tra BR-COURSE-01/04; có test riêng cho nhánh CHƯA xác minh bên dưới.
         lenient().when(instructorVerificationRepository.existsByUser_Id(anyLong())).thenReturn(true);
+    }
+
+    // ── create (chia doanh thu 2 mức, 20/09/2026) ──────────────────────
+
+    @Test
+    void create_generatesNonBlankUniqueReferralCode() {
+        User instructor = new User();
+        instructor.setId(5L);
+        instructor.setEmail("moi@lms.local");
+        instructor.setHeadline("Giảng viên Tiếng Anh");
+        instructor.setBio("Tiểu sử đủ dài ít nhất 20 ký tự để vượt điều kiện.");
+
+        Category category = new Category();
+        category.setId(2L);
+        category.setName("Tiếng Anh");
+
+        when(userRepository.findByEmail("moi@lms.local")).thenReturn(Optional.of(instructor));
+        when(categoryRepository.findById(2L)).thenReturn(Optional.of(category));
+
+        DetailRes result1 = courseService.create("moi@lms.local", new CreateReq("Khóa A", "Mô tả", 2L, "BEGINNER", BigDecimal.ZERO));
+        DetailRes result2 = courseService.create("moi@lms.local", new CreateReq("Khóa B", "Mô tả", 2L, "BEGINNER", BigDecimal.ZERO));
+
+        assertThat(result1.referralCode()).isNotBlank();
+        assertThat(result2.referralCode()).isNotBlank();
+        assertThat(result1.referralCode()).isNotEqualTo(result2.referralCode());
     }
 
     @Test
