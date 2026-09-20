@@ -7,6 +7,7 @@ import com.lms.catalog.entity.Course;
 import com.lms.catalog.entity.Lesson;
 import com.lms.catalog.repository.LessonRepository;
 import com.lms.common.exception.AccessDeniedDomainException;
+import com.lms.community.dto.ChatMessageDto;
 import com.lms.community.dto.LessonQaDto.QuestionRes;
 import com.lms.community.dto.LessonQaDto.ThreadRes;
 import com.lms.community.entity.LessonChat;
@@ -153,6 +154,65 @@ class LessonChatServiceTest {
 
         verify(chatRepository).save(any(LessonChat.class));
         verify(messagingTemplate).convertAndSend(eq("/topic/lesson/100/chat"), any(Object.class));
+    }
+
+    // ── getChatHistory / saveMessage (20/09/2026, sửa lỗi id/isInstructor) ─────────────
+
+    @Test
+    void getChatHistory_marksInstructorMessageCorrectly() {
+        User student = new User();
+        student.setId(2L);
+        student.setFullName("Học viên X");
+
+        LessonChat fromStudent = new LessonChat();
+        fromStudent.setId("m1");
+        fromStudent.setLesson(lesson);
+        fromStudent.setUser(student);
+        fromStudent.setUserName("Học viên X");
+        fromStudent.setContent("Câu hỏi");
+        fromStudent.setCreatedAt(Instant.now());
+
+        LessonChat fromInstructor = new LessonChat();
+        fromInstructor.setId("m2");
+        fromInstructor.setLesson(lesson);
+        fromInstructor.setUser(instructor);
+        fromInstructor.setUserName("Cô Lan");
+        fromInstructor.setContent("Trả lời");
+        fromInstructor.setParent(fromStudent);
+        fromInstructor.setCreatedAt(Instant.now());
+
+        when(lessonRepository.findById(100L)).thenReturn(Optional.of(lesson));
+        when(chatRepository.findByLessonIdOrderByCreatedAtAsc(100L)).thenReturn(List.of(fromStudent, fromInstructor));
+
+        List<ChatMessageDto> history = lessonChatService.getChatHistory(100L);
+
+        assertThat(history).hasSize(2);
+        ChatMessageDto studentMsg = history.get(0);
+        assertThat(studentMsg.id()).isEqualTo("m1");
+        assertThat(studentMsg.senderId()).isEqualTo("2");
+        assertThat(studentMsg.isInstructor()).isFalse();
+        ChatMessageDto instructorMsg = history.get(1);
+        assertThat(instructorMsg.id()).isEqualTo("m2");
+        assertThat(instructorMsg.senderId()).isEqualTo("1");
+        assertThat(instructorMsg.isInstructor()).isTrue();
+        assertThat(instructorMsg.parentId()).isEqualTo("m1");
+    }
+
+    @Test
+    void saveMessage_returnsPersistedDtoWithRealIdAndInstructorFlag() {
+        when(lessonRepository.getReferenceById(100L)).thenReturn(lesson);
+        when(userRepository.getReferenceById(1L)).thenReturn(instructor);
+        when(chatRepository.save(any(LessonChat.class))).thenAnswer(inv -> {
+            LessonChat saved = inv.getArgument(0);
+            saved.setId("new-msg-id");
+            return saved;
+        });
+
+        ChatMessageDto result = lessonChatService.saveMessage(100L, 1L, "Cô Lan", "Nội dung mới", null);
+
+        assertThat(result.id()).isEqualTo("new-msg-id");
+        assertThat(result.senderId()).isEqualTo("1");
+        assertThat(result.isInstructor()).isTrue();
     }
 
     private LessonChat questionOf(String id) {

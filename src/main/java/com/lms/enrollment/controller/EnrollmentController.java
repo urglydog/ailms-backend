@@ -20,14 +20,18 @@ public class EnrollmentController {
 
     private final EnrollmentService enrollmentService;
 
+    /** (20/09/2026, sửa lỗi) — trước đây chỉ `hasRole('STUDENT')`, khiến tài khoản đã nâng lên
+     * Giảng viên KHÔNG còn xem được các khóa đã mua từ lúc còn là Học viên. Trở thành Giảng
+     * viên không tước quyền sở hữu nội dung đã mua trước đó — 1 tài khoản có thể vừa dạy vừa
+     * học, xem `InstructorService.becomeInstructor` (chỉ đổi role, không đụng Enrollment). */
     @GetMapping("/mine")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     public ResponseEntity<List<Res>> getMine(Principal principal) {
         return ResponseEntity.ok(enrollmentService.getMyEnrollments(principal.getName()));
     }
 
     @PostMapping("/free/{courseId}")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     public ResponseEntity<Void> enrollFreeCourse(
             Principal principal,
             @org.springframework.web.bind.annotation.PathVariable Long courseId,

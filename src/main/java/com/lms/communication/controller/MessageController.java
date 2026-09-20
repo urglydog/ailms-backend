@@ -36,9 +36,11 @@ public class MessageController {
         return ResponseEntity.ok(messageService.sendMessage(principal.getName(), id, req.content()));
     }
 
-    /** Học viên bắt đầu hội thoại với giảng viên của 1 khóa mình đã ghi danh. */
+    /** Học viên bắt đầu hội thoại với giảng viên của 1 khóa mình đã ghi danh. (20/09/2026, sửa
+     * lỗi) — trước đây chỉ STUDENT, khiến tài khoản đã lên Giảng viên không nhắn được cho giảng
+     * viên của khóa đã mua từ lúc còn là Học viên (xem docblock EnrollmentController.getMine). */
     @PostMapping("/conversations/start")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     public ResponseEntity<ConversationRes> startFromStudent(Principal principal, @RequestBody StartReq req) {
         return ResponseEntity.ok(messageService.startFromStudent(principal.getName(), req));
     }

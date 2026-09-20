@@ -4,6 +4,7 @@ import com.lms.common.entity.BaseEntity;
 import com.lms.auth.entity.User;
 import com.lms.catalog.entity.Course;
 import com.lms.common.enums.PaymentStatus;
+import com.lms.common.enums.RevenueSource;
 import com.lms.coupon.entity.Coupon;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -22,9 +23,13 @@ import lombok.Setter;
  * IPN — cổng thanh toán gửi lại callback thành công lần thứ hai phải bị nhận diện và
  * bỏ qua, không được tạo Enrollment thứ hai.
  *
- * <p><b>BR-PAY-05:</b> {@code platformFee} (30%) và {@code instructorEarning} (70%)
- * được tính và <b>chốt cứng tại thời điểm PAID</b>, không tính lại lúc hiển thị —
- * để số liệu thống kê không lệch nếu tỷ lệ % thay đổi trong tương lai.
+ * <p><b>BR-PAY-05 (20/09/2026, thay bằng chia doanh thu 2 mức):</b> {@code platformFee}
+ * và {@code instructorEarning} được tính và <b>chốt cứng tại thời điểm PAID</b>, không
+ * tính lại lúc hiển thị — để số liệu thống kê không lệch nếu tỷ lệ % thay đổi trong tương
+ * lai. Tỷ lệ áp dụng phụ thuộc {@link #revenueSource}, chốt SẴN lúc tạo đơn (trước PAID):
+ * {@code ORGANIC} → Giảng viên 37% / nền tảng 63%; {@code INSTRUCTOR_REFERRAL} (mua qua
+ * liên kết giới thiệu riêng của Giảng viên, {@code Course.referralCode}) → Giảng viên
+ * 97% / nền tảng 3%. Xem {@code PaymentService.resolveRevenueSource}/{@code applyOutcome}.
  */
 @Entity
 @Table(name = "payments")
@@ -65,9 +70,15 @@ public class Payment extends BaseEntity {
     @Column(name = "platform_fee", nullable = false, precision = 12, scale = 2)
     private BigDecimal platformFee = BigDecimal.ZERO;
 
-    /** = amount x 70%, chốt cứng lúc PAID (BR-PAY-05). */
+    /** = amount x (63% hoặc 3% tùy {@link #revenueSource}), chốt cứng lúc PAID (BR-PAY-05). */
     @Column(name = "instructor_earning", nullable = false, precision = 12, scale = 2)
     private BigDecimal instructorEarning = BigDecimal.ZERO;
+
+    /** Chốt lúc TẠO đơn (không đổi được sau đó) — quyết định tỷ lệ ăn chia áp dụng lúc PAID,
+     * xem docblock lớp. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "revenue_source", nullable = false, length = 20)
+    private RevenueSource revenueSource = RevenueSource.ORGANIC;
 
     /** MOMO / ZALOPAY / VNPAY (đều Sandbox). */
     @Column(name = "payment_method", nullable = false, length = 20)

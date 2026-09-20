@@ -93,14 +93,18 @@ public class QuizController {
     }
 
 
+    // (20/09/2026, sửa lỗi) — 4 endpoint làm bài quiz + gia sư giải thích đáp án sai bên dưới
+    // đổi từ `hasRole('STUDENT')` sang `hasAnyRole`: tài khoản đã lên Giảng viên vẫn cần làm
+    // được quiz của khóa đã mua từ lúc còn là Học viên (xem docblock EnrollmentController.getMine).
+
     @GetMapping("/quizzes/{quizId}/start-attempt")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     public ResponseEntity<QuizAttemptDto.StartRes> startAttempt(Principal principal, @PathVariable Long quizId) {
         return ResponseEntity.ok(quizService.startAttempt(principal.getName(), quizId));
     }
 
     @PostMapping("/quizzes/attempts/{attemptId}/submit")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     public ResponseEntity<QuizAttemptDto.SubmitRes> submitAttempt(
             Principal principal,
             @PathVariable Long attemptId,
@@ -109,19 +113,19 @@ public class QuizController {
     }
 
     @GetMapping("/quizzes/{quizId}/attempts")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     public ResponseEntity<List<QuizAttemptDto.HistoryRes>> getAttemptHistory(Principal principal, @PathVariable Long quizId) {
         return ResponseEntity.ok(quizService.getAttemptHistory(principal.getName(), quizId));
     }
 
     @GetMapping("/quizzes/attempts/{attemptId}")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     public ResponseEntity<QuizAttemptDto.SubmitRes> getAttemptDetail(Principal principal, @PathVariable Long attemptId) {
         return ResponseEntity.ok(quizService.getAttemptDetail(principal.getName(), attemptId));
     }
 
     @PostMapping("/quizzes/tutor/explain")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     public ResponseEntity<QuizAttemptDto.ExplainRes> explainWrongAnswer(
             Principal principal,
             @RequestBody QuizAttemptDto.ExplainReq req) {

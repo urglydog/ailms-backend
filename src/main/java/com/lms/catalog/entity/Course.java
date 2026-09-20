@@ -94,4 +94,13 @@ public class Course extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "previous_status", length = 20)
     private CourseStatus previousStatus;
+
+    /** Chia doanh thu 2 mức (20/09/2026, tính năng mới) — mã ngẫu nhiên sinh 1 LẦN lúc tạo
+     * khóa, KHÔNG đổi sau đó. Ghép thành liên kết giới thiệu {@code /courses/{slug}?ref=
+     * {referralCode}} để Giảng viên tự quảng bá — mua qua đúng liên kết này được hưởng tỷ lệ
+     * {@code RevenueSource.INSTRUCTOR_REFERRAL} (97%) thay vì {@code ORGANIC} (37%), xem
+     * {@code PaymentService.resolveRevenueSource}. Chỉ trả về cho CHÍNH chủ khóa học (Instructor
+     * DetailRes) — không lộ qua API công khai, tương tự {@code enrollPasswordHash}. */
+    @Column(name = "referral_code", nullable = false, unique = true, length = 20)
+    private String referralCode;
 }

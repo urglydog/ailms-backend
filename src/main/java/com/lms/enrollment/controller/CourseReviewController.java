@@ -34,8 +34,10 @@ public class CourseReviewController {
         return ResponseEntity.ok(courseReviewService.listForCourse(courseId, pageable));
     }
 
+    /** (20/09/2026, sửa lỗi) — trước đây chỉ STUDENT, khiến tài khoản đã lên Giảng viên không
+     * đánh giá được khóa đã mua từ lúc còn là Học viên (xem docblock EnrollmentController.getMine). */
     @PostMapping("/api/v1/courses/{courseId}/reviews")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     public ResponseEntity<Res> create(
             Principal principal, @PathVariable Long courseId, @Valid @RequestBody CreateReq req) {
         return ResponseEntity.ok(courseReviewService.create(principal.getName(), courseId, req));

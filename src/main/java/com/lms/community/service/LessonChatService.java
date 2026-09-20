@@ -32,19 +32,29 @@ public class LessonChatService {
 
     @Transactional(readOnly = true)
     public List<ChatMessageDto> getChatHistory(Long lessonId) {
+        Lesson lesson = lessonRepository.findById(lessonId)
+                .orElseThrow(() -> new ResourceNotFoundException("Lesson", lessonId));
+        Long instructorId = lesson.getChapter().getCourse().getInstructor().getId();
         return chatRepository.findByLessonIdOrderByCreatedAtAsc(lessonId).stream()
                 .map(chat -> new ChatMessageDto(
+                        chat.getId(),
                         chat.getUser().getId().toString(),
                         chat.getUserName(),
+                        chat.getUser().getAvatarUrl(),
                         chat.getContent(),
                         chat.getCreatedAt().toString(),
-                        chat.getParent() != null ? chat.getParent().getId() : null
+                        chat.getParent() != null ? chat.getParent().getId() : null,
+                        chat.getUser().getId().equals(instructorId)
                 ))
                 .toList();
     }
 
+    /** (20/09/2026, sửa lỗi) — trả về {@link ChatMessageDto} ĐÃ LƯU (id/timestamp/isInstructor
+     * thật từ DB) để {@code WebSocketChatController} phát lại ĐÚNG dữ liệu đã persist, thay vì
+     * echo nguyên văn payload thô client gửi lên (trước đây khiến id tin nhắn broadcast ra sai —
+     * xem docblock {@link ChatMessageDto}). */
     @Transactional
-    public void saveMessage(Long lessonId, Long userId, String userName, String content, String parentId) {
+    public ChatMessageDto saveMessage(Long lessonId, Long userId, String userName, String content, String parentId) {
         Lesson lesson = lessonRepository.getReferenceById(lessonId);
         User user = userRepository.getReferenceById(userId);
 
@@ -59,7 +69,11 @@ public class LessonChatService {
             chat.setParent(parent);
         }
 
-        chatRepository.save(chat);
+        LessonChat saved = chatRepository.save(chat);
+        Long instructorId = lesson.getChapter().getCourse().getInstructor().getId();
+        return new ChatMessageDto(
+                saved.getId(), userId.toString(), userName, user.getAvatarUrl(), content,
+                saved.getCreatedAt().toString(), parentId, userId.equals(instructorId));
     }
 
     // ==================== "Giao tiếp > Hỏi đáp" của Giảng viên (19/09/2026) ====================
@@ -110,8 +124,8 @@ public class LessonChatService {
         // Phát lại qua WebSocket để học viên đang mở tab "Hỏi đáp" của bài học thấy câu trả lời
         // ngay lập tức, giống hệt luồng gửi trực tiếp từ `WebSocketChatController`.
         ChatMessageDto broadcast = new ChatMessageDto(
-                instructor.getId().toString(), instructor.getFullName(), content,
-                reply.getCreatedAt().toString(), question.getId());
+                reply.getId(), instructor.getId().toString(), instructor.getFullName(), instructor.getAvatarUrl(),
+                content, reply.getCreatedAt().toString(), question.getId(), true);
         messagingTemplate.convertAndSend("/topic/lesson/" + question.getLesson().getId() + "/chat", broadcast);
     }
 
@@ -132,13 +146,13 @@ public class LessonChatService {
         return new QuestionRes(
                 q.getId(), q.getLesson().getId(), q.getLesson().getTitle(),
                 q.getLesson().getChapter().getCourse().getId(), q.getLesson().getChapter().getCourse().getTitle(),
-                q.getUserName(), q.getContent(), q.getCreatedAt(), answerCount, hasInstructorAnswer);
+                q.getUserName(), q.getUser().getAvatarUrl(), q.getContent(), q.getCreatedAt(), answerCount, hasInstructorAnswer);
     }
 
     private AnswerRes toAnswerRes(LessonChat a, LessonChat question) {
         Long instructorId = question.getLesson().getChapter().getCourse().getInstructor().getId();
         return new AnswerRes(
-                a.getId(), a.getUserName(), a.getContent(), a.getCreatedAt(),
+                a.getId(), a.getUserName(), a.getUser().getAvatarUrl(), a.getContent(), a.getCreatedAt(),
                 a.getUser().getId().equals(instructorId));
     }
 }

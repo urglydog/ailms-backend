@@ -14,6 +14,8 @@ public class LessonQaDto {
             Long courseId,
             String courseTitle,
             String userName,
+            /** (20/09/2026, tính năng mới) — avatar người hỏi. */
+            String userAvatarUrl,
             String content,
             Instant createdAt,
             long answerCount,
@@ -24,6 +26,8 @@ public class LessonQaDto {
     public record AnswerRes(
             String id,
             String userName,
+            /** (20/09/2026, tính năng mới) — avatar người trả lời. */
+            String userAvatarUrl,
             String content,
             Instant createdAt,
             boolean isInstructor

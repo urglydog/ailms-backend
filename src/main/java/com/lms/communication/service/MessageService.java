@@ -102,7 +102,7 @@ public class MessageService {
         messageRepository.markConversationRead(conversationId, me.getId());
         return messageRepository.findByConversation_IdOrderByCreatedAtAsc(conversationId).stream()
                 .map(m -> new MessageRes(
-                        m.getId(), m.getSender().getId(), m.getSender().getFullName(),
+                        m.getId(), m.getSender().getId(), m.getSender().getFullName(), m.getSender().getAvatarUrl(),
                         m.getContent(), m.getCreatedAt(), m.getSender().getId().equals(me.getId())))
                 .toList();
     }
@@ -129,7 +129,9 @@ public class MessageService {
         notificationService.notify(
                 recipient.getId(), "NEW_MESSAGE",
                 "Tin nhắn mới từ " + sender.getFullName(), saved.getContent(), "/instructor/communication/messages");
-        MessageRes res = new MessageRes(saved.getId(), sender.getId(), sender.getFullName(), saved.getContent(), saved.getCreatedAt(), true);
+        MessageRes res = new MessageRes(
+                saved.getId(), sender.getId(), sender.getFullName(), sender.getAvatarUrl(),
+                saved.getContent(), saved.getCreatedAt(), true);
         messagingTemplate.convertAndSend("/topic/conversations/" + conversationId, res);
         return res;
     }

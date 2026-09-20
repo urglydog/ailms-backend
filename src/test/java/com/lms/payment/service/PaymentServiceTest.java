@@ -82,6 +82,7 @@ class PaymentServiceTest {
         courseA.setStatus(CourseStatus.PUBLISHED);
         courseA.setIsFree(false);
         courseA.setPrice(new BigDecimal("200000"));
+        courseA.setReferralCode("ref-course-a");
 
         courseB = new Course();
         courseB.setId(20L);
@@ -89,6 +90,7 @@ class PaymentServiceTest {
         courseB.setStatus(CourseStatus.PUBLISHED);
         courseB.setIsFree(false);
         courseB.setPrice(new BigDecimal("300000"));
+        courseB.setReferralCode("ref-course-b");
 
         lenient().when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user));
         lenient().when(courseRepository.findById(10L)).thenReturn(Optional.of(courseA));
@@ -133,7 +135,7 @@ class PaymentServiceTest {
                         .build());
 
         var result = paymentService.createBatchPayment(
-                EMAIL, new CreateBatchReq(List.of(10L, 20L), "PAYOS", "Nguyen Van A", "0900000000", null));
+                EMAIL, new CreateBatchReq(List.of(10L, 20L), "PAYOS", "Nguyen Van A", "0900000000", null, null));
 
         assertThat(result.paymentUrl()).isEqualTo("https://payos.example/checkout/abc");
 
@@ -154,7 +156,7 @@ class PaymentServiceTest {
         courseB.setIsFree(true);
 
         assertThatThrownBy(() -> paymentService.createBatchPayment(
-                EMAIL, new CreateBatchReq(List.of(10L, 20L), "PAYOS", null, null, null)))
+                EMAIL, new CreateBatchReq(List.of(10L, 20L), "PAYOS", null, null, null, null)))
                 .isInstanceOf(BusinessRuleViolationException.class);
 
         verify(paymentRepository, never()).save(any());
@@ -165,7 +167,7 @@ class PaymentServiceTest {
         when(enrollmentRepository.existsByUser_IdAndCourse_Id(1L, 20L)).thenReturn(true);
 
         assertThatThrownBy(() -> paymentService.createBatchPayment(
-                EMAIL, new CreateBatchReq(List.of(10L, 20L), "PAYOS", null, null, null)))
+                EMAIL, new CreateBatchReq(List.of(10L, 20L), "PAYOS", null, null, null, null)))
                 .isInstanceOf(BusinessRuleViolationException.class);
 
         verify(paymentRepository, never()).save(any());
@@ -173,14 +175,14 @@ class PaymentServiceTest {
 
     @Test
     void createBatchPayment_emptyCourseList_throws() {
-        assertThatThrownBy(() -> paymentService.createBatchPayment(EMAIL, new CreateBatchReq(List.of(), "PAYOS", null, null, null)))
+        assertThatThrownBy(() -> paymentService.createBatchPayment(EMAIL, new CreateBatchReq(List.of(), "PAYOS", null, null, null, null)))
                 .isInstanceOf(BusinessRuleViolationException.class);
     }
 
     @Test
     void createBatchPayment_vnpay_returnsBuiltUrlForTotalAmount() {
         var result = paymentService.createBatchPayment(
-                EMAIL, new CreateBatchReq(List.of(10L, 20L), "VNPAY", null, null, null));
+                EMAIL, new CreateBatchReq(List.of(10L, 20L), "VNPAY", null, null, null, null));
 
         assertThat(result.paymentUrl()).startsWith("https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?");
         assertThat(result.paymentUrl()).contains("vnp_Amount=50000000"); // (200000+300000) * 100
@@ -197,8 +199,9 @@ class PaymentServiceTest {
         paymentService.processIpn("txn-1", "GW-1", true);
 
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PAID);
-        assertThat(payment.getPlatformFee()).isEqualByComparingTo("60000");
-        assertThat(payment.getInstructorEarning()).isEqualByComparingTo("140000");
+        // Chia doanh thu 2 mức (20/09/2026) — ORGANIC (mặc định): nền tảng 63% / Giảng viên 37%.
+        assertThat(payment.getPlatformFee()).isEqualByComparingTo("126000");
+        assertThat(payment.getInstructorEarning()).isEqualByComparingTo("74000");
         verify(enrollmentService).createFromPayment(payment);
     }
 
@@ -257,7 +260,7 @@ class PaymentServiceTest {
                 .when(courseAccessService).verifyCanEnroll(courseA, EMAIL, "sai-mat-khau");
 
         assertThatThrownBy(() -> paymentService.createPayment(
-                EMAIL, new CreateReq(10L, "VNPAY", null, null, null, "sai-mat-khau")))
+                EMAIL, new CreateReq(10L, "VNPAY", null, null, null, "sai-mat-khau", null)))
                 .isInstanceOf(AccessDeniedDomainException.class);
         verify(paymentRepository, never()).save(any());
     }
@@ -268,9 +271,70 @@ class PaymentServiceTest {
                 .when(courseAccessService).verifyCanAddToCart(courseA, EMAIL);
 
         assertThatThrownBy(() -> paymentService.createBatchPayment(
-                EMAIL, new CreateBatchReq(List.of(10L, 20L), "PAYOS", null, null, null)))
+                EMAIL, new CreateBatchReq(List.of(10L, 20L), "PAYOS", null, null, null, null)))
                 .isInstanceOf(AccessDeniedDomainException.class);
         verify(paymentRepository, never()).save(any());
+    }
+
+    // ── Chia doanh thu 2 mức (20/09/2026) ──────────────────────────────
+
+    @Test
+    void createPayment_matchingReferralCode_setsInstructorReferralSource() {
+        ArgumentCaptor<Payment> captor = ArgumentCaptor.forClass(Payment.class);
+
+        paymentService.createPayment(EMAIL, new CreateReq(10L, "VNPAY", null, null, null, null, "ref-course-a"));
+
+        verify(paymentRepository, times(1)).save(captor.capture());
+        assertThat(captor.getValue().getRevenueSource()).isEqualTo(com.lms.common.enums.RevenueSource.INSTRUCTOR_REFERRAL);
+    }
+
+    @Test
+    void createPayment_mismatchedReferralCode_staysOrganic() {
+        ArgumentCaptor<Payment> captor = ArgumentCaptor.forClass(Payment.class);
+
+        paymentService.createPayment(EMAIL, new CreateReq(10L, "VNPAY", null, null, null, null, "khong-khop"));
+
+        verify(paymentRepository, times(1)).save(captor.capture());
+        assertThat(captor.getValue().getRevenueSource()).isEqualTo(com.lms.common.enums.RevenueSource.ORGANIC);
+    }
+
+    @Test
+    void createPayment_noReferralCode_defaultsToOrganic() {
+        ArgumentCaptor<Payment> captor = ArgumentCaptor.forClass(Payment.class);
+
+        paymentService.createPayment(EMAIL, new CreateReq(10L, "VNPAY", null, null, null, null, null));
+
+        verify(paymentRepository, times(1)).save(captor.capture());
+        assertThat(captor.getValue().getRevenueSource()).isEqualTo(com.lms.common.enums.RevenueSource.ORGANIC);
+    }
+
+    @Test
+    void createBatchPayment_referralCodePerCourse_appliesOnlyToMatchingCourse() {
+        ArgumentCaptor<Payment> captor = ArgumentCaptor.forClass(Payment.class);
+
+        paymentService.createBatchPayment(EMAIL, new CreateBatchReq(
+                List.of(10L, 20L), "VNPAY", null, null, null,
+                java.util.Map.of(10L, "ref-course-a")));
+
+        verify(paymentRepository, times(2)).save(captor.capture());
+        List<Payment> saved = captor.getAllValues();
+        Payment paymentA = saved.stream().filter(p -> p.getCourse() == courseA).findFirst().orElseThrow();
+        Payment paymentB = saved.stream().filter(p -> p.getCourse() == courseB).findFirst().orElseThrow();
+        assertThat(paymentA.getRevenueSource()).isEqualTo(com.lms.common.enums.RevenueSource.INSTRUCTOR_REFERRAL);
+        assertThat(paymentB.getRevenueSource()).isEqualTo(com.lms.common.enums.RevenueSource.ORGANIC);
+    }
+
+    @Test
+    void processIpn_instructorReferralSource_appliesNinetySevenThreeSplit() {
+        Payment payment = pendingPayment("txn-1", null, courseA, new BigDecimal("200000"));
+        payment.setRevenueSource(com.lms.common.enums.RevenueSource.INSTRUCTOR_REFERRAL);
+        when(paymentRepository.findByOrderGroupRef("txn-1")).thenReturn(List.of());
+        when(paymentRepository.findByTxnRef("txn-1")).thenReturn(Optional.of(payment));
+
+        paymentService.processIpn("txn-1", "GW-1", true);
+
+        assertThat(payment.getPlatformFee()).isEqualByComparingTo("6000");
+        assertThat(payment.getInstructorEarning()).isEqualByComparingTo("194000");
     }
 
     private Payment pendingPayment(String txnRef, String orderGroupRef, Course course, BigDecimal amount) {

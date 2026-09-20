@@ -21,9 +21,12 @@ import org.springframework.web.bind.annotation.*;
  * {@code /courses/{courseId}/tutor/**}: phiên chat (danh sách lịch sử) giờ dùng CHUNG cho mọi
  * bài học trong 1 khóa, xem {@link TutorService}. Bài học đang mở truyền riêng trong
  * {@link AskReq#currentLessonId()} của từng lượt hỏi, không còn cố định theo route nữa. */
+/** (20/09/2026, sửa lỗi) — {@code hasAnyRole} thay vì chỉ STUDENT: tài khoản đã lên Giảng viên
+ * vẫn cần dùng được Gia sư AI của khóa đã mua từ lúc còn là Học viên (xem docblock
+ * {@code EnrollmentController.getMine}) — service bên dưới tự kiểm tra ghi danh thật. */
 @RestController
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('STUDENT')")
+@PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
 public class TutorController {
 
     private final TutorService tutorService;

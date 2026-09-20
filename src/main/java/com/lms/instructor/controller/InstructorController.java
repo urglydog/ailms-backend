@@ -2,14 +2,13 @@ package com.lms.instructor.controller;
 
 import com.lms.instructor.dto.InstructorVerificationDto.Res;
 import com.lms.instructor.dto.InstructorVerificationDto.StatusRes;
+import com.lms.instructor.dto.InstructorVerificationDto.SubmitReq;
 import com.lms.instructor.service.InstructorService;
 import java.security.Principal;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
 
 /**
  * Đăng ký Giảng viên kiểu Udemy (15/09/2026) — thay thế {@code InstructorRequestController} cũ.
@@ -54,15 +53,10 @@ public class InstructorController {
         return ResponseEntity.ok(instructorService.getMy(principal.getName()));
     }
 
-    @PostMapping(value = "/verification", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping("/verification")
     @PreAuthorize("hasRole('INSTRUCTOR')")
-    public ResponseEntity<Res> submitVerification(
-            Principal principal,
-            @RequestParam String idNumber,
-            @RequestParam String addressText,
-            @RequestParam Boolean contentOwnershipConfirmed,
-            @RequestPart("file") MultipartFile file) {
+    public ResponseEntity<Res> submitVerification(Principal principal, @RequestBody SubmitReq req) {
         return ResponseEntity.ok(instructorService.submit(
-                principal.getName(), idNumber, addressText, contentOwnershipConfirmed, file));
+                principal.getName(), req.idNumber(), req.addressText(), req.contentOwnershipConfirmed()));
     }
 }

@@ -90,8 +90,15 @@ public class CourseService {
         course.setCategory(category);
         course.setInstructor(instructor);
         course.setStatus(CourseStatus.DRAFT);
+        course.setReferralCode(generateReferralCode());
 
         return mapToDetailRes(courseRepository.save(course));
+    }
+
+    /** Chia doanh thu 2 mức (20/09/2026) — mã liên kết giới thiệu, sinh 1 LẦN duy nhất lúc
+     * tạo khóa, không đổi sau đó. 10 ký tự hex (40 bit) đủ chống trùng cho quy mô đồ án. */
+    private String generateReferralCode() {
+        return UUID.randomUUID().toString().replace("-", "").substring(0, 10);
     }
 
     @Transactional(readOnly = true)
@@ -469,7 +476,8 @@ public class CourseService {
                 missingConditions,
                 missingConditions.isEmpty(),
                 course.getVisibility(),
-                course.getEnrollPasswordHash() != null
+                course.getEnrollPasswordHash() != null,
+                course.getReferralCode()
         );
     }
 }

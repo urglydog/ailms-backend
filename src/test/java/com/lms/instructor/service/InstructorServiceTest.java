@@ -5,7 +5,6 @@ import com.lms.auth.repository.UserRepository;
 import com.lms.common.enums.Role;
 import com.lms.common.exception.BusinessRuleViolationException;
 import com.lms.common.exception.InvalidRequestException;
-import com.lms.common.storage.StorageService;
 import com.lms.instructor.dto.InstructorVerificationDto.Res;
 import com.lms.instructor.dto.InstructorVerificationDto.StatusRes;
 import com.lms.instructor.entity.InstructorVerification;
@@ -17,13 +16,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.mock.web.MockMultipartFile;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -41,7 +37,6 @@ class InstructorServiceTest {
 
     @Mock private UserRepository userRepository;
     @Mock private InstructorVerificationRepository verificationRepository;
-    @Mock private StorageService storageService;
 
     @InjectMocks
     private InstructorService instructorService;
@@ -57,8 +52,6 @@ class InstructorServiceTest {
 
         lenient().when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user));
         lenient().when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
-        lenient().when(storageService.upload(anyString(), any(), anyLong(), anyString()))
-                .thenReturn("https://b2.example.com/instructor-verification/1/photo.jpg");
         lenient().when(verificationRepository.save(any(InstructorVerification.class))).thenAnswer(inv -> {
             InstructorVerification v = inv.getArgument(0);
             v.setId(500L);
@@ -111,11 +104,8 @@ class InstructorServiceTest {
     @Test
     void submit_validData_savesAndReturnsRes() {
         when(verificationRepository.existsByUser_Id(1L)).thenReturn(false);
-        MockMultipartFile file = new MockMultipartFile(
-                "file", "cccd.jpg", "image/jpeg",
-                new byte[]{(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0});
 
-        Res result = instructorService.submit(EMAIL, "001234567890", "123 Đường ABC, Q1, TP.HCM", true, file);
+        Res result = instructorService.submit(EMAIL, "001234567890", "123 Đường ABC, Q1, TP.HCM", true);
 
         assertThat(result.idNumber()).isEqualTo("001234567890");
         assertThat(result.contentOwnershipConfirmed()).isTrue();
@@ -126,27 +116,24 @@ class InstructorServiceTest {
     @Test
     void submit_alreadyVerified_throws() {
         when(verificationRepository.existsByUser_Id(1L)).thenReturn(true);
-        MockMultipartFile file = new MockMultipartFile("file", "cccd.jpg", "image/jpeg", new byte[]{1, 2, 3});
 
-        assertThatThrownBy(() -> instructorService.submit(EMAIL, "001234567890", "123 ABC", true, file))
+        assertThatThrownBy(() -> instructorService.submit(EMAIL, "001234567890", "123 ABC", true))
                 .isInstanceOf(BusinessRuleViolationException.class);
     }
 
     @Test
     void submit_withoutContentOwnershipConfirmed_throws() {
         when(verificationRepository.existsByUser_Id(1L)).thenReturn(false);
-        MockMultipartFile file = new MockMultipartFile("file", "cccd.jpg", "image/jpeg", new byte[]{1, 2, 3});
 
-        assertThatThrownBy(() -> instructorService.submit(EMAIL, "001234567890", "123 ABC", false, file))
+        assertThatThrownBy(() -> instructorService.submit(EMAIL, "001234567890", "123 ABC", false))
                 .isInstanceOf(InvalidRequestException.class);
     }
 
     @Test
     void submit_blankIdNumber_throws() {
         when(verificationRepository.existsByUser_Id(1L)).thenReturn(false);
-        MockMultipartFile file = new MockMultipartFile("file", "cccd.jpg", "image/jpeg", new byte[]{1, 2, 3});
 
-        assertThatThrownBy(() -> instructorService.submit(EMAIL, "  ", "123 ABC", true, file))
+        assertThatThrownBy(() -> instructorService.submit(EMAIL, "  ", "123 ABC", true))
                 .isInstanceOf(InvalidRequestException.class);
     }
 }
