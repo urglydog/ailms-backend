@@ -7,6 +7,7 @@ import com.lms.material.dto.MaterialFolderDto;
 import com.lms.material.dto.MaterialFolderReq;
 import com.lms.material.entity.MaterialFolder;
 import com.lms.material.repository.MaterialFolderRepository;
+import com.lms.material.repository.MaterialGenerationRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,6 +20,7 @@ public class MaterialFolderService {
 
     private final MaterialFolderRepository materialFolderRepository;
     private final CourseRepository courseRepository;
+    private final MaterialGenerationRepository materialGenerationRepository;
 
     @Transactional(readOnly = true)
     public List<MaterialFolderDto> getFoldersByCourse(Long courseId, Long parentId) {
@@ -62,6 +64,20 @@ public class MaterialFolderService {
         if (!materialFolderRepository.existsById(id)) {
             throw new ResourceNotFoundException("MaterialFolder", id);
         }
+        // Trước khi xóa: detach tất cả học liệu trong thư mục này về root (folder_id = null)
+        // để tránh lỗi FK constraint khi JPA/DB không tự SET NULL trong transactional context
+        materialGenerationRepository.findByFolder_Id(id)
+                .forEach(gen -> {
+                    gen.setFolder(null);
+                    materialGenerationRepository.save(gen);
+                });
+        // Detach sub-folders: đặt parent = null cho các thư mục con (ON DELETE SET NULL ở DB)
+        materialFolderRepository.findByCourse_IdAndParent_IdOrderByCreatedAtAsc(
+                materialFolderRepository.findById(id).map(f -> f.getCourse().getId()).orElse(0L), id
+        ).forEach(child -> {
+            child.setParent(null);
+            materialFolderRepository.save(child);
+        });
         materialFolderRepository.deleteById(id);
     }
 
