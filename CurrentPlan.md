@@ -107,19 +107,6 @@ Key: user_stream:{userId} -> Value: {sessionId, deviceName, timestamp} (TTL = 30
 
 
 
-
-#### 11B. Instructor Onboarding Profile (Chuẩn hóa từ Đề xuất YouTube/Udemy)
-
-* Để một học viên chuyển sang làm Giảng viên, họ phải trải qua luồng Onboarding 3 bước nhẹ nhàng (Wizard):
-1. **Bước 1: Hồ sơ Giảng dạy (Instructor Profile):** Tiêu đề nghề nghiệp (ví dụ: *Senior Java Engineer*), Tiểu sử (Bio), Ảnh đại diện/Banner.
-2. **Bước 2: Kinh nghiệm & Lĩnh vực:** Chọn các danh mục chuyên môn (Công nghệ thông tin, Thiết kế, Kinh doanh...).
-3. **Bước 3: Điều khoản Giảng dạy (Instructor Terms):** Đồng ý với quy tắc bản quyền và chia sẻ nội dung.
-
-
-* Sau khi hoàn tất 3 bước này, tài khoản được cấp cờ `is_instructor_profile_completed = true` và lập tức được mở quyền tạo khóa học ở trạng thái `DRAFT`.
-
-
-
 ---
 
 ### Bảng Điều Chỉnh Kế Hoạch & Roadmap Chuẩn Hóa
@@ -132,5 +119,3 @@ Key: user_stream:{userId} -> Value: {sessionId, deviceName, timestamp} (TTL = 30
 | **Task 11B (Onboarding)** | Triển khai Onboarding Profile Wizard 3 bước trước khi tạo khóa học đầu tiên | Cao (Chặn spam tài khoản) |
 | **Task 11A (Admin)** | Rate-limit AI dạng quota hàng ngày; Dashboard tập trung vào Moderation Queue & Token usage | Trung bình |
 
-
-hiện đã stopbackend do lỗi migration ở V106 chưa fix 

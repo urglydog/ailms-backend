@@ -9,13 +9,14 @@ import com.lms.catalog.repository.LessonRepository;
 import com.lms.common.exception.ResourceNotFoundException;
 import com.lms.material.entity.MaterialAssignment;
 import com.lms.material.entity.MaterialGeneration;
+import com.lms.material.repository.FlashcardDeckRepository;
 import com.lms.material.repository.MaterialAssignmentRepository;
 import com.lms.material.repository.MaterialGenerationRepository;
+import com.lms.material.repository.MindmapRepository;
+import com.lms.material.repository.QuizRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -26,21 +27,18 @@ public class MaterialAssignmentService {
     private final CourseRepository courseRepository;
     private final ChapterRepository chapterRepository;
     private final LessonRepository lessonRepository;
+    private final QuizRepository quizRepository;
+    private final MindmapRepository mindmapRepository;
+    private final FlashcardDeckRepository flashcardDeckRepository;
 
     @Transactional
     public void assignMaterial(Long materialId, Long courseId, Long chapterId, Long lessonId) {
         MaterialGeneration material = generationRepository.findById(materialId)
                 .orElseThrow(() -> new ResourceNotFoundException("MaterialGeneration", materialId));
 
-        // Delete existing assignments for this material to avoid duplicates for the same target, 
-        // or just create a new one. Wait, if it's the SAME target, we do versioning.
-        // For simplicity right now, let's just clear old assignments of this material if it's a move.
-        // But Master-Link means 1 material can be assigned to multiple targets.
-        // So we just add a new assignment if it doesn't exist.
-        
         MaterialAssignment assignment = new MaterialAssignment();
         assignment.setMaterial(material);
-        
+
         if (courseId != null) {
             Course course = courseRepository.findById(courseId)
                     .orElseThrow(() -> new ResourceNotFoundException("Course", courseId));
@@ -60,27 +58,64 @@ public class MaterialAssignmentService {
         assignmentRepository.save(assignment);
     }
 
+    /**
+     * BR-OFFICIAL-01: Xóa một assignment. Nếu sau khi xóa, học liệu không còn
+     * gắn với bất kỳ lesson/chapter nào, tự động revert isOfficial → false.
+     * Đảm bảo trạng thái Official phản ánh đúng thực tế phân phối (Many-to-Many safe).
+     */
     @Transactional
     public void unassignMaterial(Long assignmentId) {
-        if (!assignmentRepository.existsById(assignmentId)) {
-            throw new ResourceNotFoundException("MaterialAssignment", assignmentId);
-        }
+        MaterialAssignment assignment = assignmentRepository.findById(assignmentId)
+                .orElseThrow(() -> new ResourceNotFoundException("MaterialAssignment", assignmentId));
+
+        Long materialId = assignment.getMaterial() != null ? assignment.getMaterial().getId() : null;
+
         assignmentRepository.deleteById(assignmentId);
+        // Flush so countByMaterial_Id reflects the deletion in the same transaction
+        assignmentRepository.flush();
+
+        // BR-OFFICIAL-01: Revert isOfficial only when this was the LAST assignment
+        if (materialId != null && assignmentRepository.countByMaterial_Id(materialId) == 0) {
+            revertOfficialStatus(materialId);
+        }
+    }
+
+    /**
+     * Reverts isOfficial to false for the underlying resource (Quiz / Mindmap / FlashcardDeck)
+     * when a material has zero remaining lesson/chapter assignments.
+     */
+    private void revertOfficialStatus(Long materialId) {
+        generationRepository.findById(materialId).ifPresent(gen -> {
+            switch (gen.getMaterialType()) {
+                case QUIZ -> quizRepository.findByMaterialGeneration_IdAndIsDeletedFalse(materialId)
+                        .ifPresent(quiz -> {
+                            quiz.setIsOfficial(false);
+                            quizRepository.save(quiz);
+                        });
+                case MINDMAP -> mindmapRepository.findByMaterialGeneration_Id(materialId)
+                        .ifPresent(mm -> {
+                            mm.setIsOfficial(false);
+                            mindmapRepository.save(mm);
+                        });
+                case FLASHCARD -> flashcardDeckRepository.findByMaterialGeneration_Id(materialId)
+                        .ifPresent(deck -> {
+                            deck.setIsOfficial(false);
+                            flashcardDeckRepository.save(deck);
+                        });
+            }
+        });
     }
 
     @Transactional
     public void transferAssignments(Long oldMaterialId, Long newMaterialId) {
-        MaterialGeneration oldMaterial = generationRepository.findById(oldMaterialId)
+        generationRepository.findById(oldMaterialId)
                 .orElseThrow(() -> new ResourceNotFoundException("MaterialGeneration", oldMaterialId));
         MaterialGeneration newMaterial = generationRepository.findById(newMaterialId)
                 .orElseThrow(() -> new ResourceNotFoundException("MaterialGeneration", newMaterialId));
-        
-        java.util.List<MaterialAssignment> assignments = assignmentRepository.findAll();
-        for (MaterialAssignment assignment : assignments) {
-            if (assignment.getMaterial() != null && assignment.getMaterial().getId().equals(oldMaterialId)) {
-                assignment.setMaterial(newMaterial);
-                assignmentRepository.save(assignment);
-            }
+
+        for (MaterialAssignment a : assignmentRepository.findByMaterial_Id(oldMaterialId)) {
+            a.setMaterial(newMaterial);
+            assignmentRepository.save(a);
         }
     }
 }
