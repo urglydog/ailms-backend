@@ -35,14 +35,15 @@ public class InstructorMaterialController {
     @PutMapping("/{id}/move-to-folder")
     @PreAuthorize("isAuthenticated()")
     @Transactional
-    public ResponseEntity<java.util.Map<String, String>> moveToFolder(Principal principal, @PathVariable Long id, @RequestBody java.util.Map<String, Long> payload) {
+    public ResponseEntity<java.util.Map<String, String>> moveToFolder(Principal principal, @PathVariable Long id, @RequestBody java.util.Map<String, Object> payload) {
         com.lms.material.entity.MaterialGeneration gen = materialGenerationRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("MaterialGeneration", id));
         if (!gen.getCourse().getInstructor().getEmail().equals(principal.getName())) {
             throw new AccessDeniedDomainException("Ban khong co quyen");
         }
         
-        Long folderId = payload.get("folderId");
+        Object rawFolderId = payload.get("folderId");
+        Long folderId = (rawFolderId != null) ? ((Number) rawFolderId).longValue() : null;
         if (folderId != null) {
             com.lms.material.entity.MaterialFolder folder = materialFolderRepository.findById(folderId)
                     .orElseThrow(() -> new ResourceNotFoundException("MaterialFolder", folderId));
@@ -59,15 +60,17 @@ public class InstructorMaterialController {
     @PostMapping("/{id}/versioning-overwrite")
     @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     @Transactional
-    public ResponseEntity<java.util.Map<String, Object>> versioningOverwrite(Principal principal, @PathVariable Long id, @RequestBody java.util.Map<String, Long> payload) {
+    public ResponseEntity<java.util.Map<String, Object>> versioningOverwrite(Principal principal, @PathVariable Long id, @RequestBody java.util.Map<String, Object> payload) {
         com.lms.material.entity.MaterialGeneration gen = materialGenerationRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("MaterialGeneration", id));
         if (!gen.getCourse().getInstructor().getEmail().equals(principal.getName())) {
             throw new AccessDeniedDomainException("Ban khong co quyen");
         }
         
-        Long targetLessonId = payload.get("targetLessonId");
-        Long targetChapterId = payload.get("targetChapterId");
+        Object rawLessonId = payload.get("targetLessonId");
+        Object rawChapterId = payload.get("targetChapterId");
+        Long targetLessonId = (rawLessonId != null) ? ((Number) rawLessonId).longValue() : null;
+        Long targetChapterId = (rawChapterId != null) ? ((Number) rawChapterId).longValue() : null;
         
         // 1. Clone V1 -> V2
         int nextVersion = materialGenerationRepository.findTopByUser_IdAndCourse_IdAndIsDeletedFalseOrderByVersionNoDesc(gen.getUser().getId(), gen.getCourse().getId())
@@ -202,16 +205,19 @@ public class InstructorMaterialController {
     @PutMapping("/{id}/attach-lesson")
     @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     @Transactional
-    public ResponseEntity<java.util.Map<String, String>> attachToLesson(Principal principal, @PathVariable Long id, @RequestBody java.util.Map<String, Long> payload) {
+    public ResponseEntity<java.util.Map<String, String>> attachToLesson(Principal principal, @PathVariable Long id, @RequestBody java.util.Map<String, Object> payload) {
         com.lms.material.entity.MaterialGeneration gen = materialGenerationRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("MaterialGeneration", id));
         if (!gen.getCourse().getInstructor().getEmail().equals(principal.getName())) {
             throw new AccessDeniedDomainException("Ban khong co quyen");
         }
         
-        Long lessonId = payload.get("lessonId");
-        Long chapterId = payload.get("chapterId");
-        Long courseId = payload.get("courseId");
+        Object rawLessonId = payload.get("lessonId");
+        Object rawChapterId = payload.get("chapterId");
+        Object rawCourseId = payload.get("courseId");
+        Long lessonId = (rawLessonId != null) ? ((Number) rawLessonId).longValue() : null;
+        Long chapterId = (rawChapterId != null) ? ((Number) rawChapterId).longValue() : null;
+        Long courseId = (rawCourseId != null) ? ((Number) rawCourseId).longValue() : null;
         
         materialAssignmentService.assignMaterial(id, courseId, chapterId, lessonId);
         
@@ -462,9 +468,10 @@ public class InstructorMaterialController {
                 attemptCount = quizAttemptRepository.findByUser_EmailAndQuiz_IdOrderByScoreDesc(principal.getName(), materialId).size();
             }
 
-            // CHỈ GIỮ LẠI: Học liệu do Giảng viên tự sinh HOẶC học liệu đang là Official.
-            // Bỏ qua các học liệu tự luyện cá nhân của Học viên.
-            if (createdByInstructor || isOfficial) {
+            // Hiển thị cho học viên nếu: do chính họ tạo, HOẶC đang là Official, 
+            // HOẶC đã được giảng viên phân phối (assign) vào lesson/chapter (thể hiện ý định chia sẻ)
+            boolean hasAssignment = !assignments.isEmpty();
+            if (createdByInstructor || isOfficial || hasAssignment) {
     
             java.util.Map<String, Object> map = new java.util.HashMap<>();
             map.put("id", gen.getId());

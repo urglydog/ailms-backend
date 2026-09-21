@@ -1,96 +1,63 @@
-# Kế Hoạch Triển Khai Nâng Cao (Advanced Implementation Plan)
+# Kế Hoạch Triển Khai (Implementation Plan) - Sửa Lỗi & Tối Ưu UI/UX LMS
 
-Dựa trên yêu cầu đánh giá kiến trúc và kiểm soát chất lượng mã nguồn (Code Quality Audit), kế hoạch triển khai đã được nâng cấp với các tiêu chuẩn khắt khe nhằm loại bỏ rủi ro hồi quy (regression risks), các lỗ hổng kiến trúc (architectural blind spots) và đảm bảo tính ổn định ở cấp độ Production.
+Bản kế hoạch này tổng hợp lại toàn bộ các vấn đề cốt lõi bạn đang gặp phải, đi thẳng vào nguyên nhân gốc rễ và đề xuất phương án giải quyết dứt điểm mà không cần can thiệp quá sâu vào cấu trúc Backend hiện tại.
 
-Dưới đây là Kế hoạch Triển khai chi tiết cho 5 vấn đề, **chưa thực hiện code**:
+## 1. Sửa Lỗi Tính Năng (Core Bug Fixes)
 
----
+### 1.1 Lỗi Nút Loa (TTS) Bị Ẩn Trên Flashcard Official Của Học Viên
+- **Vấn đề**: Thẻ do học viên tạo có loa, thẻ giảng viên (Official) xem ở phía học viên lại mất loa. Bạn từ chối cơ chế fallback ngầm (vì ngôn ngữ đã có sẵn từ transcript).
+- **Nguyên nhân**: Khi học viên truy cập thẻ từ tab Official (thông qua `(student)/materials/[id]/page.tsx`), thuộc tính `language` có thể đang không được truyền đúng xuống component `FlashcardViewer`, hoặc API lấy chi tiết thẻ Official đang trả về thiếu trường `language` so với API của Kho cá nhân.
+- **Giải pháp**: 
+  - [MODIFY] `app/(student)/materials/[id]/page.tsx` & `MaterialManager.tsx`: Đảm bảo API trả về đúng trường `language` và truyền nguyên vẹn giá trị này vào `<FlashcardViewer language={material.language} />`. Tuyệt đối tôn trọng ngôn ngữ gốc của thẻ.
 
-## 1. Lỗi Student View & Badge Counter ("Kho Học Liệu Official")
+### 1.2 Lỗi Kéo Thả Phân Bổ (Assign) Học Liệu Không Hiện Phía Học Viên
+- **Vấn đề**: Kéo thả học liệu vào Bài học (Lesson) hoặc Chương (Chapter), phía giảng viên thấy đổi nhưng phía học viên lại không thấy hiện lên trong Kho Official.
+- **Nguyên nhân**: API lấy danh sách học liệu của học viên (ví dụ `/api/v1/instructor/materials/courses/{courseId}` hoặc `/api/v1/materials`) có thể đang thiếu logic lọc theo `lessonId` / `chapterId`, hoặc frontend của học viên đang không hiển thị các học liệu được assign theo `chapterId` (hiện tại UI học viên chỉ query theo `lessonId`).
+- **Giải pháp**:
+  - [MODIFY] Backend API (phần query học liệu cho học viên): Đảm bảo các học liệu được gán vào `lessonId` HOẶC `chapterId` hiện tại đều được trả về đầy đủ.
+  - Định hướng UI: Học liệu gán vào Chương (Chapter) sẽ được hiển thị ở phần "Học liệu chung của chương" trên màn hình học tập của sinh viên.
 
-**Verified Root Cause Strategy:**
-- Hệ thống đếm thông báo (badge) hiện tại nhận số lượng raw từ WebSocket/API `useNotification()` mà không đối chiếu với bối cảnh (context) hiện tại (ví dụ: `courseId` hoặc `lessonId`).
-- Phân tích payload: Cần kiểm tra xem payload trả về của Notification có chứa metadata như `lessonId` hay không để client lọc chính xác.
+### 1.3 Lỗi Menu "Đánh Dấu Official / Bỏ Official"
+- **Vấn đề**: Báo lỗi và không hoạt động.
+- **Giải pháp**: 
+  - [MODIFY] `MaterialFolderTree.tsx` & UI: **Xóa bỏ hoàn toàn nút này khỏi menu chuột phải**. Trạng thái "Official" nay sẽ được quyết định ngầm tự động thông qua việc giảng viên có "Phân phối (Assign)" học liệu đó vào khóa học hay không.
 
-**Edge Cases & Guardrails:**
-- **Lỗi đồng bộ state:** Nếu notification được đánh dấu là "đã đọc" (read) trên một tab, tab khác phải cập nhật realtime. 
-- Học liệu bị ẩn/chưa tới giờ mở (scheduled): Không được tính vào badge cho sinh viên dù đã có notification.
-
-**Step-by-Step Technical Execution Steps:**
-1. Cập nhật type/payload của Notification Backend để đảm bảo trả về `courseId` và `lessonId` (nếu liên kết với lesson).
-2. Refactor `MaterialManager.tsx`: Lọc mảng `notifications` không chỉ dựa trên `type === 'NEW_OFFICIAL_MATERIAL'` mà còn phải khớp với `courseId` và `lessonId` của View hiện tại.
-3. Đối chiếu danh sách `filteredOfficialMaterials` đang hiển thị để loại trừ các học liệu đang ở trạng thái khóa (chưa mở).
-
----
-
-## 2. Lỗi Thuật toán SRS (Spaced Repetition System) ở Flashcards
-
-**Verified Root Cause Strategy (Lịch sử Git):**
-- **KHÔNG viết lại thuật toán.** Do SRS trước đây đã hoạt động bình thường, đây chắc chắn là một lỗi hồi quy (regression). 
-- Phải thực hiện kiểm tra `git log -S "nextReviewAt"` hoặc `git blame` trên service xử lý SRS của Backend và các hàm tiện ích xử lý thời gian (Date utils). Mục tiêu là tìm ra commit đã làm sai lệch múi giờ (UTC vs Local) hoặc đơn vị thời gian (nhầm lẫn giữa seconds và milliseconds).
-
-**Edge Cases & Guardrails:**
-- Dữ liệu lịch sử: Các Flashcard cũ có thể đang lưu time-stamp sai định dạng do lỗi hồi quy trước đó. Cần có cơ chế fallback hoặc migration.
-- Client Timezone Shift: So sánh `nextReviewAt` <= `now()` ở phía Client dễ bị sai nếu trình duyệt ở múi giờ khác. Việc xác định `isDue` phải do Backend tính toán và khóa cứng (lock) kết quả, Client chỉ hiển thị.
-
-**Step-by-Step Technical Execution Steps:**
-1. Chạy lệnh Git để truy vết sự thay đổi của logic cộng ngày (interval) và việc parse ngày tháng.
-2. Sửa lỗi tại điểm hồi quy: Đảm bảo thời gian tính toán tiếp theo (`nextReviewAt`) tuân thủ chuẩn ISO-8601 (UTC time).
-3. Đảm bảo cờ `isDue` trả về từ Backend phản ánh chính xác trạng thái dựa trên thời gian thực tế của server, tránh phụ thuộc vào múi giờ của client ở component `FlashcardViewer`.
+### 1.4 Lỗi Không Thể Xóa/Di Chuyển Thư Mục
+- **Vấn đề**: Chuyển học liệu vào thư mục bị lỗi, xóa thư mục trống báo lỗi ràng buộc.
+- **Giải pháp**:
+  - [MODIFY] `InstructorMaterialController.java`: Fix lỗi `ClassCastException` do dữ liệu `folderId` gửi lên bị Jackson ép kiểu ngầm thành `Integer`. (Thay đổi nhận `@RequestBody Map<String, Object>`).
+  - [MODIFY] `MaterialFolderService.java`: Sửa logic `deleteFolder`, tự động gỡ khóa ngoại (set `folder_id = null` cho các học liệu bên trong) trước khi xóa thư mục để vượt qua lỗi ràng buộc DB.
 
 ---
 
-## 3. Lỗi Trạng thái Official & Logic Drag-and-Drop (Dependency Rule)
+## 2. Nâng Cấp Trải Nghiệm Người Dùng (UI/UX)
 
-**Verified Root Cause Strategy:**
-- Logic chuyển trạng thái Official/Draft không thể là một thao tác toggle tuyến tính 1-1. Học liệu và Lesson là mối quan hệ Nhiều-Nhiều (Many-to-Many).
-- Khi gỡ học liệu khỏi một Lesson, không được tự động chuyển về "Unofficial" trừ khi đó là Lesson cuối cùng chứa nó.
+### 2.1 Trạng Thái Loading (Spinner / Overlay)
+- **Giải pháp**:
+  - [MODIFY] Các component thao tác (kéo thả, xóa, chuyển thư mục): Thêm lớp phủ mờ (Disabled overlay) hoặc Spinner xoay vòng lên thẻ học liệu đang được xử lý. 
+  - **Mục đích**: Chặn người dùng double-click gây ra nhiều request trùng lặp (duplicate requests) làm crash backend.
 
-**Edge Cases & Guardrails:**
-- Batch Drag-and-Drop: Phải xử lý trường hợp kéo thả nhiều item cùng lúc nếu hệ thống hỗ trợ.
-- Xóa nhầm do legacy UI: Các nút Delete/Official cũ có thể gây conflict event. Cần gỡ bỏ hoàn toàn.
+### 2.2 Thông Báo Lỗi Thân Thiện (Toast Notifications)
+- **Giải pháp**: 
+  - [MODIFY] Bắt toàn bộ các lỗi từ API (xóa thất bại, di chuyển thất bại) thay vì `console.log`.
+  - Sử dụng thư viện Toast (Sonner) hiển thị thông báo tiếng Việt rõ nghĩa ở góc màn hình. Ví dụ: *"Không thể xóa thư mục vì vẫn còn học liệu bên trong"*.
 
-**Step-by-Step Technical Execution Steps:**
-1. Xóa bỏ hoàn toàn các nút Standalone "Official/Delete" ở Header UI (double-click legacy).
-2. Tích hợp event `onDrop` tại khu vực Material Workspace: Khi kéo thả vào Lesson, hiển thị Modal xác nhận đánh dấu Official.
-3. Sửa backend logic (unassign material): Khi gỡ học liệu khỏi Lesson, đếm số liên kết còn lại (`remainingLessonsCount`). **Chỉ** chuyển trạng thái sang `Draft` (Unofficial) khi số liên kết bằng 0.
+### 2.3 Cải Tổ Bố Cục Giảng Viên (Instructor Workspace)
+- **Master-Detail Layout**: Chia màn hình thành 2 cột (Trái: Cây thư mục (1/4) | Phải: Workspace (3/4)).
+- **Phân bổ học liệu lộn xộn**: Quy hoạch lại cách hiển thị danh sách học liệu đã gán để dễ nhìn hơn.
+- **View Toggle & Search Bar**: Thêm thanh công cụ phía trên Workspace để chuyển đổi giữa **Grid View** (thẻ) và **List View** (bảng ngang chi tiết), kèm thanh tìm kiếm và lọc.
+- **Modern Material Cards (Neumorphism)**: Làm mới thiết kế thẻ học liệu (bo tròn, đổ bóng, màu sắc phân biệt Quiz/Flashcard/Mindmap). Thêm hiệu ứng fade-in cho các nút thao tác nhanh khi hover.
+- **Folder Tree Modal**: Bấm di chuyển sẽ hiện Popup Modal hiển thị Cây Thư Mục có icon folder trực quan để người dùng chọn, thay vì nhập ID.
 
----
-
-## 4. Lỗi Context Menu, Phím tắt (Keyboard Scope) & Giao diện Tree UI
-
-**Verified Root Cause Strategy:**
-- Phím tắt toàn cục (Global Keyboard Listeners) như `Delete`, `Ctrl+C`, `Ctrl+V` gây ra rủi ro side-effect khổng lồ (ví dụ: người dùng bấm Delete khi đang gõ text tìm kiếm khiến học liệu bị xóa nhầm).
-- Input nhập ID tĩnh (Raw ID prompt) không bảo mật và gây lỗi UX nặng.
-
-**Edge Cases & Guardrails:**
-- Scope Isolation: Lắng nghe phím tắt phải được khóa chặt (guarded) bởi Active Element (ví dụ: bỏ qua nếu focus đang nằm trong `input`, `textarea`, hoặc `contenteditable`).
-- Validation Tree: Không cho phép move thư mục cha vào trong thư mục con của chính nó (ngăn chặn Circular Dependency).
-
-**Step-by-Step Technical Execution Steps:**
-1. **Scope Phím Tắt:** Trong `useEffect` xử lý `keydown` của thư mục, thêm `Guard Clause`: kiểm tra `document.activeElement.tagName`. Nếu thuộc các thẻ nhập liệu, `return` lập tức. Khóa phím tắt chỉ hoạt động trên các Material Card đang được select/focus.
-2. **Refactor UI Chuyển Thư Mục:** Thay thế `window.prompt` bằng một UI Modal Portal.
-3. Tích hợp một component **Searchable Tree-Select Dropdown** bên trong Modal để render danh sách thư mục trực quan. Xử lý logic lọc đệ quy để chặn việc di chuyển thư mục vào chính nó.
+### 2.4 Cải Tổ Giao Diện Học Viên (Student View)
+- **Tabs Official/Cá nhân**: Thiết kế lại tab "Kho Học Liệu Official" và "Kho Học Liệu Cá Nhân" thành dạng Pill-Tab hiện đại
+- **Giao diện Ôn tập Flashcard (SRS)**: 
+  - Các nút `Hard / Good / Easy` được thêm hiệu ứng hover màu sắc nổi bật.
+  - Tính toán và hiển thị rõ thời gian "Next Review Date" kết hợp icon lịch 🗓️ để dễ hình dung hơn con số `<10m` tĩnh.
 
 ---
 
-## 5. Tối ưu Hiệu suất Layout (Grid vs List Optimization)
+## Bạn Cần Phê Duyệt (Review Required)
 
-**Verified Root Cause Strategy:**
-- Bố cục Grid hiện tại (Unstructured Grid) không phù hợp cho số lượng lớn học liệu vì thiếu cột thông tin ngữ cảnh. Cần đổi sang List View.
-- Rủi ro hiệu suất: Render hàng trăm hàng List có thể làm lag UI.
-
-**Edge Cases & Guardrails:**
-- Hỗ trợ màn hình nhỏ: List view cần phải cuộn ngang hoặc tự ẩn bớt các cột ít quan trọng (responsive) trên Mobile/Tablet.
-- Performance: Cần Virtualization hoặc Pagination.
-
-**Step-by-Step Technical Execution Steps:**
-1. Chuyển đổi mặc định UI sang Dạng Danh sách (List View) với cấu trúc phân tầng rõ ràng (Tên, Loại, Trạng thái, Cập nhật). Thêm View Toggle (Grid/List).
-2. Bổ sung các Filter/Sort bar chuyên dụng.
-3. Áp dụng Virtualized List (thông qua `@tanstack/react-virtual` hoặc lazy-rendering pagination) để giới hạn số lượng DOM nodes khi Instructor load thư mục Workspace chứa trên 50+ học liệu.
-
----
-
-> [!IMPORTANT]
-> **User Review Required**
-> Kế hoạch đã được đánh giá lại và bao phủ toàn bộ các tiêu chuẩn khắt khe về kiến trúc (Architectural constraints) cũng như quản lý lỗi hồi quy. Xin vui lòng phê duyệt (Approve) Kế hoạch Cập nhật này để tôi tiến hành bước tiếp theo: **Truy vết lỗi bằng Git và bắt đầu triển khai mã nguồn**.
+> Bản kế hoạch này đã bám sát chính xác các vấn đề bạn liệt kê (Từ chối Fallback tiếng Việt, Fix lỗi hiển thị Official, Phân bổ học liệu, Xóa folder, Loading Overlay, Toast Tiếng Việt).
+> Nếu bạn đồng ý với hướng tiếp cận gọn gàng này (chủ yếu tập trung sửa lỗi và làm đẹp UI, không đụng chạm phá vỡ cấu trúc Backend), vui lòng bấm **Xác nhận (Approve)** để tôi bắt đầu thực hiện ngay phần code!
