@@ -12,4 +12,6 @@ public interface MaterialAssignmentRepository extends JpaRepository<MaterialAssi
     List<MaterialAssignment> findByChapter_Id(Long chapterId);
     List<MaterialAssignment> findByLesson_Id(Long lessonId);
     void deleteByMaterial_Id(Long materialId);
+    List<MaterialAssignment> findByMaterial_Id(Long materialId);
+    long countByMaterial_Id(Long materialId);
 }

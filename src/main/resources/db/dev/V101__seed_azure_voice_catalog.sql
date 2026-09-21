@@ -11,7 +11,7 @@
 --
 -- Giọng NỮ được chọn làm mặc định cho mỗi ngôn ngữ MỚI (không đụng 5 ngôn ngữ V100 đã có
 -- is_default riêng) — không có tiêu chí "giọng khuyến nghị" nào khác từ phía Azure để dùng.
-INSERT INTO voice_mappings (language, voice_name, gender, is_default, is_active, created_at) VALUES
+INSERT IGNORE INTO voice_mappings (language, voice_name, gender, is_default, is_active, created_at) VALUES
     ('af-ZA', 'af-ZA-AdriNeural', 'FEMALE', TRUE, TRUE, NOW()),
     ('af-ZA', 'af-ZA-WillemNeural', 'MALE', FALSE, TRUE, NOW()),
     ('am-ET', 'am-ET-MekdesNeural', 'FEMALE', TRUE, TRUE, NOW()),
