@@ -68,4 +68,13 @@ public class FlashcardController {
             @RequestPart("file") org.springframework.web.multipart.MultipartFile file) {
         return ResponseEntity.ok(flashcardService.addFlashcardsFromCsv(principal.getName(), generationId, file));
     }
+
+    /** UpComming_Plan.md B2 — Import ngược file .txt Anki/Quizlet vào bộ thẻ cá nhân (học viên). */
+    @PostMapping(value = "/deck/{generationId}/import-txt", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<FlashcardDto.ImportResultRes> importFlashcardsTxt(
+            Principal principal,
+            @PathVariable Long generationId,
+            @RequestPart("file") org.springframework.web.multipart.MultipartFile file) {
+        return ResponseEntity.ok(flashcardService.addFlashcardsFromTxt(principal.getName(), generationId, file));
+    }
 }
