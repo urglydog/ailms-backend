@@ -56,6 +56,13 @@ public class MaterialAssignmentService {
         }
 
         assignmentRepository.save(assignment);
+
+        // BR-OFFICIAL-01: Assigning a material to a course/chapter/lesson makes it visible
+        // to students, so it must be marked Official at the same time (symmetric with the
+        // revert-to-Draft logic in unassignMaterial/revertOfficialStatus below).
+        if (courseId != null || chapterId != null || lessonId != null) {
+            setOfficialStatus(materialId, true);
+        }
     }
 
     /**
@@ -76,30 +83,31 @@ public class MaterialAssignmentService {
 
         // BR-OFFICIAL-01: Revert isOfficial only when this was the LAST assignment
         if (materialId != null && assignmentRepository.countByMaterial_Id(materialId) == 0) {
-            revertOfficialStatus(materialId);
+            setOfficialStatus(materialId, false);
         }
     }
 
     /**
-     * Reverts isOfficial to false for the underlying resource (Quiz / Mindmap / FlashcardDeck)
-     * when a material has zero remaining lesson/chapter assignments.
+     * Sets isOfficial on the underlying resource (Quiz / Mindmap / FlashcardDeck) for a material.
+     * Used to flip Official on assign and revert to Draft when a material has zero remaining
+     * lesson/chapter assignments (BR-OFFICIAL-01).
      */
-    private void revertOfficialStatus(Long materialId) {
+    private void setOfficialStatus(Long materialId, boolean isOfficial) {
         generationRepository.findById(materialId).ifPresent(gen -> {
             switch (gen.getMaterialType()) {
                 case QUIZ -> quizRepository.findByMaterialGeneration_IdAndIsDeletedFalse(materialId)
                         .ifPresent(quiz -> {
-                            quiz.setIsOfficial(false);
+                            quiz.setIsOfficial(isOfficial);
                             quizRepository.save(quiz);
                         });
                 case MINDMAP -> mindmapRepository.findByMaterialGeneration_Id(materialId)
                         .ifPresent(mm -> {
-                            mm.setIsOfficial(false);
+                            mm.setIsOfficial(isOfficial);
                             mindmapRepository.save(mm);
                         });
                 case FLASHCARD -> flashcardDeckRepository.findByMaterialGeneration_Id(materialId)
                         .ifPresent(deck -> {
-                            deck.setIsOfficial(false);
+                            deck.setIsOfficial(isOfficial);
                             flashcardDeckRepository.save(deck);
                         });
             }
