@@ -25,7 +25,7 @@ public class InstructorMaterialController {
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<java.util.Map<String, String>> unassignMaterial(Principal principal, @PathVariable Long assignmentId) {
         // Validation of ownership could be added here if needed, but for simplicity assuming AssignmentService handles it or it's implicitly trusted by Instructor Role
-        materialAssignmentService.unassignMaterial(assignmentId);
+        materialAssignmentService.unassignMaterial(assignmentId, principal.getName());
         return ResponseEntity.ok(java.util.Map.of("message", "Đã gỡ phân phối học liệu"));
     }
 
@@ -49,7 +49,8 @@ public class InstructorMaterialController {
             gen.setFolder(null);
         }
         materialGenerationRepository.save(gen);
-        
+        activityLogService.log(gen.getCourse(), principal.getName(), "Đã di chuyển học liệu \"" + gen.getTitle() + "\" vào thư mục khác");
+
         return ResponseEntity.ok(java.util.Map.of("message", "Đã di chuyển học liệu"));
     }
 
@@ -76,6 +77,10 @@ public class InstructorMaterialController {
         // đó. KHÔNG gọi thêm assignMaterial ở đây nữa — làm vậy sẽ tạo thêm 1 MaterialAssignment
         // trùng lặp trỏ vào cùng đích mỗi lần kéo đè (đã từng là bug khiến badge đếm sai).
         materialAssignmentService.transferAssignments(gen.getId(), newGen.getId());
+        // Phòng vệ: dọn mọi bản "đang dùng" mồ côi khác còn sót trong dòng này (dữ liệu lịch sử
+        // lỗi trước đây), đảm bảo luôn chỉ có đúng 1 bản active mỗi dòng version.
+        archiveOtherActiveVersions(newGen.getRootGenerationId(), newGen.getId());
+        activityLogService.log(newGen.getCourse(), principal.getName(), "Đã cập nhật phiên bản mới cho học liệu \"" + newGen.getTitle() + "\"");
 
         java.util.Map<String, Object> response = new java.util.HashMap<>();
         response.put("id", newGen.getId());
@@ -127,9 +132,11 @@ public class InstructorMaterialController {
             throw new AccessDeniedDomainException("Ban khong co quyen");
         }
         Long rootId = source.getRootGenerationId() != null ? source.getRootGenerationId() : source.getId();
-        com.lms.material.entity.MaterialGeneration active = materialGenerationRepository
-                .findTopByRootGenerationIdAndIsArchivedFalseOrderByVersionNoDesc(rootId)
-                .orElse(source);
+        // Xác định bản đang active theo bản ghi tạo GẦN NHẤT (id lớn nhất), không dùng versionNo
+        // — cột này có thể mang giá trị lịch sử bị lệch từ trước khi sửa lỗi versioning.
+        java.util.List<com.lms.material.entity.MaterialGeneration> activeOnes =
+                materialGenerationRepository.findByRootGenerationIdAndIsArchivedFalseOrderByIdDesc(rootId);
+        com.lms.material.entity.MaterialGeneration active = activeOnes.isEmpty() ? source : activeOnes.get(0);
 
         // Nội dung lấy từ bản được chọn khôi phục (source), nhưng metadata (title gốc, gán bài
         // học...) kế thừa từ bản ĐANG active — khôi phục = "tạo bản mới nhất kế tiếp mang nội
@@ -141,12 +148,31 @@ public class InstructorMaterialController {
         active.setIsArchived(true);
         materialGenerationRepository.save(active);
         materialAssignmentService.transferAssignments(active.getId(), newGen.getId());
+        archiveOtherActiveVersions(newGen.getRootGenerationId(), newGen.getId());
+        activityLogService.log(newGen.getCourse(), principal.getName(), "Đã khôi phục phiên bản cũ cho học liệu \"" + newGen.getTitle() + "\"");
 
         java.util.Map<String, Object> response = new java.util.HashMap<>();
         response.put("id", newGen.getId());
         response.put("materialId", newMaterialId);
         response.put("message", "Đã khôi phục nội dung phiên bản cũ thành phiên bản mới nhất");
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Dọn mọi bản ghi "đang dùng" (is_archived=false) khác còn sót trong cùng dòng version,
+     * ngoại trừ {@code keepActiveId} — đảm bảo bất biến "chỉ đúng 1 bản active mỗi dòng version"
+     * dù dữ liệu lịch sử có bị lệch (nhánh mồ côi) hay không.
+     */
+    private void archiveOtherActiveVersions(Long rootId, Long keepActiveId) {
+        if (rootId == null) return;
+        for (com.lms.material.entity.MaterialGeneration stray :
+                materialGenerationRepository.findByRootGenerationIdAndIsArchivedFalseOrderByIdDesc(rootId)) {
+            if (!stray.getId().equals(keepActiveId)) {
+                materialAssignmentService.transferAssignments(stray.getId(), keepActiveId);
+                stray.setIsArchived(true);
+                materialGenerationRepository.save(stray);
+            }
+        }
     }
 
     /** Tạo bản ghi MaterialGeneration mới kế tiếp trong đúng dòng version của {@code metaSource}. */
@@ -265,6 +291,7 @@ public class InstructorMaterialController {
     private final com.lms.material.repository.FlashcardReviewRepository flashcardReviewRepository;
     private final com.lms.material.service.MaterialAssignmentService materialAssignmentService;
     private final CourseRepository courseRepository;
+    private final com.lms.catalog.service.CourseActivityLogService activityLogService;
 
     @PutMapping("/{id}/attach-lesson")
     @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
@@ -283,7 +310,7 @@ public class InstructorMaterialController {
         Long chapterId = (rawChapterId != null) ? ((Number) rawChapterId).longValue() : null;
         Long courseId = (rawCourseId != null) ? ((Number) rawCourseId).longValue() : null;
         
-        materialAssignmentService.assignMaterial(id, courseId, chapterId, lessonId);
+        materialAssignmentService.assignMaterial(id, courseId, chapterId, lessonId, principal.getName());
         
         return ResponseEntity.ok(java.util.Map.of("message", "Đã cập nhật đính kèm học liệu"));
     }

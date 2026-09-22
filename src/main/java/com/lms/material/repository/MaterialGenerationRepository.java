@@ -37,4 +37,6 @@ public interface MaterialGenerationRepository extends JpaRepository<MaterialGene
     long countByRootGenerationId(Long rootGenerationId);
 
     java.util.List<MaterialGeneration> findByRootGenerationIdOrderByVersionNoAsc(Long rootGenerationId);
+
+    java.util.List<MaterialGeneration> findByRootGenerationIdAndIsArchivedFalseOrderByIdDesc(Long rootGenerationId);
 }

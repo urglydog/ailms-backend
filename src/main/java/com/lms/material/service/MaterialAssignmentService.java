@@ -30,9 +30,10 @@ public class MaterialAssignmentService {
     private final QuizRepository quizRepository;
     private final MindmapRepository mindmapRepository;
     private final FlashcardDeckRepository flashcardDeckRepository;
+    private final com.lms.catalog.service.CourseActivityLogService activityLogService;
 
     @Transactional
-    public void assignMaterial(Long materialId, Long courseId, Long chapterId, Long lessonId) {
+    public void assignMaterial(Long materialId, Long courseId, Long chapterId, Long lessonId, String actorEmail) {
         MaterialGeneration material = generationRepository.findById(materialId)
                 .orElseThrow(() -> new ResourceNotFoundException("MaterialGeneration", materialId));
 
@@ -75,6 +76,10 @@ public class MaterialAssignmentService {
         if (courseId != null || chapterId != null || lessonId != null) {
             setOfficialStatus(materialId, true);
         }
+
+        String target = lessonId != null ? "vào bài học" : (chapterId != null ? "vào chương" : "vào khóa học");
+        activityLogService.log(material.getCourse(), actorEmail,
+                "Đã phân phối học liệu \"" + material.getTitle() + "\" " + target);
     }
 
     /**
@@ -83,11 +88,12 @@ public class MaterialAssignmentService {
      * Đảm bảo trạng thái Official phản ánh đúng thực tế phân phối (Many-to-Many safe).
      */
     @Transactional
-    public void unassignMaterial(Long assignmentId) {
+    public void unassignMaterial(Long assignmentId, String actorEmail) {
         MaterialAssignment assignment = assignmentRepository.findById(assignmentId)
                 .orElseThrow(() -> new ResourceNotFoundException("MaterialAssignment", assignmentId));
 
-        Long materialId = assignment.getMaterial() != null ? assignment.getMaterial().getId() : null;
+        MaterialGeneration material = assignment.getMaterial();
+        Long materialId = material != null ? material.getId() : null;
 
         assignmentRepository.deleteById(assignmentId);
         // Flush so countByMaterial_Id reflects the deletion in the same transaction
@@ -96,6 +102,10 @@ public class MaterialAssignmentService {
         // BR-OFFICIAL-01: Revert isOfficial only when this was the LAST assignment
         if (materialId != null && assignmentRepository.countByMaterial_Id(materialId) == 0) {
             setOfficialStatus(materialId, false);
+        }
+
+        if (material != null) {
+            activityLogService.log(material.getCourse(), actorEmail, "Đã gỡ phân phối học liệu \"" + material.getTitle() + "\"");
         }
     }
 

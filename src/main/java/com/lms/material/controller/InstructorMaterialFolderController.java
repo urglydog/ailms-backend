@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.security.Principal;
 import java.util.List;
 
 @RestController
@@ -28,8 +29,8 @@ public class InstructorMaterialFolderController {
 
     @PostMapping
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<MaterialFolderDto> createFolder(@Valid @RequestBody MaterialFolderReq req) {
-        return ResponseEntity.ok(materialFolderService.createFolder(req));
+    public ResponseEntity<MaterialFolderDto> createFolder(Principal principal, @Valid @RequestBody MaterialFolderReq req) {
+        return ResponseEntity.ok(materialFolderService.createFolder(req, principal.getName()));
     }
 
     @PutMapping("/{id}")
@@ -42,8 +43,8 @@ public class InstructorMaterialFolderController {
 
     @DeleteMapping("/{id}")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<Void> deleteFolder(@PathVariable Long id) {
-        materialFolderService.deleteFolder(id);
+    public ResponseEntity<Void> deleteFolder(Principal principal, @PathVariable Long id) {
+        materialFolderService.deleteFolder(id, principal.getName());
         return ResponseEntity.noContent().build();
     }
 }
