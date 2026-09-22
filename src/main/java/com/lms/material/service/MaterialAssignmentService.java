@@ -36,6 +36,18 @@ public class MaterialAssignmentService {
         MaterialGeneration material = generationRepository.findById(materialId)
                 .orElseThrow(() -> new ResourceNotFoundException("MaterialGeneration", materialId));
 
+        // Idempotency guard: tránh tạo assignment trùng lặp cho đúng cùng 1 đích
+        // (lesson/chapter) nếu đã tồn tại — phòng trường hợp gọi lại nhiều lần.
+        boolean alreadyExists = assignmentRepository.findByMaterial_Id(materialId).stream().anyMatch(a -> {
+            Long existingChapterId = a.getChapter() != null ? a.getChapter().getId() : null;
+            Long existingLessonId = a.getLesson() != null ? a.getLesson().getId() : null;
+            return java.util.Objects.equals(existingChapterId, chapterId) && java.util.Objects.equals(existingLessonId, lessonId);
+        });
+        if (alreadyExists) {
+            setOfficialStatus(materialId, true);
+            return;
+        }
+
         MaterialAssignment assignment = new MaterialAssignment();
         assignment.setMaterial(material);
 
