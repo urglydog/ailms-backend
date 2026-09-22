@@ -28,7 +28,9 @@ public class MaterialFolderService {
         if (parentId != null) {
             folders = materialFolderRepository.findByCourse_IdAndParent_IdOrderByCreatedAtAsc(courseId, parentId);
         } else {
-            folders = materialFolderRepository.findByCourse_IdAndParentIsNullOrderByCreatedAtAsc(courseId);
+            // FE builds the folder tree client-side from a single flat fetch, so return the
+            // full folder list for the course (not just root-level folders) when parentId is absent.
+            folders = materialFolderRepository.findByCourse_IdOrderByCreatedAtAsc(courseId);
         }
         return folders.stream().map(this::toDto).toList();
     }
