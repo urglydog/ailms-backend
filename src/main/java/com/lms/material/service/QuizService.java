@@ -35,20 +35,6 @@ public class QuizService {
     private final com.lms.common.config.AiWorkerConfig aiWorkerConfig;
 
     @Transactional
-    public void setOfficial(String instructorEmail, Long quizId, Boolean isOfficial) {
-        Quiz quiz = quizRepository.findById(quizId)
-                .orElseThrow(() -> new ResourceNotFoundException("Quiz", quizId));
-        Course course = quiz.getMaterialGeneration().getCourse();
-        
-        if (!course.getInstructor().getEmail().equals(instructorEmail)) {
-            throw new AccessDeniedDomainException("Chi giang vien cua khoa hoc moi co the danh dau Quiz chinh thuc");
-        }
-        
-        quiz.setIsOfficial(isOfficial != null ? isOfficial : true);
-        quizRepository.save(quiz);
-    }
-
-    @Transactional
     public void updateQuizSettings(String instructorEmail, Long quizId, com.lms.material.dto.QuizDto.QuizSettingsReq req) {
         Quiz quiz = quizRepository.findById(quizId)
                 .orElseThrow(() -> new ResourceNotFoundException("Quiz", quizId));

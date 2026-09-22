@@ -6,9 +6,6 @@ import com.lms.material.entity.FlashcardDeck;
 import com.lms.material.entity.Mindmap;
 import com.lms.material.repository.FlashcardDeckRepository;
 import com.lms.material.repository.MindmapRepository;
-import com.lms.common.service.NotificationService;
-import com.lms.enrollment.repository.EnrollmentRepository;
-import com.lms.enrollment.entity.Enrollment;
 import com.lms.catalog.entity.Course;
 import com.lms.catalog.repository.CourseRepository;
 import lombok.RequiredArgsConstructor;
@@ -72,17 +69,19 @@ public class InstructorMaterialController {
         Long targetLessonId = (rawLessonId != null) ? ((Number) rawLessonId).longValue() : null;
         Long targetChapterId = (rawChapterId != null) ? ((Number) rawChapterId).longValue() : null;
         
-        // 1. Clone V1 -> V2
-        int nextVersion = materialGenerationRepository.findTopByUser_IdAndCourse_IdAndIsDeletedFalseOrderByVersionNoDesc(gen.getUser().getId(), gen.getCourse().getId())
+        // 1. Clone theo đúng dòng version (root_generation_id), không theo toàn bộ user+course
+        Long rootId = gen.getRootGenerationId() != null ? gen.getRootGenerationId() : gen.getId();
+        int nextVersion = materialGenerationRepository.findTopByRootGenerationIdOrderByVersionNoDesc(rootId)
                 .map(mg -> mg.getVersionNo() + 1)
-                .orElse(1);
-                
+                .orElse(gen.getVersionNo() + 1);
+        String baseTitle = gen.getTitle() != null ? gen.getTitle().replaceAll("\\s*\\(V\\d+\\)\\s*$", "") : "";
+
         com.lms.material.entity.MaterialGeneration newGen = new com.lms.material.entity.MaterialGeneration();
         newGen.setUser(gen.getUser());
         newGen.setCourse(gen.getCourse());
         newGen.setMaterialType(gen.getMaterialType());
         newGen.setLanguage(gen.getLanguage());
-        newGen.setTitle(gen.getTitle() + " (V2)");
+        newGen.setTitle(baseTitle + " (V" + nextVersion + ")");
         newGen.setScopeType(gen.getScopeType());
         newGen.setScopeRefId(gen.getScopeRefId());
         newGen.setCustomLessonIds(gen.getCustomLessonIds());
@@ -91,8 +90,14 @@ public class InstructorMaterialController {
         newGen.setVersionNo(nextVersion);
         newGen.setStatus(gen.getStatus());
         newGen.setParentGeneration(gen);
-        
+        newGen.setRootGenerationId(rootId);
+
         materialGenerationRepository.save(newGen);
+
+        // Tự chữa cho bản gốc chưa từng có root_generation_id (dữ liệu cũ trước migration)
+        if (gen.getRootGenerationId() == null) {
+            gen.setRootGenerationId(rootId);
+        }
         
         Long newMaterialId = null;
         
@@ -198,8 +203,6 @@ public class InstructorMaterialController {
     private final com.lms.material.repository.QuizAttemptRepository quizAttemptRepository;
     private final com.lms.material.repository.FlashcardReviewRepository flashcardReviewRepository;
     private final com.lms.material.service.MaterialAssignmentService materialAssignmentService;
-    private final NotificationService notificationService;
-    private final EnrollmentRepository enrollmentRepository;
     private final CourseRepository courseRepository;
 
     @PutMapping("/{id}/attach-lesson")
@@ -222,56 +225,6 @@ public class InstructorMaterialController {
         materialAssignmentService.assignMaterial(id, courseId, chapterId, lessonId);
         
         return ResponseEntity.ok(java.util.Map.of("message", "Đã cập nhật đính kèm học liệu"));
-    }
-
-    @PutMapping("/mindmaps/{id}/set-official")
-    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
-    @Transactional
-    public ResponseEntity<java.util.Map<String, String>> setMindmapOfficial(Principal principal, @PathVariable Long id, @RequestParam(defaultValue = "true") boolean isOfficial) {
-        Mindmap mindmap = mindmapRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Mindmap", id));
-        if (!mindmap.getMaterialGeneration().getCourse().getInstructor().getEmail().equals(principal.getName())) {
-            throw new AccessDeniedDomainException("Ban khong co quyen");
-        }
-        mindmap.setIsOfficial(isOfficial);
-        mindmapRepository.save(mindmap);
-
-        if (isOfficial) {
-            String title = "Học liệu mới: " + (mindmap.getMaterialGeneration().getTitle() != null ? mindmap.getMaterialGeneration().getTitle() : "Sơ đồ tư duy");
-            String content = "Giảng viên vừa công bố một Sơ đồ tư duy mới cho khóa học của bạn.";
-            String linkUrl = "/materials/" + mindmap.getMaterialGeneration().getId();
-            java.util.List<Enrollment> enrollments = enrollmentRepository.findByCourseId(mindmap.getMaterialGeneration().getCourse().getId());
-            for (Enrollment e : enrollments) {
-                notificationService.notify(e.getUser().getId(), "NEW_OFFICIAL_MATERIAL", title, content, linkUrl);
-            }
-        }
-
-        return ResponseEntity.ok(java.util.Map.of("message", isOfficial ? "Đã đặt làm học liệu chính thức" : "Đã hủy học liệu chính thức"));
-    }
-
-    @PutMapping("/flashcards/{id}/set-official")
-    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
-    @Transactional
-    public ResponseEntity<java.util.Map<String, String>> setFlashcardOfficial(Principal principal, @PathVariable Long id, @RequestParam(defaultValue = "true") boolean isOfficial) {
-        FlashcardDeck deck = flashcardDeckRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("FlashcardDeck", id));
-        if (!deck.getMaterialGeneration().getCourse().getInstructor().getEmail().equals(principal.getName())) {
-            throw new AccessDeniedDomainException("Ban khong co quyen");
-        }
-        deck.setIsOfficial(isOfficial);
-        flashcardDeckRepository.save(deck);
-
-        if (isOfficial) {
-            String title = "Học liệu mới: " + (deck.getMaterialGeneration().getTitle() != null ? deck.getMaterialGeneration().getTitle() : "Bộ Flashcard");
-            String content = "Giảng viên vừa công bố một Bộ thẻ Flashcard mới cho khóa học của bạn.";
-            String linkUrl = "/materials/" + deck.getMaterialGeneration().getId();
-            java.util.List<Enrollment> enrollments = enrollmentRepository.findByCourseId(deck.getMaterialGeneration().getCourse().getId());
-            for (Enrollment e : enrollments) {
-                notificationService.notify(e.getUser().getId(), "NEW_OFFICIAL_MATERIAL", title, content, linkUrl);
-            }
-        }
-
-        return ResponseEntity.ok(java.util.Map.of("message", isOfficial ? "Đã đặt làm học liệu chính thức" : "Đã hủy học liệu chính thức"));
     }
 
     @PostMapping("/courses/{courseId}/manual")
@@ -387,7 +340,7 @@ public class InstructorMaterialController {
                 
         java.util.List<java.util.Map<String, Object>> result = new java.util.ArrayList<>();
         for (com.lms.material.entity.MaterialGeneration gen : generations) {
-            if (gen.getStatus() == com.lms.common.enums.GenStatus.ARCHIVED) {
+            if (gen.getStatus() == com.lms.common.enums.GenStatus.ARCHIVED || Boolean.TRUE.equals(gen.getIsArchived())) {
                 continue;
             }
             
@@ -481,6 +434,7 @@ public class InstructorMaterialController {
             map.put("status", gen.getStatus().name());
             map.put("language", gen.getLanguage());
             map.put("versionNo", gen.getVersionNo());
+            map.put("rootGenerationId", gen.getRootGenerationId() != null ? gen.getRootGenerationId() : gen.getId());
             map.put("isOfficial", isOfficial);
             map.put("materialId", materialId);
             map.put("questionCount", questionCount);

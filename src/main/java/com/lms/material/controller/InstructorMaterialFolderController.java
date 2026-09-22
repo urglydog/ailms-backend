@@ -44,6 +44,6 @@ public class InstructorMaterialFolderController {
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Void> deleteFolder(@PathVariable Long id) {
         materialFolderService.deleteFolder(id);
-        return ResponseEntity.ok().build();
+        return ResponseEntity.noContent().build();
     }
 }
