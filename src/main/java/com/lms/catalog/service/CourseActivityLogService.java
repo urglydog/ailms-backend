@@ -35,8 +35,22 @@ public class CourseActivityLogService {
         }
     }
 
+    /**
+     * Trả về danh sách đã map sẵn thành Map (không phải entity) — tránh
+     * LazyInitializationException khi controller đọc {@code actor.getFullName()}
+     * sau khi transaction/session của phương thức này đã đóng.
+     */
     @Transactional(readOnly = true)
-    public List<CourseActivityLog> getRecent(Long courseId, int limit) {
-        return repository.findByCourse_IdOrderByCreatedAtDesc(courseId, PageRequest.of(0, limit));
+    public List<java.util.Map<String, Object>> getRecent(Long courseId, int limit) {
+        List<java.util.Map<String, Object>> result = new java.util.ArrayList<>();
+        for (CourseActivityLog entry : repository.findByCourse_IdOrderByCreatedAtDesc(courseId, PageRequest.of(0, limit))) {
+            java.util.Map<String, Object> map = new java.util.HashMap<>();
+            map.put("id", entry.getId());
+            map.put("actorName", entry.getActor() != null ? entry.getActor().getFullName() : null);
+            map.put("description", entry.getDescription());
+            map.put("createdAt", entry.getCreatedAt().toString());
+            result.add(map);
+        }
+        return result;
     }
 }
