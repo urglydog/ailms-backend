@@ -31,7 +31,21 @@ public class MaterialGenerationController {
             Principal principal,
             @Valid @RequestBody MaterialGenerationReq req) {
         MaterialGenerationRes res = materialGenerationService.requestGeneration(principal.getName(), req);
-        return ResponseEntity.status(HttpStatus.ACCEPTED).body(res);
+        // Task 11A — X-RateLimit-* dựa trên hạn ngạch SAU KHI request này đã được tính (BR-MAT-08).
+        var quota = materialGenerationService.getQuotaStatus(principal.getName(), req.courseId());
+        return ResponseEntity.status(HttpStatus.ACCEPTED)
+                .header("X-RateLimit-Limit", String.valueOf(quota.limit()))
+                .header("X-RateLimit-Remaining", String.valueOf(quota.remaining()))
+                .header("X-RateLimit-Reset", String.valueOf(quota.resetEpochSeconds()))
+                .body(res);
+    }
+
+    /** Task 11A — trạng thái hạn ngạch sinh học liệu hiện tại (để FE hiện "còn X lượt hôm nay"). */
+    @GetMapping("/quota-status")
+    public ResponseEntity<com.lms.material.service.MaterialGenerationService.MaterialQuotaRes> getQuotaStatus(
+            Principal principal,
+            @RequestParam(required = false) Long courseId) {
+        return ResponseEntity.ok(materialGenerationService.getQuotaStatus(principal.getName(), courseId));
     }
 
     @GetMapping

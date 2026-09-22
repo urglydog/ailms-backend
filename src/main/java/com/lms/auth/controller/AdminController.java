@@ -27,6 +27,13 @@ public class AdminController {
         return ResponseEntity.ok(aiUsageLogRepository.getUsageSummaryByUser());
     }
 
+    /** Task 11A — tổng token/chi phí AI theo ngày (30 ngày gần nhất), phục vụ biểu đồ Admin Dashboard. */
+    @GetMapping("/ai-usage/daily")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<List<Map<String, Object>>> getAiUsageDaily() {
+        return ResponseEntity.ok(aiUsageLogRepository.getDailyUsage(java.time.LocalDateTime.now().minusDays(30)));
+    }
+
     @PutMapping("/users/{userId}/toggle-ai-lock")
     @PreAuthorize("hasRole('ADMIN')")
     @Transactional

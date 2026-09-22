@@ -12,6 +12,8 @@ import com.lms.common.enums.Role;
 import com.lms.common.exception.BusinessRuleViolationException;
 import com.lms.common.exception.ConflictException;
 import com.lms.common.exception.ResourceNotFoundException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -42,11 +44,15 @@ public class AuthService {
     private final StringRedisTemplate redisTemplate;
     private final EmailService emailService;
     private final GoogleOAuthProvider googleOAuthProvider;
+    private final HttpServletRequest request;
+    private final ObjectMapper objectMapper;
 
     private static final String LOGIN_FAIL_PREFIX = "login_fail:";
     private static final String REFRESH_TOKEN_PREFIX = "refresh_token:";
     private static final String USER_TOKENS_PREFIX = "user_refresh_tokens:";
     private static final String PENDING_USER_PREFIX = "pending_user:";
+    /** Task 10: Hash {email} -> {refreshToken: JSON{deviceName,ip,lastActiveAt}} — chỉ phục vụ hiển thị danh sách thiết bị, tách biệt khỏi cơ chế xác thực refresh token. */
+    private static final String USER_SESSIONS_PREFIX = "user_sessions:";
 
     /**
      * B1 Đăng ký: Lưu tạm thông tin user vào Redis chờ xác thực OTP.
@@ -138,7 +144,50 @@ public class AuthService {
         redisTemplate.opsForSet().add(USER_TOKENS_PREFIX + userDetails.getEmail(), refreshToken);
         redisTemplate.expire(USER_TOKENS_PREFIX + userDetails.getEmail(), Duration.ofDays(7));
 
+        recordSessionMeta(userDetails.getEmail(), refreshToken);
+
         return new TokenRes(accessToken, refreshToken);
+    }
+
+    /** Task 10: ghi lại thiết bị/IP cho phiên này — best-effort, không được làm hỏng luồng đăng nhập nếu lỗi. */
+    private void recordSessionMeta(String email, String refreshToken) {
+        try {
+            String userAgent = request.getHeader("User-Agent");
+            String ip = extractClientIp();
+            java.util.Map<String, String> meta = new java.util.LinkedHashMap<>();
+            meta.put("deviceName", parseDeviceName(userAgent));
+            meta.put("ip", ip != null ? ip : "");
+            meta.put("lastActiveAt", java.time.LocalDateTime.now().toString());
+            redisTemplate.opsForHash().put(USER_SESSIONS_PREFIX + email, refreshToken, objectMapper.writeValueAsString(meta));
+            redisTemplate.expire(USER_SESSIONS_PREFIX + email, Duration.ofDays(7));
+        } catch (Exception e) {
+            log.warn("Không thể ghi session metadata cho {}: {}", email, e.getMessage());
+        }
+    }
+
+    private String extractClientIp() {
+        String forwarded = request.getHeader("X-Forwarded-For");
+        if (forwarded != null && !forwarded.isBlank()) {
+            return forwarded.split(",")[0].trim();
+        }
+        return request.getRemoteAddr();
+    }
+
+    /** Suy luận tên thiết bị đơn giản từ User-Agent (không cần thư viện ngoài cho nhu cầu hiển thị cơ bản). */
+    private String parseDeviceName(String ua) {
+        if (ua == null || ua.isBlank()) return "Thiết bị không xác định";
+        String browser = ua.contains("Edg/") ? "Edge"
+                : ua.contains("Chrome/") ? "Chrome"
+                : ua.contains("Firefox/") ? "Firefox"
+                : ua.contains("Safari/") && !ua.contains("Chrome") ? "Safari"
+                : "Trình duyệt";
+        String os = ua.contains("Windows") ? "Windows"
+                : ua.contains("Mac OS") ? "macOS"
+                : ua.contains("Android") ? "Android"
+                : ua.contains("iPhone") || ua.contains("iPad") ? "iOS"
+                : ua.contains("Linux") ? "Linux"
+                : "";
+        return os.isEmpty() ? browser : browser + " trên " + os;
     }
 
     public TokenRes refreshToken(RefreshTokenReq req) {
@@ -168,6 +217,7 @@ public class AuthService {
         String email = redisTemplate.opsForValue().get(REFRESH_TOKEN_PREFIX + refreshToken);
         if (email != null) {
             redisTemplate.opsForSet().remove(USER_TOKENS_PREFIX + email, refreshToken);
+            redisTemplate.opsForHash().delete(USER_SESSIONS_PREFIX + email, refreshToken);
         }
         redisTemplate.delete(REFRESH_TOKEN_PREFIX + refreshToken);
     }
@@ -180,8 +230,26 @@ public class AuthService {
             }
         }
         redisTemplate.delete(USER_TOKENS_PREFIX + email);
+        redisTemplate.delete(USER_SESSIONS_PREFIX + email);
         // Xoá cả phiên xem video hiện tại (nếu có)
         redisTemplate.delete("user_stream:" + email); // Wait, user_stream uses userId!
+    }
+
+    /** Task 10: liệt kê các thiết bị/phiên đang đăng nhập (dựa trên refresh token còn hiệu lực). */
+    public java.util.List<java.util.Map<String, String>> getActiveSessions(String email) {
+        java.util.Map<Object, Object> entries = redisTemplate.opsForHash().entries(USER_SESSIONS_PREFIX + email);
+        java.util.List<java.util.Map<String, String>> result = new java.util.ArrayList<>();
+        for (Object value : entries.values()) {
+            try {
+                @SuppressWarnings("unchecked")
+                java.util.Map<String, String> meta = objectMapper.readValue((String) value, java.util.Map.class);
+                result.add(meta);
+            } catch (Exception e) {
+                log.warn("Bỏ qua session metadata hỏng cho {}: {}", email, e.getMessage());
+            }
+        }
+        result.sort((a, b) -> b.getOrDefault("lastActiveAt", "").compareTo(a.getOrDefault("lastActiveAt", "")));
+        return result;
     }
 
     /**

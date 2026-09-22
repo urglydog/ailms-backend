@@ -59,4 +59,13 @@ public class FlashcardController {
             @RequestBody FlashcardDto.AddReq req) {
         return ResponseEntity.ok(flashcardService.addFlashcard(principal.getName(), generationId, req));
     }
+
+    /** Task 4 — Import CSV hàng loạt flashcard (phía giảng viên). */
+    @PostMapping(value = "/deck/{generationId}/import-csv", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<FlashcardDto.ImportResultRes> importFlashcardsCsv(
+            Principal principal,
+            @PathVariable Long generationId,
+            @RequestPart("file") org.springframework.web.multipart.MultipartFile file) {
+        return ResponseEntity.ok(flashcardService.addFlashcardsFromCsv(principal.getName(), generationId, file));
+    }
 }

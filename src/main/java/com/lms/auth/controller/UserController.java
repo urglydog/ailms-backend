@@ -55,6 +55,14 @@ public class UserController {
     }
 
     /**
+     * Danh sách thiết bị/phiên đang đăng nhập của người dùng hiện tại (Task 10).
+     */
+    @GetMapping("/me/sessions")
+    public ResponseEntity<List<java.util.Map<String, String>>> getMySessions(java.security.Principal principal) {
+        return ResponseEntity.ok(authService.getActiveSessions(principal.getName()));
+    }
+
+    /**
      * UC05 - Đổi mật khẩu cho người dùng hiện tại.
      * Yêu cầu xác thực mật khẩu hiện tại trước khi cho phép đổi.
      */

@@ -48,6 +48,16 @@ public class QuizController {
         return ResponseEntity.ok(Map.of("message", "Thêm câu hỏi thành công"));
     }
 
+    /** Task 4 — Import CSV hàng loạt câu hỏi (phía giảng viên). */
+    @PostMapping(value = "/instructor/quizzes/{quizId}/questions/import-csv", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
+    public ResponseEntity<com.lms.material.dto.QuizDto.ImportResultRes> importQuestionsCsv(
+            Principal principal,
+            @PathVariable Long quizId,
+            @RequestPart("file") org.springframework.web.multipart.MultipartFile file) {
+        return ResponseEntity.ok(quizService.addQuestionsFromCsv(principal.getName(), quizId, file));
+    }
+
     @DeleteMapping("/instructor/quizzes/questions/{questionId}")
     @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     public ResponseEntity<Map<String, String>> deleteQuestion(

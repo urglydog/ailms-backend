@@ -61,6 +61,37 @@ public class MaterialGenerationService {
     @Value("${lms.redis-keys.material-queue:lms:material:jobs}")
     private String queueKey;
 
+    // BR-MAT-08 — Task 11A: dùng chung 1 hằng số cho cả chỗ kiểm tra hạn ngạch và chỗ trả
+    // header X-RateLimit-*, tránh lệch số nếu sau này đổi hạn mức.
+    private static final int MATERIAL_QUOTA_PER_DAY = 6;
+
+    private long hoursUntilReset() {
+        return java.time.Duration.between(LocalDateTime.now(), LocalDate.now().plusDays(1).atStartOfDay()).toHours() + 1;
+    }
+
+    /** Task 11A — trạng thái hạn ngạch sinh học liệu hiện tại, dùng để trả header X-RateLimit-*. */
+    public record MaterialQuotaRes(boolean unlimited, int limit, int used, int remaining, long resetEpochSeconds) {}
+
+    @Transactional(readOnly = true)
+    public MaterialQuotaRes getQuotaStatus(String email, Long courseId) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User", email));
+        long resetEpochSeconds = LocalDate.now().plusDays(1).atStartOfDay()
+                .atZone(java.time.ZoneId.systemDefault()).toEpochSecond();
+
+        boolean isInstructor = courseId != null && courseRepository.findById(courseId)
+                .map(c -> c.getInstructor().getId().equals(user.getId()))
+                .orElse(false);
+        if (isInstructor) {
+            return new MaterialQuotaRes(true, 0, 0, 0, resetEpochSeconds);
+        }
+
+        LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
+        long todayCount = materialGenerationRepository.countByUser_IdAndCreatedAtGreaterThanEqual(user.getId(), startOfDay);
+        int remaining = (int) Math.max(0, MATERIAL_QUOTA_PER_DAY - todayCount);
+        return new MaterialQuotaRes(false, MATERIAL_QUOTA_PER_DAY, (int) todayCount, remaining, resetEpochSeconds);
+    }
+
     @Transactional
     public MaterialGenerationRes requestGeneration(String email, MaterialGenerationReq req) {
         User user = userRepository.findByEmail(email)
@@ -79,8 +110,11 @@ public class MaterialGenerationService {
             // BR-MAT-08: Hạn ngạch 6 lần/ngày (Chỉ áp dụng cho Học viên)
             LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
             long todayCount = materialGenerationRepository.countByUser_IdAndCreatedAtGreaterThanEqual(user.getId(), startOfDay);
-            if (todayCount >= 6) {
-                throw new BusinessRuleViolationException("Đã đạt giới hạn sinh học liệu (6 lần/ngày) - BR-MAT-08");
+            if (todayCount >= MATERIAL_QUOTA_PER_DAY) {
+                throw new BusinessRuleViolationException(
+                        "MATERIAL_QUOTA_EXCEEDED",
+                        "Bạn đã dùng hết " + MATERIAL_QUOTA_PER_DAY + " lượt sinh học liệu hôm nay. "
+                                + "Hạn mức làm mới sau " + hoursUntilReset() + " giờ (0h00 ngày mai) - BR-MAT-08");
             }
 
             // BR-MAT-07: Giới hạn 10 bộ / khóa học (Chỉ áp dụng cho Học viên)

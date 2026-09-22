@@ -107,7 +107,7 @@ lms:
 
   # Ngưỡng nghiệp vụ lấy từ business rules
   rules:
-    lesson-complete-threshold-percent: 90    # BR-PROGRESS-01
+    lesson-complete-threshold-percent: 80    # BR-PROGRESS-01 (Task 1: chuẩn hóa theo Udemy — 80%)
     max-preview-lessons-per-course: 2        # BR-ENROLL-02
     max-documents-per-lesson: 5              # BR-UPLOAD-01
     max-document-size-mb: 50                 # BR-UPLOAD-01
