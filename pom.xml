@@ -123,6 +123,13 @@
             <version>2.9.2</version>
         </dependency>
 
+        <!-- ── Task 4: Import CSV hàng loạt cho Quiz/Flashcard phía giảng viên ── -->
+        <dependency>
+            <groupId>com.opencsv</groupId>
+            <artifactId>opencsv</artifactId>
+            <version>5.9</version>
+        </dependency>
+
         <!-- ── Giai đoạn 3: Tích hợp cổng thanh toán PayOS ── -->
         <dependency>
             <groupId>vn.payos</groupId>

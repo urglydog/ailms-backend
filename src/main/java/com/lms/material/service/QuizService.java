@@ -123,6 +123,91 @@ public class QuizService {
         quizRepository.save(quiz);
     }
 
+    /**
+     * Task 4 — Import CSV hàng loạt câu hỏi Quiz (phía giảng viên). Cột: Question Type
+     * (SINGLE/MULTI), Question Text, Option A-D, Correct Answer (vd "A" hoặc "A,C" nếu MULTI).
+     * Cột "Explanation" trong file mẫu bị bỏ qua khi đọc — QuizQuestion không có field này
+     * (đã cố ý xoá theo BR-QUIZ-01/02, xem docblock QuizQuestion). Lỗi từng dòng được gom lại
+     * thay vì fail cả import, để giảng viên sửa và tải lại đúng những dòng lỗi.
+     */
+    @Transactional
+    public com.lms.material.dto.QuizDto.ImportResultRes addQuestionsFromCsv(
+            String instructorEmail, Long quizId, org.springframework.web.multipart.MultipartFile file) {
+        Quiz quiz = quizRepository.findById(quizId)
+                .orElseThrow(() -> new ResourceNotFoundException("Quiz", quizId));
+        Course course = quiz.getMaterialGeneration().getCourse();
+        if (!course.getInstructor().getEmail().equals(instructorEmail)) {
+            throw new AccessDeniedDomainException("Ban khong co quyen");
+        }
+
+        long nextOrder = quizQuestionRepository.findByQuiz_IdOrderByDisplayOrderAsc(quizId)
+                .stream()
+                .mapToLong(QuizQuestion::getDisplayOrder)
+                .max()
+                .orElse(0) + 1;
+
+        List<String> errors = new ArrayList<>();
+        int imported = 0;
+
+        try (var reader = new com.opencsv.CSVReader(new java.io.InputStreamReader(file.getInputStream(), java.nio.charset.StandardCharsets.UTF_8))) {
+            List<String[]> rows = reader.readAll();
+            for (int i = 1; i < rows.size(); i++) { // dòng 0 là header
+                String[] row = rows.get(i);
+                int lineNo = i + 1;
+                try {
+                    if (row.length < 7 || row[1] == null || row[1].isBlank()) continue; // dòng trống, bỏ qua êm
+
+                    boolean isMultiple = row[0].trim().equalsIgnoreCase("MULTI");
+                    String questionText = row[1].trim();
+                    String[] optionTexts = { row[2].trim(), row[3].trim(), row[4].trim(), row[5].trim() };
+                    Set<String> correctLetters = Arrays.stream(row[6].split(","))
+                            .map(String::trim).map(String::toUpperCase)
+                            .filter(s -> !s.isEmpty())
+                            .collect(Collectors.toSet());
+
+                    if (questionText.isEmpty()) {
+                        errors.add("Dòng " + lineNo + ": thiếu nội dung câu hỏi");
+                        continue;
+                    }
+                    if (correctLetters.isEmpty()) {
+                        errors.add("Dòng " + lineNo + ": thiếu đáp án đúng");
+                        continue;
+                    }
+
+                    QuizQuestion question = new QuizQuestion();
+                    question.setQuiz(quiz);
+                    question.setContent(questionText);
+                    question.setIsMultipleChoice(isMultiple);
+                    question.setDisplayOrder((int) nextOrder++);
+                    quizQuestionRepository.save(question);
+
+                    String[] letters = { "A", "B", "C", "D" };
+                    for (int optIdx = 0; optIdx < 4; optIdx++) {
+                        if (optionTexts[optIdx].isEmpty()) continue;
+                        QuizOption opt = new QuizOption();
+                        opt.setQuizQuestion(question);
+                        opt.setContent(optionTexts[optIdx]);
+                        opt.setIsCorrect(correctLetters.contains(letters[optIdx]));
+                        quizOptionRepository.save(opt);
+                    }
+
+                    imported++;
+                } catch (Exception rowEx) {
+                    errors.add("Dòng " + lineNo + ": " + rowEx.getMessage());
+                }
+            }
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Không đọc được file CSV: " + e.getMessage());
+        }
+
+        if (imported > 0) {
+            quiz.setQuestionCount((quiz.getQuestionCount() != null ? quiz.getQuestionCount() : 0) + imported);
+            quizRepository.save(quiz);
+        }
+
+        return new com.lms.material.dto.QuizDto.ImportResultRes(imported, errors);
+    }
+
     @Transactional
     public void deleteQuestion(String instructorEmail, Long questionId) {
         QuizQuestion question = quizQuestionRepository.findById(questionId)

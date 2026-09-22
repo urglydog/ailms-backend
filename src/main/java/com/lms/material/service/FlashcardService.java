@@ -97,6 +97,51 @@ public class FlashcardService {
     }
 
     /**
+     * Task 4 — Import CSV hàng loạt flashcard (phía giảng viên). Cột: Front, Back. Lỗi từng
+     * dòng được gom lại thay vì fail cả import.
+     */
+    @Transactional
+    public FlashcardDto.ImportResultRes addFlashcardsFromCsv(
+            String userEmail, Long generationId, org.springframework.web.multipart.MultipartFile file) {
+        FlashcardDeck deck = flashcardDeckRepository.findByMaterialGeneration_Id(generationId)
+                .orElseThrow(() -> new ResourceNotFoundException("FlashcardDeck (by gen id)", generationId));
+
+        if (!deck.getMaterialGeneration().getUser().getEmail().equals(userEmail)) {
+            throw new IllegalArgumentException("Bạn không có quyền thêm flashcard vào bộ này.");
+        }
+
+        java.util.List<String> errors = new java.util.ArrayList<>();
+        int imported = 0;
+
+        try (var reader = new com.opencsv.CSVReader(new java.io.InputStreamReader(file.getInputStream(), java.nio.charset.StandardCharsets.UTF_8))) {
+            List<String[]> rows = reader.readAll();
+            for (int i = 1; i < rows.size(); i++) { // dòng 0 là header
+                String[] row = rows.get(i);
+                int lineNo = i + 1;
+                if (row.length < 2 || row[0] == null || row[0].isBlank()) continue; // dòng trống, bỏ qua êm
+
+                String front = row[0].trim();
+                String back = row[1] != null ? row[1].trim() : "";
+                if (front.isEmpty() || back.isEmpty()) {
+                    errors.add("Dòng " + lineNo + ": thiếu mặt trước hoặc mặt sau");
+                    continue;
+                }
+
+                Flashcard flashcard = new Flashcard();
+                flashcard.setFlashcardDeck(deck);
+                flashcard.setFrontText(front);
+                flashcard.setBackText(back);
+                flashcardRepository.save(flashcard);
+                imported++;
+            }
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Không đọc được file CSV: " + e.getMessage());
+        }
+
+        return new FlashcardDto.ImportResultRes(imported, errors);
+    }
+
+    /**
      * Get all cards in a deck with SRS review state for the current user.
      * Returns cards grouped by: new (no review yet), learning (reviewed but due), review (reviewed and not due).
      */

@@ -27,4 +27,10 @@ public class QuizDto {
             java.util.List<OptionReq> options
     ) {}
 
+    /** Task 4 — kết quả import CSV hàng loạt: số câu thêm thành công + lỗi theo từng dòng (1-based, tính cả header). */
+    public record ImportResultRes(
+            int importedCount,
+            java.util.List<String> errors
+    ) {}
+
 }

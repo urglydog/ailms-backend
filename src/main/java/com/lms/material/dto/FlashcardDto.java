@@ -35,4 +35,10 @@ public class FlashcardDto {
         String frontText,
         String backText
     ) {}
+
+    /** Task 4 — kết quả import CSV hàng loạt: số thẻ thêm thành công + lỗi theo từng dòng (1-based, tính cả header). */
+    public record ImportResultRes(
+        int importedCount,
+        java.util.List<String> errors
+    ) {}
 }
