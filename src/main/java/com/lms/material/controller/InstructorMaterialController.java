@@ -63,48 +63,129 @@ public class InstructorMaterialController {
         if (!gen.getCourse().getInstructor().getEmail().equals(principal.getName())) {
             throw new AccessDeniedDomainException("Ban khong co quyen");
         }
-        
-        Object rawLessonId = payload.get("targetLessonId");
-        Object rawChapterId = payload.get("targetChapterId");
-        Long targetLessonId = (rawLessonId != null) ? ((Number) rawLessonId).longValue() : null;
-        Long targetChapterId = (rawChapterId != null) ? ((Number) rawChapterId).longValue() : null;
-        
-        // 1. Clone theo đúng dòng version (root_generation_id), không theo toàn bộ user+course
+
+        com.lms.material.entity.MaterialGeneration newGen = createNextVersionShell(gen, gen.getTitle());
+        Long newMaterialId = cloneMaterialContent(gen, newGen);
+
+        // Set is_archived = true cho bản cũ
+        gen.setIsArchived(true);
+        materialGenerationRepository.save(gen);
+
+        // Chuyển các assignment sang bản mới — transferAssignments đã bảo toàn đúng assignment
+        // tới đích, vì versioning-overwrite chỉ được gọi khi học liệu ĐÃ đang gán vào đúng đích
+        // đó. KHÔNG gọi thêm assignMaterial ở đây nữa — làm vậy sẽ tạo thêm 1 MaterialAssignment
+        // trùng lặp trỏ vào cùng đích mỗi lần kéo đè (đã từng là bug khiến badge đếm sai).
+        materialAssignmentService.transferAssignments(gen.getId(), newGen.getId());
+
+        java.util.Map<String, Object> response = new java.util.HashMap<>();
+        response.put("id", newGen.getId());
+        response.put("materialId", newMaterialId);
+        response.put("message", "Đã tạo phiên bản mới và ghi đè thành công");
+
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/{id}/versions")
+    @PreAuthorize("isAuthenticated()")
+    @Transactional(readOnly = true)
+    public ResponseEntity<java.util.List<java.util.Map<String, Object>>> getVersionHistory(Principal principal, @PathVariable Long id) {
+        com.lms.material.entity.MaterialGeneration gen = materialGenerationRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("MaterialGeneration", id));
+        if (!gen.getCourse().getInstructor().getEmail().equals(principal.getName())) {
+            throw new AccessDeniedDomainException("Ban khong co quyen");
+        }
         Long rootId = gen.getRootGenerationId() != null ? gen.getRootGenerationId() : gen.getId();
-        int nextVersion = materialGenerationRepository.findTopByRootGenerationIdOrderByVersionNoDesc(rootId)
-                .map(mg -> mg.getVersionNo() + 1)
-                .orElse(gen.getVersionNo() + 1);
-        String baseTitle = gen.getTitle() != null ? gen.getTitle().replaceAll("\\s*\\(V\\d+\\)\\s*$", "") : "";
+        java.util.List<com.lms.material.entity.MaterialGeneration> lineage =
+                materialGenerationRepository.findByRootGenerationIdOrderByVersionNoAsc(rootId);
+        if (lineage.isEmpty()) {
+            lineage = java.util.List.of(gen);
+        }
+
+        java.util.List<java.util.Map<String, Object>> result = new java.util.ArrayList<>();
+        int position = 0;
+        for (com.lms.material.entity.MaterialGeneration v : lineage) {
+            position++;
+            java.util.Map<String, Object> map = new java.util.HashMap<>();
+            map.put("id", v.getId());
+            map.put("displayVersionNo", position);
+            map.put("title", v.getTitle());
+            map.put("createdAt", v.getCreatedAt().toString());
+            map.put("createdBy", v.getUser() != null ? v.getUser().getFullName() : null);
+            map.put("isActive", !Boolean.TRUE.equals(v.getIsArchived()));
+            result.add(map);
+        }
+        return ResponseEntity.ok(result);
+    }
+
+    @PostMapping("/{id}/restore-version")
+    @PreAuthorize("isAuthenticated()")
+    @Transactional
+    public ResponseEntity<java.util.Map<String, Object>> restoreVersion(Principal principal, @PathVariable Long id) {
+        com.lms.material.entity.MaterialGeneration source = materialGenerationRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("MaterialGeneration", id));
+        if (!source.getCourse().getInstructor().getEmail().equals(principal.getName())) {
+            throw new AccessDeniedDomainException("Ban khong co quyen");
+        }
+        Long rootId = source.getRootGenerationId() != null ? source.getRootGenerationId() : source.getId();
+        com.lms.material.entity.MaterialGeneration active = materialGenerationRepository
+                .findTopByRootGenerationIdAndIsArchivedFalseOrderByVersionNoDesc(rootId)
+                .orElse(source);
+
+        // Nội dung lấy từ bản được chọn khôi phục (source), nhưng metadata (title gốc, gán bài
+        // học...) kế thừa từ bản ĐANG active — khôi phục = "tạo bản mới nhất kế tiếp mang nội
+        // dung cũ", không ghi đè ngược, đúng nguyên tắc BR-MAT-07 và không làm mất assignment
+        // hiện tại của bản đang dùng.
+        com.lms.material.entity.MaterialGeneration newGen = createNextVersionShell(active, active.getTitle());
+        Long newMaterialId = cloneMaterialContent(source, newGen);
+
+        active.setIsArchived(true);
+        materialGenerationRepository.save(active);
+        materialAssignmentService.transferAssignments(active.getId(), newGen.getId());
+
+        java.util.Map<String, Object> response = new java.util.HashMap<>();
+        response.put("id", newGen.getId());
+        response.put("materialId", newMaterialId);
+        response.put("message", "Đã khôi phục nội dung phiên bản cũ thành phiên bản mới nhất");
+        return ResponseEntity.ok(response);
+    }
+
+    /** Tạo bản ghi MaterialGeneration mới kế tiếp trong đúng dòng version của {@code metaSource}. */
+    private com.lms.material.entity.MaterialGeneration createNextVersionShell(com.lms.material.entity.MaterialGeneration metaSource, String titleSource) {
+        Long rootId = metaSource.getRootGenerationId() != null ? metaSource.getRootGenerationId() : metaSource.getId();
+        if (metaSource.getRootGenerationId() == null) {
+            metaSource.setRootGenerationId(rootId);
+            materialGenerationRepository.save(metaSource);
+        }
+        // Số version tiếp theo = số bản ghi thực tế đã có trong dòng này + 1 — KHÔNG dùng
+        // max(versionNo) vì cột này có thể mang giá trị lịch sử bị lệch từ trước khi sửa lỗi.
+        int nextVersion = (int) materialGenerationRepository.countByRootGenerationId(rootId) + 1;
+        String baseTitle = titleSource != null ? titleSource.replaceAll("\\s*\\(V\\d+\\)\\s*$", "") : "";
 
         com.lms.material.entity.MaterialGeneration newGen = new com.lms.material.entity.MaterialGeneration();
-        newGen.setUser(gen.getUser());
-        newGen.setCourse(gen.getCourse());
-        newGen.setMaterialType(gen.getMaterialType());
-        newGen.setLanguage(gen.getLanguage());
+        newGen.setUser(metaSource.getUser());
+        newGen.setCourse(metaSource.getCourse());
+        newGen.setMaterialType(metaSource.getMaterialType());
+        newGen.setLanguage(metaSource.getLanguage());
         newGen.setTitle(baseTitle + " (V" + nextVersion + ")");
-        newGen.setScopeType(gen.getScopeType());
-        newGen.setScopeRefId(gen.getScopeRefId());
-        newGen.setCustomLessonIds(gen.getCustomLessonIds());
-        newGen.setQuantityLevel(gen.getQuantityLevel());
-        newGen.setDifficultyLevel(gen.getDifficultyLevel());
+        newGen.setScopeType(metaSource.getScopeType());
+        newGen.setScopeRefId(metaSource.getScopeRefId());
+        newGen.setCustomLessonIds(metaSource.getCustomLessonIds());
+        newGen.setQuantityLevel(metaSource.getQuantityLevel());
+        newGen.setDifficultyLevel(metaSource.getDifficultyLevel());
         newGen.setVersionNo(nextVersion);
-        newGen.setStatus(gen.getStatus());
-        newGen.setParentGeneration(gen);
+        newGen.setStatus(metaSource.getStatus());
+        newGen.setParentGeneration(metaSource);
         newGen.setRootGenerationId(rootId);
 
-        materialGenerationRepository.save(newGen);
+        return materialGenerationRepository.save(newGen);
+    }
 
-        // Tự chữa cho bản gốc chưa từng có root_generation_id (dữ liệu cũ trước migration)
-        if (gen.getRootGenerationId() == null) {
-            gen.setRootGenerationId(rootId);
-        }
-        
+    /** Deep-clone nội dung (Quiz/Flashcard/Mindmap) từ {@code source} sang {@code newGen}. */
+    private Long cloneMaterialContent(com.lms.material.entity.MaterialGeneration source, com.lms.material.entity.MaterialGeneration newGen) {
         Long newMaterialId = null;
-        
 
-        // Clone specific material
-        if (gen.getMaterialType() == com.lms.common.enums.MaterialType.QUIZ) {
-            com.lms.material.entity.Quiz oldQuiz = quizRepository.findByMaterialGeneration_IdAndIsDeletedFalse(gen.getId()).orElse(null);
+        if (source.getMaterialType() == com.lms.common.enums.MaterialType.QUIZ) {
+            com.lms.material.entity.Quiz oldQuiz = quizRepository.findByMaterialGeneration_IdAndIsDeletedFalse(source.getId()).orElse(null);
             if (oldQuiz != null) {
                 com.lms.material.entity.Quiz newQuiz = new com.lms.material.entity.Quiz();
                 newQuiz.setMaterialGeneration(newGen);
@@ -116,8 +197,7 @@ public class InstructorMaterialController {
                 newQuiz.setDurationMinutes(oldQuiz.getDurationMinutes());
                 quizRepository.save(newQuiz);
                 newMaterialId = newQuiz.getId();
-                
-                // Deep clone QuizQuestions
+
                 java.util.List<com.lms.material.entity.QuizQuestion> oldQuestions = quizQuestionRepository.findByQuiz_IdOrderByDisplayOrderAsc(oldQuiz.getId());
                 for (com.lms.material.entity.QuizQuestion oldQ : oldQuestions) {
                     com.lms.material.entity.QuizQuestion newQ = new com.lms.material.entity.QuizQuestion();
@@ -126,7 +206,7 @@ public class InstructorMaterialController {
                     newQ.setIsMultipleChoice(oldQ.getIsMultipleChoice());
                     newQ.setDisplayOrder(oldQ.getDisplayOrder());
                     quizQuestionRepository.save(newQ);
-                    
+
                     java.util.List<com.lms.material.entity.QuizOption> oldOptions = quizOptionRepository.findByQuizQuestion_Id(oldQ.getId());
                     for (com.lms.material.entity.QuizOption oldOpt : oldOptions) {
                         com.lms.material.entity.QuizOption newOpt = new com.lms.material.entity.QuizOption();
@@ -137,8 +217,8 @@ public class InstructorMaterialController {
                     }
                 }
             }
-        } else if (gen.getMaterialType() == com.lms.common.enums.MaterialType.FLASHCARD) {
-            FlashcardDeck oldDeck = flashcardDeckRepository.findByMaterialGeneration_Id(gen.getId()).orElse(null);
+        } else if (source.getMaterialType() == com.lms.common.enums.MaterialType.FLASHCARD) {
+            FlashcardDeck oldDeck = flashcardDeckRepository.findByMaterialGeneration_Id(source.getId()).orElse(null);
             if (oldDeck != null) {
                 FlashcardDeck newDeck = new FlashcardDeck();
                 newDeck.setMaterialGeneration(newGen);
@@ -146,8 +226,7 @@ public class InstructorMaterialController {
                 newDeck.setIsOfficial(oldDeck.getIsOfficial());
                 flashcardDeckRepository.save(newDeck);
                 newMaterialId = newDeck.getId();
-                
-                // Deep clone Flashcards
+
                 java.util.List<com.lms.material.entity.Flashcard> oldCards = flashcardRepository.findByFlashcardDeck_Id(oldDeck.getId());
                 for (com.lms.material.entity.Flashcard oldCard : oldCards) {
                     com.lms.material.entity.Flashcard newCard = new com.lms.material.entity.Flashcard();
@@ -157,9 +236,8 @@ public class InstructorMaterialController {
                     flashcardRepository.save(newCard);
                 }
             }
-        } else if (gen.getMaterialType() == com.lms.common.enums.MaterialType.MINDMAP) {
-
-            Mindmap oldMindmap = mindmapRepository.findByMaterialGeneration_Id(gen.getId()).orElse(null);
+        } else if (source.getMaterialType() == com.lms.common.enums.MaterialType.MINDMAP) {
+            Mindmap oldMindmap = mindmapRepository.findByMaterialGeneration_Id(source.getId()).orElse(null);
             if (oldMindmap != null) {
                 Mindmap newMindmap = new Mindmap();
                 newMindmap.setMaterialGeneration(newGen);
@@ -170,25 +248,8 @@ public class InstructorMaterialController {
                 newMaterialId = newMindmap.getId();
             }
         }
-        
-        // 2. Set is_archived = true cho V1
-        gen.setIsArchived(true);
-        materialGenerationRepository.save(gen);
-        
-        // 3. Chuyển các assignment của V1 sang V2
-        materialAssignmentService.transferAssignments(gen.getId(), newGen.getId());
-        
-        // Force the assignment to the target ONLY if target is provided
-        if (targetChapterId != null || targetLessonId != null) {
-            materialAssignmentService.assignMaterial(newGen.getId(), gen.getCourse().getId(), targetChapterId, targetLessonId);
-        }
-        
-        java.util.Map<String, Object> response = new java.util.HashMap<>();
-        response.put("id", newGen.getId());
-        response.put("materialId", newMaterialId);
-        response.put("message", "Đã tạo phiên bản mới và ghi đè thành công");
-        
-        return ResponseEntity.ok(response);
+
+        return newMaterialId;
     }
 
 
