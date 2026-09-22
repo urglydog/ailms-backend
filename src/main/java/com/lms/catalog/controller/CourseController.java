@@ -30,6 +30,7 @@ import org.springframework.web.multipart.MultipartFile;
 public class CourseController {
 
     private final CourseService courseService;
+    private final com.lms.catalog.service.CourseActivityLogService activityLogService;
 
     @PostMapping
     @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
@@ -94,6 +95,23 @@ public class CourseController {
     public ResponseEntity<DetailRes> updateVisibility(
             Principal principal, @PathVariable Long id, @Valid @RequestBody VisibilityUpdateReq req) {
         return ResponseEntity.ok(courseService.updateVisibility(principal.getName(), id, req));
+    }
+
+    @GetMapping("/mine/{id}/activities")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
+    public ResponseEntity<List<java.util.Map<String, Object>>> getActivities(
+            Principal principal, @PathVariable Long id, @RequestParam(defaultValue = "50") int limit) {
+        courseService.getMineDetail(principal.getName(), id); // xác thực quyền sở hữu, ném lỗi nếu không phải giảng viên của khóa này
+        List<java.util.Map<String, Object>> result = new java.util.ArrayList<>();
+        for (var entry : activityLogService.getRecent(id, Math.min(limit, 200))) {
+            java.util.Map<String, Object> map = new java.util.HashMap<>();
+            map.put("id", entry.getId());
+            map.put("actorName", entry.getActor() != null ? entry.getActor().getFullName() : null);
+            map.put("description", entry.getDescription());
+            map.put("createdAt", entry.getCreatedAt().toString());
+            result.add(map);
+        }
+        return ResponseEntity.ok(result);
     }
 
     @GetMapping("/mine/{id}/invites")

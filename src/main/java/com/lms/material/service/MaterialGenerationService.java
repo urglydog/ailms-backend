@@ -56,6 +56,7 @@ public class MaterialGenerationService {
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
     private final com.lms.dubbing.service.TranscriptExtractionService transcriptExtractionService;
+    private final com.lms.catalog.service.CourseActivityLogService activityLogService;
 
     @Value("${lms.redis-keys.material-queue:lms:material:jobs}")
     private String queueKey;
@@ -343,7 +344,9 @@ public class MaterialGenerationService {
         if (!generation.isReusableBy(user)) {
             throw new AccessDeniedDomainException("Học liệu này thuộc về người khác");
         }
-        if (title != null) {
+        if (title != null && !title.equals(generation.getTitle())) {
+            activityLogService.log(generation.getCourse(), email,
+                    "Đã đổi tên học liệu \"" + generation.getTitle() + "\" thành \"" + title + "\"");
             generation.setTitle(title);
         }
         if (mermaidCode != null && generation.getMaterialType() == com.lms.common.enums.MaterialType.MINDMAP) {
@@ -370,6 +373,7 @@ public class MaterialGenerationService {
         generation.setDeletedAt(java.time.LocalDateTime.now());
         generation.setStatus(com.lms.common.enums.GenStatus.ARCHIVED);
         materialGenerationRepository.save(generation);
+        activityLogService.log(generation.getCourse(), email, "Đã xóa học liệu \"" + generation.getTitle() + "\"");
 
         if (generation.getMaterialType() == com.lms.common.enums.MaterialType.QUIZ) {
             quizRepository.findByMaterialGeneration_IdAndIsDeletedFalse(generation.getId()).ifPresent(quiz -> {

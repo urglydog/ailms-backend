@@ -65,6 +65,7 @@ public class CourseService {
     private final InstructorVerificationRepository instructorVerificationRepository;
     private final CourseInviteRepository courseInviteRepository;
     private final PasswordEncoder passwordEncoder;
+    private final CourseActivityLogService activityLogService;
     private final Tika tika = new Tika();
 
     @Transactional
@@ -120,6 +121,15 @@ public class CourseService {
         Course course = loadOwnedCourse(id, instructorEmail);
         Category category = categoryRepository.findById(req.categoryId())
                 .orElseThrow(() -> new ResourceNotFoundException("Category", req.categoryId()));
+
+        // Ghi log các thay đổi trước khi ghi đè — mô tả cụ thể cho panel "Hoạt động gần đây".
+        List<String> changes = new java.util.ArrayList<>();
+        if (!java.util.Objects.equals(course.getTitle(), req.title())) changes.add("tiêu đề");
+        if (!java.util.Objects.equals(course.getDescription(), req.description())) changes.add("mô tả");
+        if (course.getPrice() == null || course.getPrice().compareTo(req.price()) != 0) changes.add("giá");
+        if (!changes.isEmpty()) {
+            activityLogService.log(course, instructorEmail, "Đã cập nhật " + String.join(", ", changes) + " của khóa học");
+        }
 
         // BR-COURSE-02: sửa metadata không cần duyệt lại, kể cả khi đã PUBLISHED.
         // Không tự đổi status khi đang REJECTED — instructor chủ động bấm gửi duyệt lại.

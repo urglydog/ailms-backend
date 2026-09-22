@@ -21,6 +21,7 @@ public class MaterialFolderService {
     private final MaterialFolderRepository materialFolderRepository;
     private final CourseRepository courseRepository;
     private final MaterialGenerationRepository materialGenerationRepository;
+    private final com.lms.catalog.service.CourseActivityLogService activityLogService;
 
     @Transactional(readOnly = true)
     public List<MaterialFolderDto> getFoldersByCourse(Long courseId, Long parentId) {
@@ -36,21 +37,23 @@ public class MaterialFolderService {
     }
 
     @Transactional
-    public MaterialFolderDto createFolder(MaterialFolderReq req) {
+    public MaterialFolderDto createFolder(MaterialFolderReq req, String actorEmail) {
         Course course = courseRepository.findById(req.courseId())
                 .orElseThrow(() -> new ResourceNotFoundException("Course", req.courseId()));
-        
+
         MaterialFolder folder = new MaterialFolder();
         folder.setName(req.name());
         folder.setCourse(course);
-        
+
         if (req.parentId() != null) {
             MaterialFolder parent = materialFolderRepository.findById(req.parentId())
                     .orElseThrow(() -> new ResourceNotFoundException("MaterialFolder", req.parentId()));
             folder.setParent(parent);
         }
-        
-        return toDto(materialFolderRepository.save(folder));
+
+        MaterialFolderDto saved = toDto(materialFolderRepository.save(folder));
+        activityLogService.log(course, actorEmail, "Đã tạo thư mục \"" + req.name() + "\"");
+        return saved;
     }
 
     @Transactional
@@ -62,10 +65,9 @@ public class MaterialFolderService {
     }
 
     @Transactional
-    public void deleteFolder(Long id) {
-        if (!materialFolderRepository.existsById(id)) {
-            throw new ResourceNotFoundException("MaterialFolder", id);
-        }
+    public void deleteFolder(Long id, String actorEmail) {
+        MaterialFolder folder = materialFolderRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("MaterialFolder", id));
         // Trước khi xóa: detach tất cả học liệu trong thư mục này về root (folder_id = null)
         // để tránh lỗi FK constraint khi JPA/DB không tự SET NULL trong transactional context
         materialGenerationRepository.findByFolder_Id(id)
@@ -75,11 +77,12 @@ public class MaterialFolderService {
                 });
         // Detach sub-folders: đặt parent = null cho các thư mục con (ON DELETE SET NULL ở DB)
         materialFolderRepository.findByCourse_IdAndParent_IdOrderByCreatedAtAsc(
-                materialFolderRepository.findById(id).map(f -> f.getCourse().getId()).orElse(0L), id
+                folder.getCourse().getId(), id
         ).forEach(child -> {
             child.setParent(null);
             materialFolderRepository.save(child);
         });
+        activityLogService.log(folder.getCourse(), actorEmail, "Đã xóa thư mục \"" + folder.getName() + "\"");
         materialFolderRepository.deleteById(id);
     }
 
