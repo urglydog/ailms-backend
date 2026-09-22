@@ -142,6 +142,55 @@ public class FlashcardService {
     }
 
     /**
+     * UpComming_Plan.md B2 — Import ngược file .txt tab-separated chuẩn Anki/Quizlet vào bộ thẻ
+     * CÁ NHÂN của học viên. Khác CSV ở chỗ: phân tách bằng tab (không phải dấu phẩy) và KHÔNG bỏ
+     * dòng đầu — file Anki xuất ra thường không có header, bỏ nhầm dòng 1 sẽ mất 1 thẻ thật.
+     */
+    @Transactional
+    public FlashcardDto.ImportResultRes addFlashcardsFromTxt(
+            String userEmail, Long generationId, org.springframework.web.multipart.MultipartFile file) {
+        FlashcardDeck deck = flashcardDeckRepository.findByMaterialGeneration_Id(generationId)
+                .orElseThrow(() -> new ResourceNotFoundException("FlashcardDeck (by gen id)", generationId));
+
+        if (!deck.getMaterialGeneration().getUser().getEmail().equals(userEmail)) {
+            throw new IllegalArgumentException("Bạn không có quyền thêm flashcard vào bộ này.");
+        }
+
+        java.util.List<String> errors = new java.util.ArrayList<>();
+        int imported = 0;
+
+        var parser = new com.opencsv.CSVParserBuilder().withSeparator('\t').build();
+        try (var reader = new com.opencsv.CSVReaderBuilder(
+                new java.io.InputStreamReader(file.getInputStream(), java.nio.charset.StandardCharsets.UTF_8))
+                .withCSVParser(parser).build()) {
+            List<String[]> rows = reader.readAll();
+            for (int i = 0; i < rows.size(); i++) { // KHÔNG bỏ dòng 0 — file Anki không có header
+                String[] row = rows.get(i);
+                int lineNo = i + 1;
+                if (row.length < 2 || row[0] == null || row[0].isBlank()) continue; // dòng trống, bỏ qua êm
+
+                String front = row[0].trim();
+                String back = row[1] != null ? row[1].trim() : "";
+                if (front.isEmpty() || back.isEmpty()) {
+                    errors.add("Dòng " + lineNo + ": thiếu mặt trước hoặc mặt sau");
+                    continue;
+                }
+
+                Flashcard flashcard = new Flashcard();
+                flashcard.setFlashcardDeck(deck);
+                flashcard.setFrontText(front);
+                flashcard.setBackText(back);
+                flashcardRepository.save(flashcard);
+                imported++;
+            }
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Không đọc được file .txt: " + e.getMessage());
+        }
+
+        return new FlashcardDto.ImportResultRes(imported, errors);
+    }
+
+    /**
      * Get all cards in a deck with SRS review state for the current user.
      * Returns cards grouped by: new (no review yet), learning (reviewed but due), review (reviewed and not due).
      */
