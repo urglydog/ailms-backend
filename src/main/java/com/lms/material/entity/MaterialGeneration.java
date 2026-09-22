@@ -117,6 +117,10 @@ public class MaterialGeneration extends BaseEntity {
     @JoinColumn(name = "parent_generation_id")
     private MaterialGeneration parentGeneration;
 
+    /** Id của bản gốc (V1) trong cùng dòng version; bản gốc tự trỏ vào chính nó. */
+    @Column(name = "root_generation_id")
+    private Long rootGenerationId;
+
     @OneToMany(mappedBy = "material", cascade = CascadeType.ALL, orphanRemoval = true)
     private java.util.List<MaterialAssignment> assignments = new java.util.ArrayList<>();
 
