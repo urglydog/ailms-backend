@@ -19,7 +19,9 @@ public record MaterialDetailRes(
         LocalDateTime createdAt,
         String mermaidCode, // Only populated for MINDMAP
         List<FlashcardDto> flashcards, // Only populated for FLASHCARD
-        List<QuizQuestionDto> quizQuestions // Only populated for QUIZ
+        List<QuizQuestionDto> quizQuestions, // Only populated for QUIZ
+        Long quizId // ID entity Quiz thật (khác `id` = MaterialGeneration) — Only populated for QUIZ,
+                    // cần cho các endpoint /api/v1/quizzes/{quizId}/... (export-pdf...)
 ) {
     @Builder
     public record FlashcardDto(
