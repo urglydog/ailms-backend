@@ -61,11 +61,14 @@ public class EnrollmentService {
             com.lowagie.text.pdf.PdfWriter.getInstance(document, out);
             document.open();
 
-            var borderFont = com.lowagie.text.FontFactory.getFont(com.lowagie.text.FontFactory.HELVETICA, 12);
-            var titleFont = com.lowagie.text.FontFactory.getFont(com.lowagie.text.FontFactory.HELVETICA_BOLD, 32, new java.awt.Color(37, 99, 235));
-            var nameFont = com.lowagie.text.FontFactory.getFont(com.lowagie.text.FontFactory.HELVETICA_BOLD, 24);
-            var bodyFont = com.lowagie.text.FontFactory.getFont(com.lowagie.text.FontFactory.HELVETICA, 14);
-            var smallFont = com.lowagie.text.FontFactory.getFont(com.lowagie.text.FontFactory.HELVETICA, 10, java.awt.Color.GRAY);
+            // Base-14 Helvetica không có glyph tiếng Việt — dùng DejaVu Sans nhúng (VietnamesePdfFonts).
+            com.lowagie.text.pdf.BaseFont bfRegular = com.lms.common.util.VietnamesePdfFonts.loadRegular();
+            com.lowagie.text.pdf.BaseFont bfBold = com.lms.common.util.VietnamesePdfFonts.loadBold();
+            var borderFont = new com.lowagie.text.Font(bfRegular, 12);
+            var titleFont = new com.lowagie.text.Font(bfBold, 32, com.lowagie.text.Font.NORMAL, new java.awt.Color(37, 99, 235));
+            var nameFont = new com.lowagie.text.Font(bfBold, 24);
+            var bodyFont = new com.lowagie.text.Font(bfRegular, 14);
+            var smallFont = new com.lowagie.text.Font(bfRegular, 10, com.lowagie.text.Font.NORMAL, java.awt.Color.GRAY);
 
             var title = new com.lowagie.text.Paragraph("CHỨNG CHỈ HOÀN THÀNH", titleFont);
             title.setAlignment(com.lowagie.text.Element.ALIGN_CENTER);
@@ -101,7 +104,7 @@ public class EnrollmentService {
 
             document.close();
             return out.toByteArray();
-        } catch (com.lowagie.text.DocumentException e) {
+        } catch (Exception e) {
             throw new IllegalStateException("Không sinh được PDF chứng chỉ", e);
         }
     }

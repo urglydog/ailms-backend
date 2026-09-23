@@ -1,1 +1,5 @@
-aaa
+Test tay PDF: gọi thử endpoint xuất đề trắng/cheatsheet với 1 quiz có câu hỏi tiếng Việt có dấu → mở file PDF ra, xác nhận chữ hiển thị đúng (không vỡ font/không lỗi 500). Thử tải chứng chỉ (Certificate) với 1 enrollment đã 100% để xác nhận cùng fix áp dụng đúng.
+Frontend: npx eslint + npx tsc --noEmit bên trong container lms_frontend_dev cho toàn bộ file đã sửa.
+Test tay tài nguyên tĩnh: giảng viên vào "Tài Nguyên Tĩnh", tải lên 1 file PDF thật → xác nhận thành công, xuất hiện trong tab "Tài nguyên" phía học viên.
+Test tay Mindmap: mở 1 mindmap có sẵn, xác nhận còn đúng 3 tab; mở "Soạn Code", chọn sơ đồ hướng LR, xác nhận preview hiện đầy đủ không cần cuộn code; tab "Chỉnh Sửa" toolbar không còn icon emoji màu.
+Test tay label/icon: xem nhanh cả 4 vị trí ở mục 5 đã đổi đúng icon + label ngắn gọn, hover thấy tooltip mô tả đầy đủ.
