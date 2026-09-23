@@ -37,6 +37,11 @@ public class Enrollment extends BaseEntity {
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
 
+    /** UpComming_Plan.md A1 — mã UUID xác thực chứng chỉ, sinh 1 lần duy nhất cùng lúc với
+     * completedAt (xem LessonProgressService.recalculateEnrollmentProgress). */
+    @Column(name = "certificate_code", length = 36)
+    private String certificateCode;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;

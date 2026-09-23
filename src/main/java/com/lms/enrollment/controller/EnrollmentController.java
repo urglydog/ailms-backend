@@ -39,4 +39,17 @@ public class EnrollmentController {
         enrollmentService.enrollFreeCourse(principal.getName(), courseId, password);
         return ResponseEntity.ok().build();
     }
+
+    /** UpComming_Plan.md A1 — tải PDF chứng chỉ hoàn thành, sinh on-the-fly, chỉ khi đã hoàn thành 100%. */
+    @GetMapping("/{courseId}/certificate")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
+    public ResponseEntity<byte[]> getCertificate(
+            Principal principal,
+            @org.springframework.web.bind.annotation.PathVariable Long courseId) {
+        byte[] pdf = enrollmentService.generateCertificatePdf(principal.getName(), courseId);
+        return ResponseEntity.ok()
+                .contentType(org.springframework.http.MediaType.APPLICATION_PDF)
+                .header("Content-Disposition", "attachment; filename=\"certificate-" + courseId + ".pdf\"")
+                .body(pdf);
+    }
 }

@@ -130,6 +130,13 @@
             <version>5.9</version>
         </dependency>
 
+        <!-- ── UpComming_Plan.md A1: sinh PDF chứng chỉ hoàn thành + A5 đề trắng Quiz (dùng chung) ── -->
+        <dependency>
+            <groupId>com.github.librepdf</groupId>
+            <artifactId>openpdf</artifactId>
+            <version>1.3.42</version>
+        </dependency>
+
         <!-- ── Giai đoạn 3: Tích hợp cổng thanh toán PayOS ── -->
         <dependency>
             <groupId>vn.payos</groupId>

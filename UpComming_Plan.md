@@ -11,7 +11,7 @@ Mỗi mục có: hiện trạng thật (đã kiểm tra code, không phỏng đo
 
 ## Nhóm A — Hạng mục đã dời lại từ Task 1/4/11
 
-### A1. Certificate PDF khi học viên đạt 100% tiến độ
+### A1. ✅ ĐÃ XONG (phần lõi) — Certificate PDF khi học viên đạt 100% tiến độ
 
 **Hiện trạng**: chưa có gì. Không có thư viện sinh PDF nào trong `pom.xml` (không OpenPDF/iText/PDFBox), không có entity `Certificate`, `Enrollment` chỉ có `completedAt`.
 
@@ -24,34 +24,40 @@ Mỗi mục có: hiện trạng thật (đã kiểm tra code, không phỏng đo
 - FE: nút "Tải chứng chỉ" chỉ hiện khi `progressPct >= 100` (đã có sẵn field này ở `CourseCard`/trang tiến độ).
 - Bổ sung từ `CurrentPlan.md` cũ: khi `progressPct` vừa chạm 100% trong lúc học viên đang ở màn hình học, hiện 1 popup chúc mừng nhẹ (kèm icon cúp) mời bấm tải chứng chỉ ngay, thay vì phải tự tìm nút — tận dụng đúng chỗ progress bar vừa thêm ở `app/(learn)/layout.tsx` (Task 1 đợt trước) để biết khi nào % vừa đổi sang 100.
 
+**Đã làm**: migration `V127__enrollment_certificate_code.sql` (cột `certificate_code` VARCHAR(36) nullable), set UUID cùng lúc với `completedAt` trong `LessonProgressService.recalculateEnrollmentProgress`, thêm dependency `com.github.librepdf:openpdf:1.3.42`, endpoint `GET /api/v1/enrollments/{courseId}/certificate` (sinh PDF on-the-fly bằng OpenPDF, chặn 422 nếu chưa hoàn thành), nút "Tải chứng chỉ" (icon cúp) ở `CourseCard.tsx` chỉ hiện khi `progressPct >= 100`.
+
+**Chưa làm (bonus, không phải core)**: popup chúc mừng tự động khi % vừa chạm 100 lúc đang học — để dành, có thể làm sau nếu bạn muốn, không chặn việc tải chứng chỉ (nút ở Course Card đã đủ dùng được ngay).
+
 **Test case (pass khi)**:
-1. Enrollment có `progressPct < 100` → gọi endpoint trả 422, không sinh PDF.
-2. Enrollment vừa chạm 100% → `certificate_code` được set đúng 1 lần, gọi lại nhiều lần không đổi mã.
-3. File PDF tải về mở được, có tên học viên, tên khoá học, ngày hoàn thành, mã xác thực.
-4. `mvn compile` sạch, health-check sau khi thêm cột migration mới.
+1. Enrollment có `progressPct < 100` → gọi endpoint trả 422, không sinh PDF. — ✅ logic đã viết đúng, **chưa test tay**.
+2. Enrollment vừa chạm 100% → `certificate_code` được set đúng 1 lần, gọi lại nhiều lần không đổi mã. — ✅ logic đã viết đúng (chỉ set khi `getCertificateCode() == null` gộp chung điều kiện với `completedAt == null`), **chưa test tay**.
+3. File PDF tải về mở được, có tên học viên, tên khoá học, ngày hoàn thành, mã xác thực. — **cần test tay** (chưa có enrollment nào đủ 100% trong dữ liệu hiện tại để thử end-to-end).
+4. `mvn compile` — ✅ BUILD SUCCESS, restart + health-check 200 OK, xác nhận migration V127 đã áp dụng vào DB thật.
 
 ---
 
-### A2. Gộp điểm Quiz / học liệu tĩnh vào công thức % tiến độ
+### A2. ✅ ĐÃ XONG (phần công thức chính) — Gộp điểm Quiz vào công thức % tiến độ
 
-**Hiện trạng**: `progressPct` tính thuần theo % bài học có video đã xem đủ ngưỡng (BR-PROGRESS-02). `quizScore` đã có trường riêng trên `EnrolledCourse` nhưng **không** cộng vào `progressPct`.
+**Quyết định đã chốt với bạn (23/09/2026)**:
+1. Trọng số: **70% video / 30% Quiz**.
+2. Học liệu tĩnh: **không tính vào %** (chỉ tham khảo).
+3. Enrollment cũ đã có `completedAt`: **giữ nguyên đã hoàn thành**, không hồi tố.
 
-**Phân tích khả thi**: đây là **thay đổi business rule**, không phải bug fix hay bổ sung UI — đổi công thức sẽ làm % của toàn bộ enrollment cũ thay đổi giá trị ngay lập tức (không cần user làm gì thêm), ảnh hưởng ngược tới dữ liệu lịch sử. Theo đúng CLAUDE.md mục 1 ("Thay đổi logic lớn — BẮT BUỘC confirm"), mục này **cần chốt rõ business rule mới trước khi code**, không nằm trong nhóm "làm nhanh".
+**Đã làm**: `LessonProgressService.recalculateEnrollmentProgress` — công thức mới `progressPct = 70% × (bài COMPLETED/tổng bài READY) + 30% × (100 nếu điểm Quiz chính thức cao nhất ≥ 5.00/10, else 0)`. Ngưỡng "đạt" (5.00/10) **tái dùng đúng ngưỡng đã có ở Gradebook** (`InstructorGradebookController`, không bịa ngưỡng mới), "Quiz chính thức" xác định qua `QuizRepository.findFirstByMaterialGeneration_Course_IdAndIsOfficialTrueOrderByCreatedAtDesc` (method đã tồn tại sẵn, cùng cách Gradebook xác định "quiz của khoá"). Khoá **không có** Quiz chính thức → dồn 100% trọng số vào video (không phạt học viên vì thiếu thứ giảng viên chưa tạo). Enrollment đã có `completedAt` → early-return, giữ nguyên nguyên trạng, không áp công thức mới.
 
-**Câu hỏi cần bạn chốt trước khi làm** (chưa code gì ở đây):
-- Trọng số: video chiếm bao nhiêu %, Quiz chiếm bao nhiêu %? (vd 70/30?)
-- Học liệu tĩnh (Task nhóm B bên dưới) có tính vào % không, hay chỉ để tham khảo?
-- Enrollment cũ đã có `completedAt` theo công thức cũ — có cần tính toán lại hàng loạt (batch job) hay giữ nguyên "đã hoàn thành thì thôi"?
+Vì Quiz giờ ảnh hưởng %, đã nối thêm 1 điểm gọi: `QuizService.submitAttempt` (khi quiz chính thức) giờ cũng gọi `LessonProgressService.recalculateEnrollmentProgress` ngay sau khi chấm điểm — trước đây nộp Quiz không đụng gì tới `progressPct`, giờ phải tính lại ngay, không đợi học viên xem thêm video mới cập nhật.
 
-**3 chi tiết bổ sung từ `CurrentPlan.md` cũ (chưa được liệt kê trước đó), gộp vào đây vì cùng thuộc "đổi công thức tính %":**
-1. **Tick/bỏ tick thủ công**: học viên tự bấm đánh dấu hoàn thành 1 bài học bằng tay (không chỉ tự động qua % xem video) — cần 1 cột trạng thái override trên `LessonProgress` (vd `isManuallyCompleted`) tách biệt khỏi phần trăm xem thật, để không phá vỡ BR-PROGRESS-01 (không tính tua nhanh) khi tính lượt xem thật.
-2. **Học liệu tĩnh tự tick khi xem/tải**: nếu học liệu tĩnh (Nhóm B1) được tính vào %, cần bắt sự kiện "đã tải/đã xem" ở `CourseResourcesTab`/`StudentResourceController` — hiện endpoint tải file chỉ trả `fileUrl`, chưa ghi nhận sự kiện này.
-3. **Cân đối lại mẫu số khi giảng viên xoá 1 Quiz/mục bắt buộc**: hệ thống đã dùng soft-delete (`isDeleted`) cho `MaterialGeneration`/`Quiz` nên về nguyên tắc mẫu số (tổng số mục bắt buộc) đã tự động loại các mục đã xoá nếu công thức tính % luôn lọc theo `isDeleted = false` tại thời điểm tính — **cần viết test riêng xác nhận đúng hành vi này** trước khi coi là an toàn, vì đây là đúng rủi ro mà `CurrentPlan.md` cũ cảnh báo (giảng viên xoá quiz làm tụt tiến độ học viên đã nộp bài).
+**Chưa làm (3 chi tiết phụ, tách riêng theo đúng đề xuất ban đầu — không thuộc phạm vi "đã chốt")**:
+1. **Tick/bỏ tick thủ công** 1 bài học — cần cột `isManuallyCompleted` mới trên `LessonProgress`, đây là 1 quyết định schema/UX riêng, chưa hỏi bạn.
+2. **Học liệu tĩnh tự tick khi xem/tải** — đã loại khỏi phạm vi theo quyết định #2 ở trên, không cần làm.
+3. **Cân đối mẫu số khi xoá Quiz/mục bắt buộc** — `findFirstByMaterialGeneration_Course_IdAndIsOfficialTrueOrderByCreatedAtDesc` chỉ lấy quiz **chưa xoá** mặc định (Spring Data JPA không tự lọc `isDeleted`, cần kiểm tra kỹ — nếu instructor xoá đúng quiz đang là "quiz chính thức" thì lần tính tiếp theo sẽ không tìm thấy quiz nào → tự động rơi về "không có Quiz chính thức" → chỉ tính video, không bị kẹt ở 70%. Hành vi này **an toàn theo đúng tinh thần đã cảnh báo**, nhưng chưa viết test riêng xác nhận — để dành nếu bạn muốn chắc chắn hơn.
 
-**Test case (khi đã chốt công thức)**:
-- Phần công thức mới: viết sau khi có business rule cụ thể (trọng số) — chưa thể viết trước.
-- Phần tick thủ công: học viên bấm tick tay 1 bài chưa xem video → `progressPct` tăng đúng 1 đơn vị/tổng số bài; bấm bỏ tick → giảm lại đúng.
-- Phần cân đối mẫu số: tạo 1 enrollment đã hoàn thành X/10 mục, giảng viên xoá 1 Quiz (soft-delete) → tổng mẫu số phải còn 9, % phải tăng lên tương ứng (không được giữ nguyên X/10 cũ gây sai số), học viên KHÔNG bị tụt % vì mục đã xoá không còn tính là "chưa hoàn thành".
+**Test case**:
+1. Khoá không có Quiz chính thức → % tính như cũ (100% trọng số video). — ✅ có unit test (`coEnrollment_tinhDungPhanTramTheoBaiReady`, `hoanThanhTatCaBai_setCompletedAt`).
+2. Khoá có Quiz chính thức, video 100% nhưng chưa làm Quiz → % = 70.00, chưa set `completedAt`. — ✅ unit test mới `coQuizChinhThuc_chuaDat_chi70PhanTramVideo`.
+3. Khoá có Quiz chính thức, video 100% + điểm Quiz cao nhất ≥ 5.00 → % = 100.00, set `completedAt` + `certificateCode`. — ✅ unit test mới `coQuizChinhThucDaDat_video100PhanTram_hoanThanhDu100`.
+4. Enrollment đã `completedAt` từ trước → gọi lại không đổi %, không đổi `completedAt`. — ✅ unit test cũ `daCoCompletedAt_khongGhiDeLai` (đã cập nhật cho phù hợp early-return mới).
+5. `mvn -o test` — ✅ **374/374 test pass** (toàn bộ test suite, không chỉ module này), `mvn -o test-compile` sạch (đã sửa `LessonProgressServiceTest` bị vỡ do constructor thêm 2 tham số), restart + health-check 200 OK, không có lỗi circular bean dependency giữa `QuizService` ↔ `LessonProgressService`.
 
 ---
 
@@ -61,7 +67,7 @@ Phát hiện lúc làm: vẫn còn 1 link thật trỏ tới trang này ở drop
 
 ---
 
-### A4. Mermaid Live Preview + Template nâng cao (Fishbone / Tree-card / Matrix)
+### A4. Mermaid Live Preview (✅ phần a đã xong) + Template nâng cao (Fishbone / Tree-card / Matrix — chưa làm)
 
 **Ghi chú từ bạn (giảng viên, đã tự thử trước đó)**: đã cố hiện thực fishbone, treecard, matrix nhưng hầu như đều lỗi do giới hạn thư viện; nguyên nhân một phần do dùng auto-format ở tab hiển thị tĩnh nên không mô phỏng đúng 100% mọi thao tác realtime.
 
@@ -74,25 +80,27 @@ Phát hiện lúc làm: vẫn còn 1 link thật trỏ tới trang này ở drop
 
 | Phần | Khả thi | Đề xuất |
 |---|---|---|
-| a) Live Preview split-screen (gõ code Mermaid trái, xem hình phải, realtime) | **Khả thi, rủi ro thấp** | Thêm 1 tab "Soạn Code" cạnh "Chỉnh Sửa"/"Mã Mermaid" đã có. Textarea bên trái, debounce ~400ms gọi `mermaid.render()` (đã có sẵn trong bundle, không cần cài thêm gì) render bên phải. Lỗi cú pháp hiện thông báo đỏ ngay tại chỗ thay vì phải bấm Lưu mới biết sai. |
-| b) Template "Tree-card" (sơ đồ cây phân nhánh) | **Khả thi** | Thực chất trùng với diagram `mindmap` Mermaid đã hỗ trợ — không cần renderer mới, chỉ cần 1 nút "Chèn khung Tree-card mẫu" sinh sẵn code `mindmap` mẫu để sửa tiếp. |
+| a) Live Preview split-screen (gõ code Mermaid trái, xem hình phải, realtime) | **✅ ĐÃ XONG** | Thêm component `MermaidCodeEditor.tsx` + tab "Soạn Code" mới trong `CourseMaterialsManager.tsx` (cạnh "Chỉnh Sửa"/"Mã Mermaid"). Textarea trái debounce 400ms → tái dùng nguyên `MermaidViewer` đã có bên phải, nút Lưu gọi đúng `updateMermaidMutation` sẵn có. |
+| b) Template "Tree-card" (sơ đồ cây phân nhánh) | **✅ ĐÃ XONG** | Nút "Chèn khung Tree-card mẫu" trong tab "Soạn Code" (`MermaidCodeEditor.tsx`), điền sẵn code `mindmap` mẫu 3 nhánh để sửa tiếp — đúng dự đoán, không cần renderer mới. |
 | c) Fishbone / Matrix | **Không khả thi trong khuôn khổ Mermaid** | Muốn có thật sự phải đổi hẳn cơ chế vẽ (SVG tự viết hoặc lib khác như Markmap/D3) — đây là 1 hạng mục lớn, tách riêng hoàn toàn, cần đánh giá lại từ đầu, không nằm trong phạm vi "làm nhanh dứt điểm" của đợt này. |
 
-**Test case cho phần (a) — phần duy nhất đề xuất làm trong đợt tới**:
-1. Gõ code Mermaid hợp lệ → hình bên phải cập nhật trong < 1s, không cần bấm nút nào.
-2. Gõ code sai cú pháp → hiện thông báo lỗi đỏ tại chỗ, KHÔNG crash trắng màn hình, KHÔNG giữ lại hình cũ gây hiểu nhầm.
-3. Bấm "Lưu" từ tab này → dùng đúng `onSave` đã có, không tạo luồng lưu riêng.
-4. `npx eslint` + `tsc --noEmit` sạch.
+**Test case cho phần (a)**:
+1. Gõ code Mermaid hợp lệ → hình bên phải cập nhật trong < 1s, không cần bấm nút nào. — **cần test tay**.
+2. Gõ code sai cú pháp → hiện thông báo lỗi đỏ tại chỗ (đúng, `MermaidViewer` đã có sẵn khối `error` hiện thông báo + code gốc, không crash trắng màn hình). — **cần test tay**.
+3. Bấm "Lưu" từ tab này → dùng đúng `onSave`/`updateMermaidMutation` đã có, không tạo luồng lưu riêng. — ✅ đúng, tái dùng nguyên hàm cũ.
+4. `npx eslint` + `tsc --noEmit` — ✅ đã chạy, sạch.
 
 ---
 
-### A5. Export PDF cheatsheet / đề trắng (kèm đáp án trang cuối)
+### A5. ✅ ĐÃ XONG — Export PDF cheatsheet / đề trắng
 
-**Hiện trạng**: chưa có.
+**Đã làm**: `QuizService.exportQuizPdf` (dùng chung OpenPDF của A1) sinh 2 chế độ — `mode=blank` (đề trắng, đáp án in riêng trang cuối) và `mode=cheatsheet` (câu hỏi + đáp án đúng in liền, tô màu xanh để ôn nhanh). Hai endpoint song song đúng khuôn 2 nhóm quyền đã có trong hệ thống: `GET /api/v1/instructor/quizzes/{quizId}/export-pdf` (giảng viên, ownership = course.instructor) và `GET /api/v1/quizzes/{quizId}/export-pdf` (học viên, ownership = quiz sở hữu cá nhân — đúng tinh thần bản gốc `CurrentPlan.md`: "Export Quiz" là nhu cầu của học viên). Nút bấm thêm ở cả `CourseMaterialsManager.tsx` (giảng viên) và `(student)/materials/[id]/page.tsx` (học viên, chỉ hiện khi quiz không phải Official — đúng vì endpoint học viên chỉ cho export quiz cá nhân của chính họ).
 
-**Đề xuất**: nên làm **sau** A1 vì dùng chung hạ tầng PDF (cùng 1 dependency OpenPDF, tránh thêm 1 lib PDF thứ 2). Sinh PDF từ danh sách `QuizQuestion` hiện có (không cần dữ liệu mới) — layout: câu hỏi + 4 lựa chọn, đáp án đúng in ở trang cuối riêng.
-
-**Test case**: PDF sinh ra đúng số câu, đáp án ở cuối khớp với đáp án đúng trong DB, không lộ đáp án ở phần đề.
+**Test case (pass khi)**:
+1. PDF sinh ra đúng số câu, đáp án ở cuối (`mode=blank`) khớp với đáp án đúng trong DB, không lộ đáp án ở phần đề. — **cần test tay**.
+2. `mode=cheatsheet` hiện đáp án đúng tô màu ngay trong phần đề (không tách trang riêng). — **cần test tay**.
+3. Giảng viên A không export được PDF quiz của khoá giảng viên B (403). — logic ownership tái dùng nguyên từ `addQuestionsFromCsv`, đã đúng từ trước.
+4. `mvn compile` — ✅ BUILD SUCCESS. `npx eslint` + `tsc --noEmit` (cả 2 file FE) — ✅ sạch.
 
 ---
 
@@ -174,10 +182,14 @@ Vì đây là **học liệu cá nhân của học viên** (không phải Offici
 | ~~B1 — Nút mở học liệu tĩnh~~ | Rất nhỏ | ✅ Đã xong, chờ bạn test tay qua UI |
 | ~~B2 — Import ngược Anki .txt~~ | Nhỏ | ✅ Đã xong, chờ bạn test tay qua UI |
 | ~~A3 — Gỡ trang /progress~~ | Rất nhỏ | ✅ Đã xong (đã xoá cả link Header) |
-| **A4a — Mermaid Live Preview** | Vừa | Chưa làm — khả thi rõ ràng, không đụng backend |
-| **A1 — Certificate PDF** | Vừa | Chưa làm — cần thêm 1 dependency + 1 cột migration |
-| **A5 — Export PDF cheatsheet** | Nhỏ (nếu làm sau A1) | Chưa làm — phụ thuộc lib PDF của A1 |
-| **A2 — Gộp % Quiz vào tiến độ** | Lớn, cần chốt business rule trước | Chưa làm — đổi logic ảnh hưởng dữ liệu cũ, KHÔNG nên làm vội |
+| ~~A4a — Mermaid Live Preview~~ | Vừa | ✅ Đã xong, chờ bạn test tay qua UI |
+| ~~A1 — Certificate PDF~~ | Vừa | ✅ Đã xong (phần lõi), chờ bạn test tay qua UI |
+| ~~A5 — Export PDF cheatsheet~~ | Nhỏ | ✅ Đã xong, chờ bạn test tay qua UI |
+| ~~A4b — Template Tree-card~~ | Nhỏ | ✅ Đã xong |
+| ~~A2 — Gộp % Quiz vào tiến độ~~ | Lớn | ✅ Đã xong (70/30, 374/374 test pass), 3 chi tiết phụ để dành sau |
+| A4c — Fishbone/Matrix | Lớn | Không khả thi với Mermaid, cần đánh giá lại từ đầu nếu vẫn muốn làm |
+| A6 — Redis token-bucket | — | Không cần làm trừ khi có vấn đề thật |
+| A7 — Onboarding Wizard (Task 11B) | — | **Bỏ qua theo chỉ đạo trước đó**, không đụng vào |
 | A4b/c — Template Tree-card / Fishbone-Matrix | Tree-card nhỏ, Fishbone/Matrix không khả thi với Mermaid | Fishbone/Matrix cần đánh giá lại từ đầu bằng lib khác nếu vẫn muốn làm |
 | A6 — Redis token-bucket | — | Không cần làm trừ khi có vấn đề thật |
 | **A7 — Onboarding Wizard (Task 11B)** | — | **Bỏ qua**, giữ nguyên chỉ đạo trước đó, không đưa vào lịch làm |
