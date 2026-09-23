@@ -223,10 +223,13 @@ public class QuizService {
             com.lowagie.text.pdf.PdfWriter.getInstance(document, out);
             document.open();
 
-            var titleFont = com.lowagie.text.FontFactory.getFont(com.lowagie.text.FontFactory.HELVETICA_BOLD, 18);
-            var questionFont = com.lowagie.text.FontFactory.getFont(com.lowagie.text.FontFactory.HELVETICA_BOLD, 12);
-            var optionFont = com.lowagie.text.FontFactory.getFont(com.lowagie.text.FontFactory.HELVETICA, 11);
-            var correctFont = com.lowagie.text.FontFactory.getFont(com.lowagie.text.FontFactory.HELVETICA_BOLD, 11, new java.awt.Color(5, 150, 105));
+            // Base-14 Helvetica không có glyph tiếng Việt — dùng DejaVu Sans nhúng (VietnamesePdfFonts).
+            com.lowagie.text.pdf.BaseFont bfRegular = com.lms.common.util.VietnamesePdfFonts.loadRegular();
+            com.lowagie.text.pdf.BaseFont bfBold = com.lms.common.util.VietnamesePdfFonts.loadBold();
+            var titleFont = new com.lowagie.text.Font(bfBold, 18);
+            var questionFont = new com.lowagie.text.Font(bfBold, 12);
+            var optionFont = new com.lowagie.text.Font(bfRegular, 11);
+            var correctFont = new com.lowagie.text.Font(bfBold, 11, com.lowagie.text.Font.NORMAL, new java.awt.Color(5, 150, 105));
 
             String title = quiz.getMaterialGeneration() != null && quiz.getMaterialGeneration().getTitle() != null
                     ? quiz.getMaterialGeneration().getTitle()
@@ -276,7 +279,7 @@ public class QuizService {
 
             document.close();
             return out.toByteArray();
-        } catch (com.lowagie.text.DocumentException e) {
+        } catch (Exception e) {
             throw new IllegalStateException("Không sinh được PDF đề thi", e);
         }
     }
