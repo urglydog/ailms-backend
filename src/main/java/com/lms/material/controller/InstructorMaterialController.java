@@ -6,6 +6,7 @@ import com.lms.material.entity.FlashcardDeck;
 import com.lms.material.entity.Mindmap;
 import com.lms.material.repository.FlashcardDeckRepository;
 import com.lms.material.repository.MindmapRepository;
+import com.lms.material.service.MaterialNamingRules;
 import com.lms.catalog.entity.Course;
 import com.lms.catalog.repository.CourseRepository;
 import lombok.RequiredArgsConstructor;
@@ -41,6 +42,9 @@ public class InstructorMaterialController {
         
         Object rawFolderId = payload.get("folderId");
         Long folderId = (rawFolderId != null) ? ((Number) rawFolderId).longValue() : null;
+
+        MaterialNamingRules.assertNoCollision(siblingsInFolder(gen.getCourse().getId(), folderId, gen.getUser().getId()), gen.getTitle(), gen.getMaterialType(), gen.getId());
+
         if (folderId != null) {
             com.lms.material.entity.MaterialFolder folder = materialFolderRepository.findById(folderId)
                     .orElseThrow(() -> new ResourceNotFoundException("MaterialFolder", folderId));
@@ -204,6 +208,72 @@ public class InstructorMaterialController {
         newGen.setRootGenerationId(rootId);
 
         return materialGenerationRepository.save(newGen);
+    }
+
+    /**
+     * Danh sách học liệu (chưa xóa, CÙNG chủ sở hữu {@code ownerId}) đang nằm ở 1 đích (thư mục cụ
+     * thể hoặc gốc) — dùng để kiểm tra trùng tên. Lọc thêm theo owner vì Workspace thư mục là tính
+     * năng riêng của giảng viên; ở gốc (folderId=null) học liệu do học viên tự sinh (AI) cũng dùng
+     * chung folder=null — không lọc owner sẽ khiến 2 học viên khác nhau (hoặc giảng viên với học
+     * viên) vô tình bị chặn trùng tên với nhau dù không hề liên quan tới Workspace này.
+     */
+    private java.util.List<com.lms.material.entity.MaterialGeneration> siblingsInFolder(Long courseId, Long folderId, Long ownerId) {
+        java.util.List<com.lms.material.entity.MaterialGeneration> all = folderId != null
+                ? materialGenerationRepository.findByFolder_IdAndIsDeletedFalse(folderId)
+                : materialGenerationRepository.findByCourse_IdAndFolderIsNullAndIsDeletedFalse(courseId);
+        return all.stream().filter(m -> m.getUser() != null && m.getUser().getId().equals(ownerId)).toList();
+    }
+
+    @PostMapping("/{id}/duplicate")
+    @PreAuthorize("isAuthenticated()")
+    @Transactional
+    public ResponseEntity<java.util.Map<String, Object>> duplicateMaterial(Principal principal, @PathVariable Long id, @RequestBody java.util.Map<String, Object> payload) {
+        com.lms.material.entity.MaterialGeneration source = materialGenerationRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("MaterialGeneration", id));
+        if (!source.getCourse().getInstructor().getEmail().equals(principal.getName())) {
+            throw new AccessDeniedDomainException("Ban khong co quyen");
+        }
+
+        Object rawTargetFolderId = payload.get("targetFolderId");
+        Long targetFolderId = (rawTargetFolderId != null) ? ((Number) rawTargetFolderId).longValue() : null;
+        com.lms.material.entity.MaterialFolder targetFolder = null;
+        if (targetFolderId != null) {
+            targetFolder = materialFolderRepository.findById(targetFolderId)
+                    .orElseThrow(() -> new ResourceNotFoundException("MaterialFolder", targetFolderId));
+        }
+
+        String finalTitle = MaterialNamingRules.nextAvailableCopyName(
+                siblingsInFolder(source.getCourse().getId(), targetFolderId, source.getUser().getId()), source.getTitle(), source.getMaterialType());
+
+        com.lms.material.entity.MaterialGeneration newGen = new com.lms.material.entity.MaterialGeneration();
+        newGen.setUser(source.getUser());
+        newGen.setCourse(source.getCourse());
+        newGen.setMaterialType(source.getMaterialType());
+        newGen.setLanguage(source.getLanguage());
+        newGen.setTitle(finalTitle);
+        newGen.setScopeType(source.getScopeType());
+        newGen.setScopeRefId(source.getScopeRefId());
+        newGen.setCustomLessonIds(source.getCustomLessonIds());
+        newGen.setQuantityLevel(source.getQuantityLevel());
+        newGen.setDifficultyLevel(source.getDifficultyLevel());
+        newGen.setVersionNo(1);
+        newGen.setStatus(source.getStatus());
+        newGen.setFolder(targetFolder);
+        // Bản sao độc lập — KHÔNG set parentGeneration, không nằm trong dòng version của bản gốc.
+        newGen = materialGenerationRepository.save(newGen);
+        newGen.setRootGenerationId(newGen.getId());
+        materialGenerationRepository.save(newGen);
+
+        // Không copy assignments (gán chương/bài) — bản sao là vật thể mới, chưa gắn vào đâu cả.
+        Long newMaterialId = cloneMaterialContent(source, newGen);
+        activityLogService.log(newGen.getCourse(), principal.getName(), "Đã nhân bản học liệu \"" + source.getTitle() + "\"");
+
+        java.util.Map<String, Object> response = new java.util.HashMap<>();
+        response.put("id", newGen.getId());
+        response.put("materialId", newMaterialId);
+        response.put("title", finalTitle);
+        response.put("message", "Đã nhân bản học liệu");
+        return ResponseEntity.ok(response);
     }
 
     /** Deep-clone nội dung (Quiz/Flashcard/Mindmap) từ {@code source} sang {@code newGen}. */
@@ -370,7 +440,11 @@ public class InstructorMaterialController {
         generation.setStatus(com.lms.common.enums.GenStatus.COMPLETED); // Completed immediately since manual
 
         String quizTypeStr = payload.get("quizType");
-        
+
+        // Tạo thủ công luôn vào Workspace gốc (không có tham số chọn thư mục ở form này) — kiểm
+        // tra trùng tên+loại ở gốc, chặn nếu trùng (rule 4: create/rename/move đều chặn cứng).
+        MaterialNamingRules.assertNoCollision(siblingsInFolder(courseId, null, course.getInstructor().getId()), title, materialType, null);
+
         materialGenerationRepository.save(generation);
 
         Long materialId = null;
@@ -469,6 +543,7 @@ public class InstructorMaterialController {
             Boolean isProctored = false;
             Integer maxViolations = 3;
             Integer usageCount = 0;
+            Integer cardCount = null;
 
             if (gen.getStatus() == com.lms.common.enums.GenStatus.COMPLETED) {
                 if (gen.getMaterialType() == com.lms.common.enums.MaterialType.MINDMAP) {
@@ -483,6 +558,9 @@ public class InstructorMaterialController {
                         materialId = f.getId();
                         isOfficial = f.getIsOfficial();
                         usageCount = flashcardReviewRepository.countByFlashcard_FlashcardDeck_Id(f.getId());
+                        // Đếm sống thay vì dùng cột cardCount lưu sẵn — cột đó chỉ được set lúc tạo/AI sinh,
+                        // KHÔNG được cập nhật khi thêm/xóa từng thẻ qua FlashcardController nên dễ bị lệch.
+                        cardCount = flashcardRepository.findByFlashcardDeck_Id(f.getId()).size();
                     }
                 } else if (gen.getMaterialType() == com.lms.common.enums.MaterialType.QUIZ) {
                     var q = quizRepository.findByMaterialGeneration_IdAndIsDeletedFalse(gen.getId()).orElse(null);
@@ -526,6 +604,7 @@ public class InstructorMaterialController {
             map.put("isOfficial", isOfficial);
             map.put("materialId", materialId);
             map.put("questionCount", questionCount);
+            map.put("cardCount", cardCount);
             map.put("randomPickCount", randomPickCount);
             map.put("allowReview", allowReview);
             map.put("startTime", startTime != null ? startTime.toString() : null);

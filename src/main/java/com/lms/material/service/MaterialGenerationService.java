@@ -382,6 +382,18 @@ public class MaterialGenerationService {
             throw new AccessDeniedDomainException("Học liệu này thuộc về người khác");
         }
         if (title != null && !title.equals(generation.getTitle())) {
+            Long folderId = generation.getFolder() != null ? generation.getFolder().getId() : null;
+            java.util.List<MaterialGeneration> siblings = folderId != null
+                    ? materialGenerationRepository.findByFolder_IdAndIsDeletedFalse(folderId)
+                    : materialGenerationRepository.findByCourse_IdAndFolderIsNullAndIsDeletedFalse(generation.getCourse().getId());
+            // Chỉ so trùng tên với học liệu CÙNG chủ sở hữu — xem giải thích ở
+            // InstructorMaterialController#siblingsInFolder (Workspace thư mục là tính năng riêng
+            // của giảng viên; ở gốc còn có học liệu AI riêng tư của từng học viên).
+            java.util.List<MaterialGeneration> ownedSiblings = siblings.stream()
+                    .filter(m -> m.getUser() != null && m.getUser().getId().equals(generation.getUser().getId()))
+                    .toList();
+            MaterialNamingRules.assertNoCollision(ownedSiblings, title, generation.getMaterialType(), generation.getId());
+
             activityLogService.log(generation.getCourse(), email,
                     "Đã đổi tên học liệu \"" + generation.getTitle() + "\" thành \"" + title + "\"");
             generation.setTitle(title);

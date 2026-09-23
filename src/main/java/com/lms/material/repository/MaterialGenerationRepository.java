@@ -30,6 +30,10 @@ public interface MaterialGenerationRepository extends JpaRepository<MaterialGene
 
     List<MaterialGeneration> findByFolder_Id(Long folderId);
 
+    List<MaterialGeneration> findByFolder_IdAndIsDeletedFalse(Long folderId);
+
+    List<MaterialGeneration> findByCourse_IdAndFolderIsNullAndIsDeletedFalse(Long courseId);
+
     Optional<MaterialGeneration> findTopByRootGenerationIdOrderByVersionNoDesc(Long rootGenerationId);
 
     Optional<MaterialGeneration> findTopByRootGenerationIdAndIsArchivedFalseOrderByVersionNoDesc(Long rootGenerationId);
