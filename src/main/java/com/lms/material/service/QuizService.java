@@ -33,6 +33,7 @@ public class QuizService {
     private final EnrollmentRepository enrollmentRepository;
     private final org.springframework.web.client.RestTemplate restTemplate;
     private final com.lms.common.config.AiWorkerConfig aiWorkerConfig;
+    private final com.lms.enrollment.service.LessonProgressService lessonProgressService;
 
     @Transactional
     public void updateQuizSettings(String instructorEmail, Long quizId, com.lms.material.dto.QuizDto.QuizSettingsReq req) {
@@ -206,6 +207,101 @@ public class QuizService {
         }
 
         return new com.lms.material.dto.QuizDto.ImportResultRes(imported, errors);
+    }
+
+    /**
+     * UpComming_Plan.md A5 — Export PDF đề trắng (mode=blank, đáp án in riêng trang cuối) hoặc
+     * cheatsheet (mode=cheatsheet, câu hỏi + đáp án đúng in liền nhau để ôn nhanh). Dùng chung
+     * OpenPDF vừa thêm ở A1 (Certificate), không thêm lib PDF thứ 2.
+     */
+    @Transactional(readOnly = true)
+    public byte[] exportQuizPdf(Quiz quiz, boolean cheatsheet) {
+        List<QuizQuestion> questions = quizQuestionRepository.findByQuiz_IdOrderByDisplayOrderAsc(quiz.getId());
+        try {
+            var document = new com.lowagie.text.Document(com.lowagie.text.PageSize.A4, 45, 45, 50, 50);
+            var out = new java.io.ByteArrayOutputStream();
+            com.lowagie.text.pdf.PdfWriter.getInstance(document, out);
+            document.open();
+
+            var titleFont = com.lowagie.text.FontFactory.getFont(com.lowagie.text.FontFactory.HELVETICA_BOLD, 18);
+            var questionFont = com.lowagie.text.FontFactory.getFont(com.lowagie.text.FontFactory.HELVETICA_BOLD, 12);
+            var optionFont = com.lowagie.text.FontFactory.getFont(com.lowagie.text.FontFactory.HELVETICA, 11);
+            var correctFont = com.lowagie.text.FontFactory.getFont(com.lowagie.text.FontFactory.HELVETICA_BOLD, 11, new java.awt.Color(5, 150, 105));
+
+            String title = quiz.getMaterialGeneration() != null && quiz.getMaterialGeneration().getTitle() != null
+                    ? quiz.getMaterialGeneration().getTitle()
+                    : "Đề thi";
+            var titlePar = new com.lowagie.text.Paragraph(cheatsheet ? title + " — Cheatsheet" : title, titleFont);
+            titlePar.setSpacingAfter(20);
+            document.add(titlePar);
+
+            java.util.List<String> answerKey = new java.util.ArrayList<>();
+            String[] letters = { "A", "B", "C", "D" };
+
+            int idx = 1;
+            for (QuizQuestion q : questions) {
+                var qPar = new com.lowagie.text.Paragraph("Câu " + idx + ". " + q.getContent(), questionFont);
+                qPar.setSpacingBefore(10);
+                qPar.setSpacingAfter(6);
+                document.add(qPar);
+
+                List<QuizOption> options = quizOptionRepository.findByQuizQuestion_Id(q.getId());
+                StringBuilder correctLetters = new StringBuilder();
+                for (int i = 0; i < options.size(); i++) {
+                    QuizOption opt = options.get(i);
+                    String letter = i < letters.length ? letters[i] : String.valueOf(i + 1);
+                    boolean isCorrect = Boolean.TRUE.equals(opt.getIsCorrect());
+                    if (isCorrect) {
+                        if (correctLetters.length() > 0) correctLetters.append(", ");
+                        correctLetters.append(letter);
+                    }
+                    var optPar = new com.lowagie.text.Paragraph(
+                            "   " + letter + ". " + opt.getContent(),
+                            cheatsheet && isCorrect ? correctFont : optionFont);
+                    document.add(optPar);
+                }
+                answerKey.add("Câu " + idx + ": " + correctLetters);
+                idx++;
+            }
+
+            if (!cheatsheet) {
+                document.newPage();
+                var keyTitle = new com.lowagie.text.Paragraph("ĐÁP ÁN", titleFont);
+                keyTitle.setSpacingAfter(15);
+                document.add(keyTitle);
+                for (String line : answerKey) {
+                    document.add(new com.lowagie.text.Paragraph(line, optionFont));
+                }
+            }
+
+            document.close();
+            return out.toByteArray();
+        } catch (com.lowagie.text.DocumentException e) {
+            throw new IllegalStateException("Không sinh được PDF đề thi", e);
+        }
+    }
+
+    /** A5 — export PDF phía giảng viên (đề của khoá học họ dạy). */
+    @Transactional(readOnly = true)
+    public byte[] exportQuizPdfAsInstructor(String instructorEmail, Long quizId, boolean cheatsheet) {
+        Quiz quiz = quizRepository.findById(quizId)
+                .orElseThrow(() -> new ResourceNotFoundException("Quiz", quizId));
+        Course course = quiz.getMaterialGeneration().getCourse();
+        if (!course.getInstructor().getEmail().equals(instructorEmail)) {
+            throw new AccessDeniedDomainException("Ban khong co quyen");
+        }
+        return exportQuizPdf(quiz, cheatsheet);
+    }
+
+    /** A5 — export PDF phía học viên (bộ quiz cá nhân của chính họ). */
+    @Transactional(readOnly = true)
+    public byte[] exportQuizPdfAsOwner(String userEmail, Long quizId, boolean cheatsheet) {
+        Quiz quiz = quizRepository.findById(quizId)
+                .orElseThrow(() -> new ResourceNotFoundException("Quiz", quizId));
+        if (!quiz.getMaterialGeneration().getUser().getEmail().equals(userEmail)) {
+            throw new AccessDeniedDomainException("Ban khong co quyen");
+        }
+        return exportQuizPdf(quiz, cheatsheet);
     }
 
     @Transactional
@@ -522,7 +618,14 @@ public class QuizService {
         attempt.setStatus("COMPLETED");
         attempt.setSubmittedAt(LocalDateTime.now());
         quizAttemptRepository.save(attempt);
-        
+
+        // A2 (UpComming_Plan.md) — Quiz chính thức giờ chiếm 30% công thức % tiến độ khóa học,
+        // nên nộp bài xong phải tính lại ngay, không chỉ lúc xem video mới tính (LessonProgressService).
+        if (Boolean.TRUE.equals(attempt.getQuiz().getIsOfficial())) {
+            lessonProgressService.recalculateEnrollmentProgress(
+                    attempt.getUser(), attempt.getQuiz().getMaterialGeneration().getCourse());
+        }
+
         return new QuizAttemptDto.SubmitRes(attemptId, score, correctCount, attempt.getTotalQuestions(), details, isArchived);
     }
 

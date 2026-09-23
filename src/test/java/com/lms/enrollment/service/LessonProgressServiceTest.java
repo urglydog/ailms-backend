@@ -14,6 +14,8 @@ import com.lms.enrollment.entity.LessonProgress;
 import com.lms.enrollment.repository.EnrollmentRepository;
 import com.lms.enrollment.repository.LessonProgressRepository;
 import com.lms.enrollment.security.EnrollmentSecurity;
+import com.lms.material.repository.QuizAttemptRepository;
+import com.lms.material.repository.QuizRepository;
 import java.math.BigDecimal;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -42,6 +44,8 @@ class LessonProgressServiceTest {
     @Mock private EnrollmentSecurity enrollmentSecurity;
     @Mock private LessonProgressRepository lessonProgressRepository;
     @Mock private EnrollmentRepository enrollmentRepository;
+    @Mock private QuizRepository quizRepository;
+    @Mock private QuizAttemptRepository quizAttemptRepository;
 
     private LessonProgressService service;
 
@@ -52,7 +56,8 @@ class LessonProgressServiceTest {
     @BeforeEach
     void setUp() {
         service = new LessonProgressService(
-                lessonRepository, userRepository, enrollmentSecurity, lessonProgressRepository, enrollmentRepository);
+                lessonRepository, userRepository, enrollmentSecurity, lessonProgressRepository, enrollmentRepository,
+                quizRepository, quizAttemptRepository);
         ReflectionTestUtils.setField(service, "completeThresholdPercent", 90);
 
         user = new User();
@@ -190,14 +195,75 @@ class LessonProgressServiceTest {
         enrollment.setProgressPct(BigDecimal.valueOf(100));
         enrollment.setCompletedAt(firstCompletedAt);
         when(enrollmentRepository.findByUser_IdAndCourse_Id(1L, 10L)).thenReturn(Optional.of(enrollment));
-        when(lessonRepository.countByChapter_CourseIdAndStatus(10L, "READY")).thenReturn(4L);
-        when(lessonProgressRepository.countByUser_IdAndLesson_Chapter_Course_IdAndIsCompletedTrue(1L, 10L))
-                .thenReturn(4L);
+        // A2 (UpComming_Plan.md) — enrollment đã completedAt thì recalculateEnrollmentProgress trả
+        // về sớm, KHÔNG còn đọc lessonRepository/lessonProgressRepository nữa (giữ nguyên đã hoàn
+        // thành, không áp công thức mới) — không cần stub 2 repository đó ở test này nữa.
 
         service.recordProgress(EMAIL, 21L, new RecordReq(900, 900));
 
         ArgumentCaptor<Enrollment> captor = ArgumentCaptor.forClass(Enrollment.class);
         verify(enrollmentRepository).save(captor.capture());
         assertThat(captor.getValue().getCompletedAt()).isEqualTo(firstCompletedAt);
+    }
+
+    // A2 (UpComming_Plan.md, 23/09/2026) — công thức mới: 70% video + 30% Quiz chính thức của
+    // khóa (đạt khi điểm cao nhất >= 5.00/10, cùng ngưỡng đã dùng ở Gradebook). Khóa không có
+    // Quiz chính thức thì dồn 100% trọng số vào video (test cũ ở trên đã phủ trường hợp này vì
+    // quizRepository không stub gì -> Mockito tự trả Optional.empty()).
+
+    @Test
+    void coQuizChinhThuc_chuaDat_chi70PhanTramVideo() {
+        Enrollment enrollment = new Enrollment();
+        enrollment.setUser(user);
+        enrollment.setCourse(course);
+        enrollment.setProgressPct(BigDecimal.ZERO);
+        when(enrollmentRepository.findByUser_IdAndCourse_Id(1L, 10L)).thenReturn(Optional.of(enrollment));
+        when(lessonRepository.countByChapter_CourseIdAndStatus(10L, "READY")).thenReturn(4L);
+        when(lessonProgressRepository.countByUser_IdAndLesson_Chapter_Course_IdAndIsCompletedTrue(1L, 10L))
+                .thenReturn(4L); // video 100%, nhưng chưa làm Quiz
+
+        com.lms.material.entity.Quiz officialQuiz = new com.lms.material.entity.Quiz();
+        officialQuiz.setId(99L);
+        when(quizRepository.findFirstByMaterialGeneration_Course_IdAndIsOfficialTrueOrderByCreatedAtDesc(10L))
+                .thenReturn(Optional.of(officialQuiz));
+        when(quizAttemptRepository.findByUser_EmailAndQuiz_IdOrderByScoreDesc(EMAIL, 99L))
+                .thenReturn(java.util.List.of());
+
+        service.recordProgress(EMAIL, 21L, new RecordReq(900, 900));
+
+        ArgumentCaptor<Enrollment> captor = ArgumentCaptor.forClass(Enrollment.class);
+        verify(enrollmentRepository).save(captor.capture());
+        // video 100% * 0.7 + quiz chưa đạt (0) * 0.3 = 70.00 — chưa đủ 100% nên completedAt vẫn null.
+        assertThat(captor.getValue().getProgressPct()).isEqualByComparingTo("70.00");
+        assertThat(captor.getValue().getCompletedAt()).isNull();
+    }
+
+    @Test
+    void coQuizChinhThucDaDat_video100PhanTram_hoanThanhDu100() {
+        Enrollment enrollment = new Enrollment();
+        enrollment.setUser(user);
+        enrollment.setCourse(course);
+        enrollment.setProgressPct(BigDecimal.valueOf(70));
+        when(enrollmentRepository.findByUser_IdAndCourse_Id(1L, 10L)).thenReturn(Optional.of(enrollment));
+        when(lessonRepository.countByChapter_CourseIdAndStatus(10L, "READY")).thenReturn(4L);
+        when(lessonProgressRepository.countByUser_IdAndLesson_Chapter_Course_IdAndIsCompletedTrue(1L, 10L))
+                .thenReturn(4L);
+
+        com.lms.material.entity.Quiz officialQuiz = new com.lms.material.entity.Quiz();
+        officialQuiz.setId(99L);
+        when(quizRepository.findFirstByMaterialGeneration_Course_IdAndIsOfficialTrueOrderByCreatedAtDesc(10L))
+                .thenReturn(Optional.of(officialQuiz));
+
+        com.lms.material.entity.QuizAttempt passedAttempt = new com.lms.material.entity.QuizAttempt();
+        passedAttempt.setScore(new BigDecimal("8.00")); // >= 5.00 -> đạt
+        when(quizAttemptRepository.findByUser_EmailAndQuiz_IdOrderByScoreDesc(EMAIL, 99L))
+                .thenReturn(java.util.List.of(passedAttempt));
+
+        service.recordProgress(EMAIL, 21L, new RecordReq(900, 900));
+
+        ArgumentCaptor<Enrollment> captor = ArgumentCaptor.forClass(Enrollment.class);
+        verify(enrollmentRepository).save(captor.capture());
+        assertThat(captor.getValue().getProgressPct()).isEqualByComparingTo("100.00");
+        assertThat(captor.getValue().getCompletedAt()).isNotNull();
     }
 }

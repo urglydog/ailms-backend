@@ -58,6 +58,20 @@ public class QuizController {
         return ResponseEntity.ok(quizService.addQuestionsFromCsv(principal.getName(), quizId, file));
     }
 
+    /** A5 — Export PDF đề trắng/cheatsheet (phía giảng viên). */
+    @GetMapping("/instructor/quizzes/{quizId}/export-pdf")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
+    public ResponseEntity<byte[]> exportQuizPdfInstructor(
+            Principal principal,
+            @PathVariable Long quizId,
+            @RequestParam(defaultValue = "blank") String mode) {
+        byte[] pdf = quizService.exportQuizPdfAsInstructor(principal.getName(), quizId, "cheatsheet".equals(mode));
+        return ResponseEntity.ok()
+                .contentType(org.springframework.http.MediaType.APPLICATION_PDF)
+                .header("Content-Disposition", "attachment; filename=\"quiz-" + quizId + ".pdf\"")
+                .body(pdf);
+    }
+
     @DeleteMapping("/instructor/quizzes/questions/{questionId}")
     @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     public ResponseEntity<Map<String, String>> deleteQuestion(
@@ -84,6 +98,20 @@ public class QuizController {
             @RequestBody com.lms.material.dto.QuizDto.QuestionUpdateReq req) {
         quizService.addPersonalQuestion(principal.getName(), quizId, req);
         return ResponseEntity.ok(Map.of("message", "Thêm câu hỏi thành công"));
+    }
+
+    /** A5 — Export PDF đề trắng/cheatsheet (phía học viên, bộ quiz cá nhân của chính họ). */
+    @GetMapping("/quizzes/{quizId}/export-pdf")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
+    public ResponseEntity<byte[]> exportQuizPdfPersonal(
+            Principal principal,
+            @PathVariable Long quizId,
+            @RequestParam(defaultValue = "blank") String mode) {
+        byte[] pdf = quizService.exportQuizPdfAsOwner(principal.getName(), quizId, "cheatsheet".equals(mode));
+        return ResponseEntity.ok()
+                .contentType(org.springframework.http.MediaType.APPLICATION_PDF)
+                .header("Content-Disposition", "attachment; filename=\"quiz-" + quizId + ".pdf\"")
+                .body(pdf);
     }
 
     @DeleteMapping("/quizzes/questions/{questionId}")
