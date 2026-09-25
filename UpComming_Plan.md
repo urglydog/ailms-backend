@@ -1,4 +1,4 @@
-# Kế Hoạch Các Hạng Mục Còn Lại (Cập nhật 24/09/2026)
+# Kế Hoạch Các Hạng Mục Còn Lại (Cập nhật 25/09/2026)
 
 Các hạng mục A1, A2, A3, A4a, A4b, A5, B1, B2 của đợt trước (Certificate PDF, gộp điểm Quiz vào %, gỡ trang `/progress`, Mermaid Live Preview + Tree-card, Export PDF cheatsheet/đề trắng, nút Tài nguyên tĩnh, Import Anki/Quizlet) **đã xong toàn bộ phần code** — chỉ còn chờ bạn test tay qua UI (chi tiết từng test case đã có ở lịch sử làm việc, không lặp lại ở đây). Không phát hiện lỗi/dở dang nào khi rà lại.
 
@@ -71,6 +71,21 @@ File này giữ đúng 1 nơi duy nhất để ghi việc còn phải làm — c
 4. Index `ivfflat` (`lists=100`) dư thừa ở quy mô catalog nhỏ (~20 dòng) khiến pgvector trả kết quả rỗng ngẫu nhiên (approximate search, không đủ dữ liệu để phân cụm đúng) — đã gỡ index, dùng quét tuần tự chính xác (đủ nhanh ở quy mô này).
 5. Ngưỡng `discovery_min_similarity` mặc định 0.5 quá lỏng (khoá không liên quan vẫn ~0.55-0.63) — tinh chỉnh lên 0.65 dựa trên test thực tế, tách rõ khoá liên quan (~0.70+) khỏi nhiễu.
 
+**Còn lại 2 mục trong nhóm 🎯**: Anti-Cheat (#1) và Auto-ban (#2) bên dưới vẫn CHƯA làm — Discovery là mục duy nhất trong 3 thuật toán điểm nhấn đã xong.
+
+---
+
+## ✅ Việc phát sinh đã sửa xong trong phiên 25/09/2026 (ngoài scope Discovery ban đầu)
+
+Phát hiện lúc GV hỏi thử "AI Trợ lý Giảng dạy" về tình trạng khoá Unity — không liên quan Discovery nhưng cùng phiên nên gộp báo cáo ở đây, đã sửa + push hết:
+
+1. **401 giả ở AI Trợ lý Giảng dạy** — `instructor_ai.py` gọi callback về BE bằng header `Authorization: Bearer` thay vì `X-Internal-Token` đúng chuẩn dự án → BE từ chối 401 vô điều kiện, Gemini tự bịa lời giải thích "đăng xuất đăng nhập lại" nghe rất thật nhưng KHÔNG liên quan JWT/phiên đăng nhập. Sửa dùng lại `backend_client` dùng chung. Sửa luôn `discovery.py` vì cùng 1 pattern lỗi (hiện vô hại vì endpoint public).
+2. **`InternalInstructorAiService` trả số liệu mock cứng** — `totalStudents/averageRating/revenue/recentCourses` trước đây HARDCODE (kể cả 3 khoá học bịa "React Masterclass" không tồn tại trong DB) — GV hỏi khoá thật (Unity) luôn nhận câu trả lời sai. Sửa bằng cách tái dùng `DashboardService` (trang "Hiệu suất" GV, dữ liệu thật). Sửa luôn field `revenue`→`totalRevenue` khớp đúng tên FE đang đọc (trước đó card "Doanh thu" luôn hiện trống), và `period` (this_month/this_year...) giờ mới thực sự được gửi cho BE.
+3. **7 màn hình FE dùng `fetch()` thô bỏ qua auto-refresh access token** — certificate PDF, export quiz PDF (2 chỗ), nộp bài tập multipart, danh sách user admin, trang thông báo, lịch sử chat lesson — tất cả im lặng fail khi access token hết hạn thay vì tự refresh như các API khác. Thêm 2 helper `apiBlob`/`apiFormData` dùng chung logic refresh với `api.*`, migrate hết 7 chỗ.
+4. **`InstructorChat.tsx` lệch kích thước/animation so với `DiscoveryChat.tsx`** — thiếu `overflow-hidden` khiến phần trên bị che ở cửa sổ trình duyệt thấp, animation mở/đóng khác hẳn khung học viên. Đồng bộ lại đúng theo `DiscoveryChat.tsx` làm chuẩn.
+
+Cả 4 đều đã cập nhật vào `CLAUDE.md` (mục 3/4/8) để tránh lặp lại.
+
 ---
 
 ## 🟡 Cần bạn quyết định hướng trước khi làm
@@ -116,4 +131,11 @@ File này giữ đúng 1 nơi duy nhất để ghi việc còn phải làm — c
 
 ---
 
-Bạn muốn bắt đầu từ mục nào? Gợi ý: xử lý lỗi Momo/ZaloPay (🔴, nhanh) trước, rồi vào thẳng 3 thuật toán điểm nhấn (🎯) — đó mới là phần cần "dứt điểm" nhất cho buổi bảo vệ.
+## Task tiếp theo — thứ tự đề xuất
+
+1. **Momo/ZaloPay trả sai URL** (🔴, nhanh, làm ngay được) — vẫn còn treo từ đầu, chưa đụng tới.
+2. **AI Anti-Cheat** (🎯 #1) — còn lại đúng 2/3 thuật toán điểm nhấn cho luận văn, đã có thiết kế chi tiết (Tầng 1 rule-based + Tầng 2 AI Vision webcam), chỉ cần 1 quyết định nhỏ trước khi code (bật webcam bắt buộc mọi bài thi hay chỉ bài `isProctored=true`).
+3. **Auto-ban bằng AI** (🎯 #2) — thiết kế human-in-the-loop đã có, cần bạn chốt ngưỡng cụ thể (số ngày liên tục hết quota, số request/phút bất thường) trước khi code.
+4. Sau khi xong cả 3 thuật toán điểm nhấn: quay lại 3 mục 🟡 cần bạn quyết định hướng (Email OTP thật, VNPAY/Momo/ZaloPay production, thêm Facebook/Zalo login) — không gấp cho buổi bảo vệ, xử lý sau.
+
+Bạn muốn bắt đầu từ mục nào?
