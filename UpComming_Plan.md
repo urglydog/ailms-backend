@@ -20,6 +20,43 @@ Bạn test thật trên điện thoại (máy tính công ty không có mic/came
 
 ---
 
+## ✅ Video giám sát vẫn không lưu được dù test trên máy có mic/camera thật (26/09/2026)
+
+Bạn test lại trên thiết bị có mic/camera thật (không phải hạn chế do máy công ty nữa) — video vẫn hoàn toàn không lưu, cộng thêm 1 điểm AI phân tích còn thô và 1 điểm UX click-vi-phạm quá tức thời. Dùng Explore agent trace lại đúng code vừa viết (không đoán), xác nhận 4 bug + 1 điểm cần tinh chỉnh prompt AI:
+
+1. **Nguyên nhân chính khiến video luôn 0-byte/không upload**: effect "Gắn stream" tự dừng track camera/mic ngay khi `result` (kết quả nộp bài) truthy. Nhưng `submitExam`'s `onSuccess` gọi `setResult(data)` NGAY DÒNG ĐẦU — TRƯỚC `await stopCompositeRecording()`. `await` nhường quyền lại event loop → React kịp flush `result` → effect chạy NGAY, dừng cứng track camera/mic TRONG LÚC `MediaRecorder` còn đang đợi `onstop` flush chunk cuối → track audio bị cắt đột ngột → recorder ra blob rỗng → không bao giờ gọi API upload. `onSuccess` đã có sẵn 1 lệnh dừng track ĐÚNG CHỖ ở cuối (sau khi upload xong) — lệnh dư thừa trong effect chính là nguồn gây race, đã xoá hẳn.
+2. **Rò rỉ camera/mic khi nộp bài lỗi** (bug phụ cùng gốc): các nhánh lỗi (410/404/500/lỗi chung) trước đây không dừng track nào cả — trước đây "ăn theo" hiệu ứng phụ của effect ở mục 1 (dựa vào `result`, nhưng `result` không set khi lỗi) nên đèn camera thực ra sáng treo khi nộp bài thất bại. Đã thêm dừng track tường minh ở các nhánh lỗi.
+3. **Lỗi upload video im lặng hoàn toàn**: mutation upload video không có `onError` — fail vì mạng/413/token hết hạn... thì không log, không toast, không cách nào biết. Đã thêm `console.error` + toast nhẹ (không đổ lỗi học viên, không ảnh hưởng điểm).
+4. **Phòng ngừa rủi ro Safari đứng hình**: canvas ghép hình trước đây không gắn vào DOM — Safari có tiền sử `captureStream()` trên canvas rời DOM bị đứng hình. Đã gắn canvas ẩn vào DOM lúc bắt đầu ghi, gỡ ra lúc dừng ghi.
+5. **AI chỉ báo "không thấy mặt", không phân biệt được "quay mặt đi"**: nguyên nhân không phải logic BE (đã đúng) mà ở PROMPT gửi Gemini — câu hỏi gộp lẫn "faces" và "people" khiến khi thí sinh quay hẳn đầu đi (mặt không thấy rõ nhưng người vẫn ngồi đó), Gemini trả lời theo nghĩa "face" nên `person_count=0`, sụp về "không thấy ai" thay vì đúng ra phải là "quay mặt đi". Đã tách prompt thành 2 câu hỏi độc lập: đếm SỰ HIỆN DIỆN của người (đầu/vai/thân, không cần thấy mặt) và hướng nhìn riêng biệt; "không xác định" giờ chỉ dùng khi thật sự không đánh giá được (quá tối, camera bị che).
+6. **UX click vi phạm quá tức thời** (theo đúng ý bạn "kế thừa Gia sư AI" đã làm đợt trước, giờ tinh chỉnh nhịp độ): trước tua video và xổ chi tiết cùng lúc 1 tick, cảm giác đột ngột. Giờ tua video trước, đợi ~300ms rồi mới xổ chi tiết — đúng cảm giác "tua trước, đọc sau".
+
+**Đã test**: `npx tsc --noEmit` + lint sạch trên 2 file FE sửa (không có lỗi nào ngoài các lỗi pre-existing không liên quan ở trang khác); `mvn clean compile -DskipTests` sạch (BE không đổi code, chỉ chạy lại cho chắc theo quy tắc); ai-worker `py_compile` sạch, container restart lên khoẻ mạnh. **Chưa test được qua Gemini thật** lúc này vì toàn bộ pool API key đang cooldown 1h do rate-limit từ các đợt test trước trong phiên (429, không liên quan tới code vừa sửa) — cần bạn tự test lại: (a) làm 1 lượt thi proctored đầy đủ tới lúc nộp trên máy có camera/mic thật, xác nhận vào "Giám sát thi" thấy video phát được; (b) thử quay mặt hẳn sang 1 bên khi đang thi, xác nhận vi phạm ghi nhận là "ánh mắt rời màn hình" thay vì "không thấy khuôn mặt" (cần đợi qua cooldown Gemini trước); (c) vào 1 lượt thi có vi phạm, click 1 dòng, xác nhận video tua trước rồi mới xổ chi tiết.
+
+---
+
+## ✅ Fix bug thật: "cooldown 1h do 429" ở trên thực ra là bug logic, không phải rate-limit thật (26/09/2026)
+
+Bạn chỉ đúng ngay: dashboard Google AI Studio cho thấy quota Gemini 3.5 Flash còn dư rất nhiều (8/1000 RPM) — không thể nào hit limit thật như tôi báo nhầm ở mục trên. Dùng Explore agent trace lại code, tìm ra bug thật trong `ai-worker/app/providers/gemini.py`: lúc verify fix trước đó, tôi gọi thử `/analyze-frame` với 1 chuỗi byte JPEG giả (test data, không phải ảnh thật) → Gemini trả đúng `400 Bad Request` (hợp lý, payload ảnh hỏng) — nhưng code cũ coi MỌI mã 400/403 là "key có vấn đề" và khoá luôn 1 tiếng, không phân biệt được "key thật sự sai/bị chặn" với "1 request cụ thể gửi payload sai". 1 request test hỏng đã khoá oan 1 key hoàn toàn khoẻ mạnh mất 1 tiếng.
+
+Đã sửa: đọc body lỗi Google trả về để phân biệt — chỉ khoá key khi thật sự là lỗi auth/key (403, `PERMISSION_DENIED`, `UNAUTHENTICATED`, `API_KEY_INVALID`); 400 do payload sai (vd ảnh hỏng) thì trả lỗi thẳng cho caller, không đụng key pool. Đồng thời sửa dòng log cứng "bi 429" (in sai ngay cả khi lý do thật là 400/403) và thêm validate base64 sớm ở `proctoring.py` để chặn payload hỏng trước khi tốn 1 lượt gọi Gemini.
+
+**Đã test qua API thật** (curl trực tiếp `/analyze-frame`): (1) base64 hỏng hoàn toàn → bị chặn ngay tại ai-worker, không gọi Gemini; (2) base64 hợp lệ nhưng không phải ảnh thật → Gemini từ chối đúng với `INVALID_ARGUMENT`, log không còn "bi 429", key KHÔNG bị khoá; (3) gọi lại ngay với 1 ảnh JPEG hợp lệ → trả `200 OK` bình thường, xác nhận key vẫn hoạt động liền sau lỗi trước đó, không còn bị khoá oan. Đã commit & push `ai-worker` lên `feat/additional-features`.
+
+---
+
+## ✅ Video Safari upload thành công nhưng sai đuôi/Content-Type nên không phát được (26/09/2026)
+
+Bạn test thật attempt #69 trên iPhone Safari: 3 vi phạm ghi đúng mốc thời gian, nộp bài thành công, nhưng vào "Giám sát thi" vẫn báo "No video with supported format and MIME type found". Kiểm tra DB + B2 xác nhận file THẬT SỰ đã tạo và upload thành công (17.5MB, không phải file rỗng như bug race condition đã sửa trước đó) — dùng Explore agent trace lại toàn bộ chuỗi FE→BE→B2, xác nhận đây là 1 bug khác: **BE dùng chính chuỗi Tika đoán được để quyết định CẢ đuôi file LẪN Content-Type lưu B2** — nhưng Tika soi "magic bytes" dựa vào box `ftyp` ở đầu file để nhận diện mp4, mà container MP4 phân mảnh (fragmented) do `MediaRecorder` của Safari tạo ra không theo cấu trúc mux chuẩn (khác ffmpeg), rất dễ soi trượt và rơi về nhánh mặc định "webm" — dù bytes bên trong thật sự là MP4/H.264. Hậu quả: file lưu đúng bytes MP4 nhưng khai sai `.webm` + `Content-Type: video/webm`, trình duyệt reviewer đúng lý từ chối phát.
+
+**Đây là lỗi chung của MỌI Safari (macOS lẫn iOS/iPadOS)**, không phải riêng iPhone — nguyên nhân gốc là cách Safari tạo container MP4, không liên quan hình dạng thiết bị. Chrome/Firefox ghi webm chuẩn nên Tika soi đúng, không gặp lỗi này.
+
+Đã sửa: BE không còn dùng chuỗi chi tiết Tika để quyết định đuôi/Content-Type nữa — chỉ giữ Tika làm hàng rào an ninh rộng (phải là `video/*` mới cho qua, không đổi). Đuôi/Content-Type chính xác giờ lấy từ TÊN FILE GỐC do FE đặt (`attempt-<id>.mp4`/`.webm` — FE tự tính từ `recorder.mimeType` THẬT của trình duyệt lúc ghi, đáng tin hơn Tika cho container lạ này). Kèm 1 fix phòng ngừa: bọc `await stopCompositeRecording()` bằng timeout 5s ở FE — nếu `MediaRecorder.onstop` không bao giờ bắn ra trên 1 số WebKit (tiền sử đã biết), camera/mic vẫn được giải phóng đúng lúc thay vì treo vĩnh viễn (nghi ngờ liên quan tới icon micro bạn thấy vẫn hiện sau khi nộp bài, dù CHƯA CHẮC CHẮN 100% là nguyên nhân — video attempt #69 vẫn upload thành công nghĩa là lần đó `onstop` đã bắn ra bình thường).
+
+**Đã test qua API thật**: upload 1 file `.mp4` giả lập (có `ftyp` box hợp lệ) qua `POST /api/v1/quizzes/attempts/69/recording` — xác nhận key lưu B2 giờ đúng đuôi `.mp4` và `Content-Type: video/mp4` (trước đây sẽ luôn phụ thuộc Tika, giờ đảm bảo đúng theo tên file FE gửi bất kể Tika đoán ra sao). **Recording cũ của attempt #69 vẫn sai** (dữ liệu cũ trước fix, không tự sửa ngược được) — cần bạn làm lại 1 lượt thi MỚI trên Safari để có video đúng, xác nhận: (a) video phát được trên trang "Giám sát thi", (b) icon micro tắt đúng lúc sau khi nộp bài.
+
+---
+
 ## ✅ UX Giám sát thi + Materials Workspace — sửa theo phản hồi thật (26/09/2026)
 
 Phản hồi trực tiếp sau khi dùng thử: thiết kế "Giám sát thi" đợt trước vi phạm nhiều nguyên tắc UX cơ bản — quá nhiều bước (chọn khoá → chọn quiz → mới thấy lượt thi), quá nhiều chữ giải thích thừa, dùng ID vô nghĩa ("Bài thi #3"), ngôn từ dài dòng ("Xem bằng chứng", "Không có video bằng chứng cho lượt thi này"). Đã sửa toàn bộ:

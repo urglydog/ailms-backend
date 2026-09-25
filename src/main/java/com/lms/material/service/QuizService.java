@@ -785,14 +785,24 @@ public class QuizService {
             throw new com.lms.common.exception.InvalidRequestException("File tai len phai la video, nhan duoc: " + detectedMime);
         }
 
-        // BUG THẬT (26/09/2026): trước đây hardcode ".webm" — nhưng Safari (macOS/iOS) không ghi
-        // được webm, FE đã đổi sang tự dò mimeType thật (mp4 trên Safari) nên key lưu trữ cũng
-        // phải khớp đúng định dạng thật, không phải cố định 1 đuôi.
-        String ext = detectedMime.contains("mp4") ? "mp4" : "webm";
+        // BUG THẬT (26/09/2026, phát hiện lúc test thật trên iPhone Safari): trước đây dùng
+        // chính chuỗi Tika trả về (`detectedMime`) để quyết định CẢ đuôi file LẪN Content-Type
+        // lưu B2. Nhưng Tika chỉ soi "magic bytes" ở đầu file để đoán mp4/webm — container MP4
+        // phân mảnh (fragmented) mà MediaRecorder của Safari tạo ra không theo cấu trúc mux
+        // chuẩn (khác ffmpeg), rất dễ soi trượt và rơi về nhánh mặc định "webm" dù bytes thật sự
+        // là MP4/H.264. Hậu quả: file lưu đúng bytes MP4 nhưng bị khai .webm + Content-Type
+        // video/webm sai, trình duyệt reviewer từ chối phát ("No video with supported format").
+        // Fix: chỉ dùng Tika làm hàng rào AN NINH rộng (đã kiểm tra ở trên — phải là video/*),
+        // còn đuôi/Content-Type CHÍNH XÁC thì lấy từ tên file gốc FE đặt (`attempt-<id>.mp4`/
+        // `.webm` — FE tự tính từ `recorder.mimeType` THẬT của trình duyệt lúc ghi, đáng tin hơn
+        // Tika cho trường hợp container lạ này).
+        String originalFilename = file.getOriginalFilename();
+        String ext = (originalFilename != null && originalFilename.toLowerCase().endsWith(".mp4")) ? "mp4" : "webm";
+        String contentType = ext.equals("mp4") ? "video/mp4" : "video/webm";
         String key = "proctoring/" + attemptId + "/" + UUID.randomUUID() + "." + ext;
         String url;
         try (InputStream in = file.getInputStream()) {
-            url = storageService.upload(key, in, file.getSize(), detectedMime);
+            url = storageService.upload(key, in, file.getSize(), contentType);
         } catch (IOException e) {
             throw new com.lms.common.exception.InvalidRequestException("Khong tai duoc video len kho luu tru: " + e.getMessage());
         }
