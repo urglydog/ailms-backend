@@ -59,6 +59,7 @@ class CourseServiceTest {
     @Mock private InstructorVerificationRepository instructorVerificationRepository;
     @Mock private CourseInviteRepository courseInviteRepository;
     @Mock private PasswordEncoder passwordEncoder;
+    @Mock private CourseEmbeddingService courseEmbeddingService;
 
     @InjectMocks
     private CourseService courseService;

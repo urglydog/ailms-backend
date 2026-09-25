@@ -52,6 +52,7 @@ class LessonServiceTest {
     @Mock private FfprobeService ffprobeService;
     @Mock private YoutubeMetadataService youtubeMetadataService;
     @Mock private TranscriptExtractionService transcriptExtractionService;
+    @Mock private CourseEmbeddingService courseEmbeddingService;
 
     @InjectMocks
     private LessonService lessonService;

@@ -35,6 +35,7 @@ class ChapterServiceTest {
     @Mock private CourseRepository courseRepository;
     @Mock private LessonRepository lessonRepository;
     @Mock private LessonService lessonService;
+    @Mock private CourseEmbeddingService courseEmbeddingService;
 
     @InjectMocks
     private ChapterService chapterService;
