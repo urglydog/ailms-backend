@@ -1,4 +1,4 @@
-# Kế Hoạch Các Hạng Mục Còn Lại (Cập nhật 25/09/2026)
+# Kế Hoạch Các Hạng Mục Còn Lại (Cập nhật 26/09/2026)
 
 Các hạng mục A1, A2, A3, A4a, A4b, A5, B1, B2 của đợt trước (Certificate PDF, gộp điểm Quiz vào %, gỡ trang `/progress`, Mermaid Live Preview + Tree-card, Export PDF cheatsheet/đề trắng, nút Tài nguyên tĩnh, Import Anki/Quizlet) **đã xong toàn bộ phần code** — chỉ còn chờ bạn test tay qua UI (chi tiết từng test case đã có ở lịch sử làm việc, không lặp lại ở đây). Không phát hiện lỗi/dở dang nào khi rà lại.
 
@@ -6,13 +6,30 @@ File này giữ đúng 1 nơi duy nhất để ghi việc còn phải làm — c
 
 ---
 
-## 🔴 Ưu tiên xử lý trước — lỗi đang tồn tại (không phải tính năng thiếu)
+## ✅ UX Giám sát thi + Materials Workspace — sửa theo phản hồi thật (26/09/2026)
 
-### Momo/ZaloPay ở checkout đang âm thầm trả sai URL
+Phản hồi trực tiếp sau khi dùng thử: thiết kế "Giám sát thi" đợt trước vi phạm nhiều nguyên tắc UX cơ bản — quá nhiều bước (chọn khoá → chọn quiz → mới thấy lượt thi), quá nhiều chữ giải thích thừa, dùng ID vô nghĩa ("Bài thi #3"), ngôn từ dài dòng ("Xem bằng chứng", "Không có video bằng chứng cho lượt thi này"). Đã sửa toàn bộ:
 
-**Hiện trạng**: FE (`checkout/[slug]/page.tsx`, `checkout/cart/page.tsx`) có nút chọn Momo/ZaloPay, nhưng BE (`PaymentService.java`, nhánh "Fallback for Momo / Others") không có xử lý riêng cho 2 cổng này — mọi lựa chọn Momo/ZaloPay đều rơi vào nhánh fallback và trả về **URL sandbox của VNPAY**. Học viên chọn Momo nhưng bị đưa sang trang VNPAY, không có thông báo lỗi nào.
+- **IA**: bỏ hẳn 2 trang trung gian (chọn khoá, chọn quiz) — "Giám sát thi" giờ là 1 tab ngay trong sidebar sửa khoá học (cùng cấp "Chương trình giảng dạy"/"Học liệu & Quiz thi cử"), courseId đã có sẵn từ URL nên chỉ còn 1 bảng phẳng gộp mọi lượt thi của mọi quiz giám sát trong khoá — 1 API duy nhất (`GET .../courses/{courseId}/attempts`), không cần vào 1 quiz cụ thể mới xem được dữ liệu.
+- **Chữ nghĩa**: bỏ phụ đề giải thích thừa dưới tiêu đề; "Bài thi #3" → tên thật (fallback "Đề thi không tên" nếu instructor chưa đặt tên, khớp quy ước "Học liệu không tên" đã dùng ở Workspace — KHÔNG hiện ID DB vô nghĩa nữa); "Xem bằng chứng" → icon mắt + tooltip; "Không có video bằng chứng cho lượt thi này" → "Chưa có video".
+- **Chỉ nổi bật thứ đáng chú ý**: badge rủi ro chỉ hiện màu khi MEDIUM/HIGH — LOW/chưa có đánh giá để trống (dấu gạch ngang), không kéo mắt người xem vào thứ không quan trọng.
+- **Materials Workspace — tìm ra nguyên nhân gốc "nhìn như ảnh tĩnh, không phân biệt được"**: `MaterialFolderTree.tsx` dùng `border-gray-50` (literal Tailwind, gần như vô hình trên nền trắng) thay vì token `border-line` của dự án — sau hơn chục lần "fix" trước đó không cải thiện vì không ai tìm đúng dòng này. Đã sửa + audit toàn bộ `border-gray-*`/token literal khác trong khu vực. Panel "Phân Phối (Shortcuts)" bên trái: các dòng shortcut trước đây là text trần không border/nền/màu nhạt (`text-ink-muted`) — giờ có border + nền + `text-ink` đậm, rõ ràng là object bấm được.
 
-**Việc cần làm** (làm ngay được, không cần chờ quyết định lớn): chặn ở BE — nếu `paymentMethod` là MOMO/ZALOPAY mà chưa có triển khai thật, trả lỗi rõ ràng (vd 501/thông báo "Phương thức đang bảo trì") thay vì âm thầm trả URL VNPAY sai. Cân nhắc song song: ẩn tạm 2 nút này ở FE nếu chưa có kế hoạch làm thật trong ngắn hạn.
+---
+
+## ✅ Task nhỏ đã dứt điểm trong phiên 25/09/2026 (đợt 3, "râu ria")
+
+### 1. Momo/ZaloPay ở checkout âm thầm trả sai URL — ĐÃ XONG
+
+`PaymentService.createPayment`/`createBatchPayment` trước đây fallback mọi `paymentMethod` lạ (kể cả MOMO/ZALOPAY) sang URL sandbox VNPAY, không báo lỗi. Đã validate ngay đầu hàm, ném `BusinessRuleViolationException` 422 rõ ràng ("Phương thức thanh toán MOMO hiện chưa được hỗ trợ..."). Đã test thật qua API: MOMO → 422 đúng, VNPAY vẫn hoạt động bình thường, không để lại row `Payment` PENDING rác (rollback `@Transactional` sạch).
+
+### 2. FE hiện sai thông báo lỗi thanh toán/ghi danh (bug liên đới phát hiện lúc sửa mục 1)
+
+`checkout/[slug]/page.tsx`, `checkout/cart/page.tsx`, `EnrollButton.tsx` đọc `err.detail` — nhưng `ApiError` (client dùng chung) không có field này, chỉ có `.message`. Kết quả: mọi lỗi thanh toán/ghi danh luôn hiện thông báo chung chung, kể cả lỗi Momo vừa sửa ở trên (không sửa cùng lúc thì bạn sẽ vẫn thấy "Có lỗi xảy ra" thay vì lý do thật). Đã sửa cả 3 chỗ theo đúng pattern `applyCoupon` đã làm đúng từ trước.
+
+### 3. Màn hình Workspace học liệu không có filter/search hiệu quả
+
+`CourseMaterialsManager.tsx` (màn `.../edit/materials`) trước đây chỉ có ô tìm kiếm lọc theo tiêu đề — vô dụng với phần lớn học liệu vì tiêu đề trống ("Học liệu không tên"), và hoàn toàn không có cách nào tách Quiz/Flashcard/Mindmap hay Draft/Official — mọi loại nằm chung 1 lưới. Đã thêm 1 hàng filter mới (chip button) lọc theo loại + trạng thái, kết hợp với ô tìm kiếm sẵn có. Icon `lucide-react` đơn sắc tái dùng từ bộ đã import sẵn, màu theo token có sẵn — đúng CLAUDE.md mục 9 (quy tắc icon/label khu vực Materials Workspace). Lưu ý: "Tài nguyên tĩnh" là màn hình riêng ở sidebar (không nằm trong Workspace này) nên không có trong bộ lọc.
 
 ---
 
@@ -130,11 +147,10 @@ Cả 4 đều đã cập nhật vào `CLAUDE.md` (mục 3/4/8) để tránh lặ
 
 ## Task tiếp theo — thứ tự đề xuất
 
-Cả 3/3 thuật toán điểm nhấn (Discovery, Anti-Cheat + video bằng chứng + màn hình giám sát, Auto-ban) đã xong phần code và test qua API thật. Còn lại:
+Cả 3/3 thuật toán điểm nhấn (Discovery, Anti-Cheat + video bằng chứng + màn hình giám sát, Auto-ban) đã xong phần code và test qua API thật. Momo/ZaloPay + 3 bug/thiếu-sót nhỏ liên đới cũng đã dứt điểm (xem mục ✅ phía trên). Còn lại:
 
-1. **Test tay qua UI thật** (ưu tiên trước — code mới test qua API/curl, chưa test qua trình duyệt thật): mở 1 quiz `isProctored=true`, làm thử 1 lượt (xin quyền Camera+Micro+chia sẻ màn hình — 3 quyền riêng, trình duyệt hỏi lần lượt), thử chuyển tab/thoát fullscreen/mở DevTools/nói to liên tục, xác nhận toast cảnh báo + tự nộp bài đúng lúc. Sau đó vào `/instructor/proctoring` với tài khoản giảng viên, xác nhận thấy đúng lượt thi vừa làm, video phát được, click marker nhảy đúng thời điểm.
-2. **Momo/ZaloPay trả sai URL** (🔴, nhanh, làm ngay được) — vẫn còn treo từ đầu, chưa đụng tới.
-3. 3 mục 🟡 cần bạn quyết định hướng (Email OTP thật, VNPAY/Momo/ZaloPay production, thêm Facebook/Zalo login) — không gấp cho buổi bảo vệ, xử lý sau.
-4. (Nhỏ, không gấp) Job Celery tự xoá video proctoring quá hạn 30-90 ngày — video hiện lưu vô thời hạn.
+1. **Test tay qua UI thật cho Anti-Cheat** (ưu tiên trước — code mới test qua API/curl, chưa test qua trình duyệt thật): mở 1 quiz `isProctored=true`, làm thử 1 lượt (xin quyền Camera+Micro+chia sẻ màn hình — 3 quyền riêng, trình duyệt hỏi lần lượt), thử chuyển tab/thoát fullscreen/mở DevTools/nói to liên tục, xác nhận toast cảnh báo + tự nộp bài đúng lúc. Sau đó vào sửa khoá học → tab "Giám sát thi" (đã dời vào đây, không còn ở sidebar Giảng viên top-level nữa), xác nhận thấy đúng lượt thi vừa làm, video phát được, click marker nhảy đúng thời điểm.
+2. 3 mục 🟡 cần bạn quyết định hướng (Email OTP thật, VNPAY/Momo/ZaloPay production, thêm Facebook/Zalo login) — không gấp cho buổi bảo vệ, xử lý sau.
+3. (Nhỏ, không gấp) Job Celery tự xoá video proctoring quá hạn 30-90 ngày — video hiện lưu vô thời hạn.
 
-Bạn muốn bắt đầu từ mục nào?
+Bạn muốn bắt đầu từ mục nào? Gợi ý: nếu muốn "nâng cấp Anti-Cheat" tiếp (bạn nhắc ở đầu phiên) — cần nói rõ hơn bạn muốn nâng cấp phần nào cụ thể (thêm tín hiệu hành vi mới? tinh chỉnh ngưỡng risk score? mở rộng màn hình giám sát?) để lên kế hoạch cụ thể, hay ý bạn là test/tinh chỉnh phần vừa xong ở mục 1 trước.

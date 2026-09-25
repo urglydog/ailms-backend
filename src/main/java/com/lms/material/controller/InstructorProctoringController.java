@@ -25,10 +25,17 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * UC-ANTICHEAT (25/09/2026) — màn hình "Giám sát thi" cho giảng viên: danh sách quiz có bật
- * giám sát → danh sách lượt thi kèm risk level → chi tiết 1 lượt thi (video bằng chứng + marker
- * vi phạm). KHÔNG mở rộng {@code InstructorGradebookController} — Gradebook chỉ có điểm số tổng
- * hợp (chỉ lượt gần nhất/cao nhất mỗi học viên), không hợp để nhét thêm video/timeline. Logic đặt
+ * UC-ANTICHEAT (25/09/2026, rút gọn IA 26/09/2026) — màn hình "Giám sát thi" cho giảng viên.
+ *
+ * <p><b>Bug UX thật đã sửa</b>: thiết kế ban đầu tách 2 bước (chọn khoá → chọn quiz → mới thấy
+ * lượt thi) qua 2 endpoint riêng (`courses/{id}/quizzes` rồi `quizzes/{id}/attempts`) — quá nhiều
+ * bước để xem dữ liệu 1 bài thi cụ thể, theo đúng phản hồi thật của giảng viên dùng thử. Gộp còn
+ * ĐÚNG 1 endpoint `courses/{courseId}/attempts` trả về TẤT CẢ lượt thi (đã gộp cả tên quiz vào
+ * từng dòng) của mọi quiz có giám sát trong 1 khoá — FE giờ chỉ cần course context (đã có sẵn từ
+ * URL trang sửa khoá học) + 1 lần gọi API, không cần màn hình trung gian "chọn quiz" nữa.
+ *
+ * <p>KHÔNG mở rộng {@code InstructorGradebookController} — Gradebook chỉ có điểm số tổng hợp
+ * (chỉ lượt gần nhất/cao nhất mỗi học viên), không hợp để nhét thêm video/timeline. Logic đặt
  * thẳng trong controller, đúng phong cách {@code InstructorGradebookController} (inner DTO
  * {@code @Data @Builder}) thay vì tách service riêng.
  */
@@ -44,43 +51,39 @@ public class InstructorProctoringController {
     private final QuizAttemptViolationRepository quizAttemptViolationRepository;
     private final ProctoringRecordingRepository proctoringRecordingRepository;
 
-    @GetMapping("/courses/{courseId}/quizzes")
+    /** Danh sách TẤT CẢ lượt thi (đã nộp) của mọi quiz có bật giám sát trong 1 khoá học, gộp sẵn
+     * tên quiz vào từng dòng — không cần màn hình trung gian "chọn quiz" nữa. Sắp xếp mới nhất
+     * trước. */
+    @GetMapping("/courses/{courseId}/attempts")
     @Transactional(readOnly = true)
-    public ResponseEntity<List<QuizSummaryDto>> getProctoredQuizzes(Principal principal, @PathVariable Long courseId) {
+    public ResponseEntity<List<AttemptSummaryDto>> getAttempts(Principal principal, @PathVariable Long courseId) {
         Course course = loadOwnedCourse(courseId, principal.getName());
         List<Quiz> quizzes = quizRepository.findByMaterialGeneration_Course_IdAndIsProctoredTrue(course.getId());
 
-        return ResponseEntity.ok(quizzes.stream().map(q -> {
-            List<QuizAttempt> attempts = quizAttemptRepository.findByQuiz_IdAndStatusOrderBySubmittedAtDesc(q.getId(), "COMPLETED");
-            long highRiskCount = quizAttemptRepository.countByQuiz_IdAndAiRiskLevel(q.getId(), "HIGH");
-            return QuizSummaryDto.builder()
-                    .quizId(q.getId())
-                    .title(q.getMaterialGeneration().getTitle())
-                    .quizType(q.getQuizType().name())
-                    .attemptCount(attempts.size())
-                    .highRiskCount(highRiskCount)
-                    .build();
-        }).toList());
-    }
+        List<AttemptSummaryDto> result = quizzes.stream()
+                .flatMap(q -> quizAttemptRepository.findByQuiz_IdAndStatusOrderBySubmittedAtDesc(q.getId(), "COMPLETED").stream()
+                        .map(a -> AttemptSummaryDto.builder()
+                                .attemptId(a.getId())
+                                // MaterialGeneration.title thường NULL (instructor chưa đặt tên
+                                // riêng) — cùng quy ước fallback "không tên" đã dùng ở Workspace
+                                // học liệu (CourseMaterialsManager.tsx), tránh hiện ID vô nghĩa
+                                // kiểu "Bài thi #3" (bug UX thật đã bị phản ánh, 26/09/2026).
+                                .quizTitle(q.getMaterialGeneration().getTitle() != null
+                                        ? q.getMaterialGeneration().getTitle() : "Đề thi không tên")
+                                .studentName(a.getUser().getFullName())
+                                .studentEmail(a.getUser().getEmail())
+                                .submittedAt(a.getSubmittedAt())
+                                .violationCount(a.getViolationCount())
+                                .aiRiskLevel(a.getAiRiskLevel())
+                                .hasRecording(proctoringRecordingRepository.findByAttempt_Id(a.getId()).isPresent())
+                                .build()))
+                .sorted((a, b) -> {
+                    if (a.getSubmittedAt() == null || b.getSubmittedAt() == null) return 0;
+                    return b.getSubmittedAt().compareTo(a.getSubmittedAt());
+                })
+                .toList();
 
-    @GetMapping("/quizzes/{quizId}/attempts")
-    @Transactional(readOnly = true)
-    public ResponseEntity<List<AttemptSummaryDto>> getAttempts(Principal principal, @PathVariable Long quizId) {
-        Quiz quiz = quizRepository.findById(quizId)
-                .orElseThrow(() -> new ResourceNotFoundException("Quiz", quizId));
-        loadOwnedCourse(quiz.getMaterialGeneration().getCourse().getId(), principal.getName());
-
-        List<QuizAttempt> attempts = quizAttemptRepository.findByQuiz_IdAndStatusOrderBySubmittedAtDesc(quizId, "COMPLETED");
-        return ResponseEntity.ok(attempts.stream().map(a -> AttemptSummaryDto.builder()
-                        .attemptId(a.getId())
-                        .studentName(a.getUser().getFullName())
-                        .studentEmail(a.getUser().getEmail())
-                        .submittedAt(a.getSubmittedAt())
-                        .violationCount(a.getViolationCount())
-                        .aiRiskLevel(a.getAiRiskLevel())
-                        .hasRecording(proctoringRecordingRepository.findByAttempt_Id(a.getId()).isPresent())
-                        .build())
-                .toList());
+        return ResponseEntity.ok(result);
     }
 
     @GetMapping("/attempts/{attemptId}")
@@ -126,18 +129,9 @@ public class InstructorProctoringController {
 
     @Data
     @Builder
-    public static class QuizSummaryDto {
-        private Long quizId;
-        private String title;
-        private String quizType;
-        private int attemptCount;
-        private long highRiskCount;
-    }
-
-    @Data
-    @Builder
     public static class AttemptSummaryDto {
         private Long attemptId;
+        private String quizTitle;
         private String studentName;
         private String studentEmail;
         private LocalDateTime submittedAt;

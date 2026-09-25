@@ -26,7 +26,6 @@ public interface QuizAttemptRepository extends JpaRepository<QuizAttempt, Long> 
 
     /** UC-ANTICHEAT — màn hình "Giám sát thi" cho giảng viên. */
     List<QuizAttempt> findByQuiz_IdAndStatusOrderBySubmittedAtDesc(Long quizId, String status);
-    long countByQuiz_IdAndAiRiskLevel(Long quizId, String aiRiskLevel);
     
     List<QuizAttempt> findByUser_EmailAndQuiz_MaterialGeneration_Course_IdOrderBySubmittedAtDesc(String email, Long courseId);
     

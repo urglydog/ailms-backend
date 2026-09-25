@@ -85,6 +85,12 @@ public class PaymentService {
         if (enrollmentRepository.existsByUser_IdAndCourse_Id(user.getId(), course.getId())) {
             throw new BusinessRuleViolationException("BR-ENROLL-01: Bạn đã sở hữu khóa học này.");
         }
+        // BUG THẬT (25/09/2026) — xem docblock nhánh fallback bên dưới: validate NGAY từ đầu
+        // (trước khi tạo dòng Payment PENDING) thay vì để tới cuối hàm.
+        if (!"PAYOS".equalsIgnoreCase(req.paymentMethod()) && !"VNPAY".equalsIgnoreCase(req.paymentMethod())) {
+            throw new BusinessRuleViolationException("PAYMENT_METHOD_UNAVAILABLE",
+                    "Phương thức thanh toán \"" + req.paymentMethod() + "\" hiện chưa được hỗ trợ. Vui lòng chọn VNPAY hoặc PayOS.");
+        }
 
         // BR-PAY-02: Lấy giá từ server. UC57 mở rộng (15/09/2026) — áp coupon tốt nhất
         // (autoApply + mã tự nhập nếu có, BR-COUPON-01 không cộng dồn) TRƯỚC khi chốt amount,
@@ -128,9 +134,10 @@ public class PaymentService {
             return new PaymentDto.PaymentUrlRes(buildVnpayUrl(txnRef, amount, orderInfo));
         }
 
-        // Fallback for Momo / Others
-        String mockPaymentUrl = "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?vnp_TxnRef=" + payment.getTxnRef();
-        return new PaymentDto.PaymentUrlRes(mockPaymentUrl);
+        // Không thể tới đây nữa — đã validate paymentMethod ngay đầu hàm (trước đây MOMO/ZALOPAY
+        // và bất kỳ giá trị lạ nào rơi vào đây, ÂM THẦM trả URL sandbox VNPAY sai — bug thật,
+        // 25/09/2026).
+        throw new IllegalStateException("Unreachable: paymentMethod đã được validate ở đầu hàm");
     }
 
     /**
@@ -149,6 +156,13 @@ public class PaymentService {
     public PaymentDto.PaymentUrlRes createBatchPayment(String email, PaymentDto.CreateBatchReq req) {
         if (req.courseIds() == null || req.courseIds().isEmpty()) {
             throw new BusinessRuleViolationException("Chọn ít nhất 1 khóa học để thanh toán.");
+        }
+        // BUG THẬT (25/09/2026) — xem docblock nhánh tương tự ở createPayment(): validate NGAY
+        // từ đầu (trước khi tạo N dòng Payment PENDING) thay vì để rơi vào fallback VNPAY sai ở
+        // cuối hàm.
+        if (!"PAYOS".equalsIgnoreCase(req.paymentMethod()) && !"VNPAY".equalsIgnoreCase(req.paymentMethod())) {
+            throw new BusinessRuleViolationException("PAYMENT_METHOD_UNAVAILABLE",
+                    "Phương thức thanh toán \"" + req.paymentMethod() + "\" hiện chưa được hỗ trợ. Vui lòng chọn VNPAY hoặc PayOS.");
         }
         List<Long> distinctIds = req.courseIds().stream().distinct().toList();
 
@@ -224,8 +238,8 @@ public class PaymentService {
             return new PaymentDto.PaymentUrlRes(buildVnpayUrl(orderGroupRef, totalAmount, orderInfo));
         }
 
-        // Fallback for Momo / Others
-        return new PaymentDto.PaymentUrlRes("https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?vnp_TxnRef=" + orderGroupRef);
+        // Không thể tới đây nữa — đã validate paymentMethod ngay đầu hàm.
+        throw new IllegalStateException("Unreachable: paymentMethod đã được validate ở đầu hàm");
     }
 
     /** Chia doanh thu 2 mức (20/09/2026) — so khớp mã giới thiệu client gửi lên với
