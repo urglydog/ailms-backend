@@ -166,6 +166,36 @@ Cả 4 đều đã cập nhật vào `CLAUDE.md` (mục 3/4/8) để tránh lặ
 
 ---
 
+## 🚀 Nâng cấp Kiến trúc Bảo mật & Tối ưu AI (Phân tích 25/09/2026 - Cần hiện thực)
+
+*Ghi chú: Đây là kết quả từ cuộc thảo luận chuyên sâu về kiến trúc hệ thống và các véc-tơ tấn công (Attack Vectors). Cần hiện thực các ý tưởng này để biến hệ thống thành một sản phẩm có tính bảo mật/tối ưu thực tế cao (Production-ready), rất có giá trị cho báo cáo luận văn.*
+
+### 1. Nâng cấp Anti-Cheat: Hybrid Event-Driven Architecture (AI Biên - Đám mây)
+**Vấn đề / Phản biện từ user**: 
+> "Nếu server-side chỉ dùng đúng 1 tấm hình sau mỗi 25s thì không tránh khỏi chụp đúng lúc người dùng chớp mắt hoặc lắc nhẹ đầu... mà nếu capture khung hình liên tục thì tốn tài nguyên. Khoảng 30 tấm hình cho 15 phút thi để ra kết luận là quá rủi ro. Liệu ta có thể tận dụng cái AI quét mỗi 2s ở client-side cho phía server-side không?"
+
+**Thiết kế hiện thực (Cần làm)**:
+- **Chuyển từ "Định kỳ" (Periodic 25s) sang "Hướng sự kiện" (Event-driven)**: 
+  Sử dụng mô hình AI nhẹ ở FE (`face-api.js` quét mỗi 2s) làm "Cò súng" (Trigger).
+- **Logic FE**: Thay vì gửi ảnh lên AI Worker mù quáng mỗi 25s, FE sẽ theo dõi kết quả của mô hình 2s. Nếu phát hiện `NO_FACE` hoặc `MULTIPLE_FACES` **liên tục trong 3 chu kỳ (6 giây)**, FE lập tức cắt 1 frame ảnh và gửi khẩn cấp lên Server (Gemini) để xác minh (Bypass chu kỳ chờ).
+- **Throttling (Giới hạn tỷ lệ)**: Vẫn phải giữ một khoảng thời gian chờ tối thiểu (ví dụ: tối đa 1 request mỗi 15-20s) kể cả khi FE báo động liên tục, để chống spam API nếu mô hình FE bị nhiễu.
+- **Bắt lỗi hướng nhìn (Gaze/Head turn)**: Vì model FE không bắt được hướng nhìn, vẫn giữ một chu kỳ gửi ảnh ngẫu nhiên (Randomized Polling: ví dụ random 30s-60s gửi 1 lần thay vì cố định 25s) để học viên không thể căn giờ gian lận.
+
+### 2. Nâng cấp Auto-Ban: Chống tấn công Denial of Wallet (DoW) qua Prompt Injection
+**Vấn đề / Phản biện từ user**:
+> "Hết token/Spam request ở học liệu đã có Daily Quota và Redis Lock lo. Kẽ hở duy nhất là AI Discovery/Tutor. Kẻ gian có thể lách luật: Gửi một văn bản CỰC KỲ DÀI vào prompt và bọc bằng câu 'Tôi thấy nội dung này có trong khóa học XXX phải không?'. Nhờ có chữ 'khóa học XXX', nó qua mặt bộ lọc relevance, ép Server đọc 1 đống text rác dài ngoằng, làm cạn kiệt API key (Tốn tiền)."
+
+**Thiết kế hiện thực (Defense in Depth - Cần làm)**:
+- **Lớp 1: Giới hạn độ dài đầu vào (Hard Length Limit)**:
+  - FE: Thêm thuộc tính `maxLength={1000}` (hoặc 500) vào tất cả các ô input chat AI (Tutor / Discovery).
+  - BE/AI-Worker: Dừng ngay và trả về `400 Bad Request` nếu payload `len(prompt) > 1000` trước khi chạm vào bất kỳ logic AI hay Token router nào.
+- **Lớp 2: Rút gọn ngữ cảnh (Context Truncation)**:
+  - Ở AI-Worker, khi query Vector DB (Supabase), dù có tìm ra nhiều bài học liên quan, chỉ được phép nhồi tối đa **3 đoạn văn bản (chunks)** có độ tương đồng cao nhất vào System Prompt gửi cho Gemini. Không bao giờ gửi toàn bộ file nội dung.
+- **Lớp 3: Nâng cấp Auto-Ban dựa trên Token (Token-based Tracking)**:
+  - Hiện tại `AiLockScan` đang đếm số Request/phút. Cần nâng cấp: Đọc cột `total_tokens` trong bảng `ai_usage_logs`.
+  - Nếu 1 user tiêu thụ quá mức bất thường (VD: > 50,000 tokens trong 5 phút), lập tức cắm cờ cảnh báo Auto-Ban, bất kể số lượng request là 1 hay 10.
+
+---
 ## 🟡 Cần bạn quyết định hướng trước khi làm
 
 ### 1. Gửi OTP qua email thật (đang dùng Mailpit — chỉ chạy được lúc dev)
