@@ -196,36 +196,31 @@ Cả 4 đều đã cập nhật vào `CLAUDE.md` (mục 3/4/8) để tránh lặ
   - Nếu 1 user tiêu thụ quá mức bất thường (VD: > 50,000 tokens trong 5 phút), lập tức cắm cờ cảnh báo Auto-Ban, bất kể số lượng request là 1 hay 10.
 
 ---
-## 🟡 Cần bạn quyết định hướng trước khi làm
+## 🛠️ Chốt Cấu Hình Production & Cleanup (Đã thống nhất, chờ làm)
 
-### 1. Gửi OTP qua email thật (đang dùng Mailpit — chỉ chạy được lúc dev)
+*Các hạng mục dưới đây đã được thảo luận và chốt phương án để tối ưu hóa cho mục tiêu bảo vệ luận văn (chạy thật, miễn phí, dễ setup, UI gọn gàng). Các agent ca sau cần bám sát cấu hình này để code.*
 
-**Hiện trạng**: `EmailService.java` gửi qua `JavaMailSender`, cấu hình trong `application.yml` trỏ thẳng vào Mailpit (`host=mailpit`, `port=1025`, không có `username`/`password`, `smtp.auth=false`/`smtp.starttls.enable=false` hardcode). Chưa có profile `application-prod.yml` nào khác. OTP dùng cho đăng ký và quên mật khẩu (2 luồng OTP hơi trùng lặp code, gộp về sau được, không gấp).
+### 1. Dọn dẹp UI Cổng thanh toán
+- **Yêu cầu**: Xóa hoàn toàn các phương thức thanh toán ảo/chưa kích hoạt (VNPAY, Momo, ZaloPay) khỏi giao diện Frontend.
+- **Lý do**: Không có Giấy phép ĐKKD nên không thể đưa lên môi trường thật (Production) cho các cổng này. Giữ lại nút bấm ảo sẽ làm hội đồng bắt bẻ.
+- **Hành động**: Chỉ giữ lại duy nhất phương thức **PayOS (Chuyển khoản VietQR)** làm phương thức thanh toán chính thức vì nó đã chạy thật thành công. Xóa/ẩn UI liên quan đến VNPAY/Momo/ZaloPay trên FE.
 
-**Checklist "đầy đủ" để dùng được ở production**:
-- [ ] Bạn chọn 1 dịch vụ gửi email thật + có domain đã xác thực (SPF/DKIM) — vd Gmail SMTP (dễ, giới hạn số lượng thấp) hoặc SendGrid/Mailgun/AWS SES (chuyên dụng hơn, cần đăng ký + xác thực domain).
-- [ ] Thêm field `spring.mail.username`/`spring.mail.password` vào `application.yml` (hiện chưa tồn tại).
-- [ ] Đổi `smtp.auth`/`smtp.starttls.enable` sang đọc từ env thay vì hardcode `false`.
-- [ ] Đổi `from` (đang hardcode `noreply@lms.local` trong `EmailService.java`) sang địa chỉ thuộc domain đã xác thực.
-- [ ] Tách `application-prod.yml` riêng, giữ nguyên Mailpit cho dev/test.
+### 2. Thay thế Mailpit bằng Gmail SMTP
+- **Yêu cầu**: Backend cần gửi OTP thật đến email người dùng thay vì dùng server local Mailpit.
+- **Lý do**: Cần một hệ thống gửi mail thật, hoàn toàn miễn phí, và không yêu cầu xác thực Tên miền (Domain).
+- **Hành động**: 
+  - Cập nhật cấu hình `spring.mail.*` trong `application.yml` (hoặc tạo `application-prod.yml`).
+  - Sử dụng Host: `smtp.gmail.com`, Port: `587`, bật `smtp.auth=true` và `smtp.starttls.enable=true`.
+  - Hướng dẫn User lấy Mật khẩu ứng dụng (App Password) của Gmail và đưa vào Environment variables.
 
-**Cần bạn trả lời**: chọn dịch vụ nào, đã có domain email riêng chưa?
+### 3. Bổ sung Chính sách cho Google OAuth Consent Screen
+- **Yêu cầu**: Màn hình đăng nhập Google phải chuyên nghiệp (hiện logo, có link chính sách).
+- **Quyết định**: **KHÔNG CẦN CODE**. 
+- **Hành động**: Đây là việc setup trên Portal. Cần nhắc User đăng nhập Google Cloud Console -> OAuth Consent Screen -> Upload Logo dự án, điền link giả định vào ô *Privacy Policy* và *Terms of Service*. Code FE/BE hiện tại đã chuẩn.
 
-### 2. Thanh toán — VNPAY lên thật hay giữ sandbox? Momo/ZaloPay xây thật hay bỏ?
-
-**Hiện trạng**: PayOS đã chạy thật (SDK riêng, webhook có xác thực chữ ký, tự động paid + ghi danh). VNPAY có logic ký/tạo URL thật nhưng hardcode sandbox + bank code test, chưa có IPN thật (chỉ có `/ipn-mock` — code tự ghi "giả lập để test"). Kiến trúc `Payment`/`PaymentService` đã gateway-agnostic, thêm cổng mới không cần đổi kiến trúc, chỉ cần thêm đúng khuôn PayOS.
-
-**Cần bạn trả lời**:
-- VNPAY có cần lên production thật không, hay giữ sandbox vì PayOS đã là cổng chính?
-- Momo: xây thật (cần đăng ký merchant Momo Business) hay bỏ nút?
-- ZaloPay: tương tự — xây thật hay bỏ nút?
-- Có muốn thêm hình thức nào khác không (vd VietQR chuyển khoản trực tiếp, phí thường rẻ hơn gateway)?
-
-### 3. Thêm đăng nhập Facebook (hoặc khác)?
-
-**Hiện trạng**: Google OAuth (Google Identity Services, verify ID token, đọc `GOOGLE_OAUTH_CLIENT_ID` từ env) và Email/mật khẩu đều chạy thật. Facebook/Apple/GitHub/Zalo: hoàn toàn chưa có — không nút, không dependency, không TODO. Kiến trúc auth hiện tại KHÔNG dùng cơ chế OAuth2-client chuẩn của Spring cho Google (tự viết verify riêng) — thêm nhà cung cấp mới cần viết 1 provider riêng theo đúng khuôn `GoogleOAuthProvider`, không phải chỉ thêm config.
-
-**Cần bạn trả lời**: có thật sự cần thêm không (Google + Email/mật khẩu đã đủ cho phần lớn người dùng VN)? Nếu cần, ưu tiên Facebook hay Zalo (Zalo phổ biến hơn với nhiều nhóm người dùng Việt)?
+### 4. Đăng nhập Mạng xã hội (Facebook/Zalo)
+- **Quyết định**: **HỦY BỎ (Không làm)**.
+- **Lý do**: Google và Email/Password đã giải quyết 99% nhu cầu. Quá trình setup Facebook/Zalo tốn nhiều thời gian (cần verify app rườm rà) mà không mang lại thêm nhiều "điểm cộng" cho luận văn. Sẽ dành thời gian tập trung trau chuốt các tính năng AI cốt lõi.
 
 ---
 
