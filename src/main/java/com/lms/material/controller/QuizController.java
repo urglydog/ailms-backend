@@ -155,6 +155,28 @@ public class QuizController {
         return ResponseEntity.ok(quizService.getAttemptDetail(principal.getName(), attemptId));
     }
 
+    /** UC-ANTICHEAT — ghi nhận 1 vi phạm rời rạc (tab-switch, copy/paste, DevTools, idle, âm
+     * thanh, Gemini Vision flag...) trong lúc làm bài. Server-side, thay cho localStorage cũ. */
+    @PostMapping("/quizzes/attempts/{attemptId}/violations")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
+    public ResponseEntity<QuizAttemptDto.ViolationRes> recordViolation(
+            Principal principal,
+            @PathVariable Long attemptId,
+            @RequestBody QuizAttemptDto.ViolationReq req) {
+        return ResponseEntity.ok(quizService.recordViolation(principal.getName(), attemptId, req));
+    }
+
+    /** UC-ANTICHEAT — xác minh khung hình webcam định kỳ bằng Gemini Vision thật (đếm người +
+     * đánh giá hướng nhìn), khác hẳn face-api.js client-side (chỉ để hiển thị UX tức thời). */
+    @PostMapping("/quizzes/attempts/{attemptId}/proctor-frame")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
+    public ResponseEntity<QuizAttemptDto.ProctorFrameRes> analyzeProctorFrame(
+            Principal principal,
+            @PathVariable Long attemptId,
+            @RequestBody QuizAttemptDto.ProctorFrameReq req) {
+        return ResponseEntity.ok(quizService.analyzeProctorFrame(principal.getName(), attemptId, req));
+    }
+
     @PostMapping("/quizzes/tutor/explain")
     @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     public ResponseEntity<QuizAttemptDto.ExplainRes> explainWrongAnswer(

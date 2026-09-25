@@ -51,7 +51,37 @@ public class QuizAttemptDto {
             Integer correctCount,
             Integer totalQuestions,
             List<AnswerDetailDto> details,
-            Boolean isArchived
+            Boolean isArchived,
+            String aiRiskLevel,
+            String aiRiskExplanation
+    ) {}
+
+    /** UC-ANTICHEAT — request FE gửi khi bắt được 1 vi phạm (tab-switch, copy/paste, DevTools,
+     * idle, âm thanh, Gemini Vision flag...). */
+    public record ViolationReq(
+            String type,
+            String detail
+    ) {}
+
+    public record ViolationRes(
+            Integer violationCount,
+            Integer maxViolations,
+            Boolean shouldAutoSubmit
+    ) {}
+
+    /** Request chụp khung hình webcam định kỳ để AI-worker xác minh bằng Gemini Vision. */
+    public record ProctorFrameReq(
+            String imageBase64,
+            String mimeType
+    ) {}
+
+    public record ProctorFrameRes(
+            Integer personCount,
+            String gazeDirection,
+            Boolean flagged,
+            Integer violationCount,
+            Integer maxViolations,
+            Boolean shouldAutoSubmit
     ) {}
 
     public record ExplainReq(

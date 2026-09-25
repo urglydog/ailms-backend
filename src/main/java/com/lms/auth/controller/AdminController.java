@@ -44,4 +44,49 @@ public class AdminController {
         userRepository.save(user);
         return ResponseEntity.ok().build();
     }
+
+    /** Auto-ban bằng AI (25/09/2026) — danh sách user có đề xuất khoá đang chờ Admin xử lý. */
+    @GetMapping("/ai-lock-proposals")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<List<Map<String, Object>>> getAiLockProposals() {
+        return ResponseEntity.ok(userRepository.findByAiLockProposedAtIsNotNull().stream()
+                .map(u -> {
+                    Map<String, Object> row = new java.util.HashMap<>();
+                    row.put("userId", u.getId());
+                    row.put("email", u.getEmail());
+                    row.put("fullName", u.getFullName());
+                    row.put("aiLockProposedAt", u.getAiLockProposedAt());
+                    row.put("aiLockProposedReason", u.getAiLockProposedReason());
+                    return row;
+                })
+                .toList());
+    }
+
+    /** Admin đồng ý đề xuất — khoá thật (dùng lại đúng {@code isAiLocked}), xoá đề xuất. */
+    @PostMapping("/users/{userId}/confirm-lock-proposal")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Transactional
+    public ResponseEntity<Void> confirmLockProposal(@PathVariable Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", userId));
+        user.setIsAiLocked(true);
+        user.setAiLockProposedAt(null);
+        user.setAiLockProposedReason(null);
+        userRepository.save(user);
+        return ResponseEntity.ok().build();
+    }
+
+    /** Admin bỏ qua đề xuất — không khoá, chỉ xoá đề xuất (job có thể tự tạo lại sau nếu tín
+     * hiệu vẫn còn ở lần quét tiếp theo). */
+    @PostMapping("/users/{userId}/dismiss-lock-proposal")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Transactional
+    public ResponseEntity<Void> dismissLockProposal(@PathVariable Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", userId));
+        user.setAiLockProposedAt(null);
+        user.setAiLockProposedReason(null);
+        userRepository.save(user);
+        return ResponseEntity.ok().build();
+    }
 }
