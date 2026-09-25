@@ -11,7 +11,8 @@ import lombok.Setter;
  * Cảnh báo AI ({@link QuizAttemptViolation}) chỉ là marker hỗ trợ; video mới là bằng chứng
  * cuối cùng giảng viên xem lại khi có tranh chấp — đúng cách các tool proctoring thật làm.
  *
- * <p>{@code videoUrl} trỏ vào key dạng {@code proctoring/{attemptId}/{uuid}.webm} trên B2 —
+ * <p>{@code videoUrl} trỏ vào key dạng {@code proctoring/{attemptId}/{uuid}.webm} (hoặc {@code
+ * .mp4} — Safari không ghi được webm, xem {@code QuizService.uploadRecording}) trên B2 —
  * KHÔNG bao giờ nhúng tiêu đề bài thi/ngày giờ vào tên file (đúng quy ước đặt tên hiện có của
  * dự án, xem các nơi khác dùng {@code StorageService}); màn hình quản lý hiển thị tên/ngày giờ
  * từ dữ liệu DB (join qua {@code attempt}), không suy ra từ filename.

@@ -742,7 +742,13 @@ public class QuizService {
         String type = personCount != null && personCount == 0 ? "NO_FACE"
                 : personCount != null && personCount > 1 ? "MULTIPLE_FACES"
                 : "GAZE_AWAY";
-        String detail = "person_count=" + personCount + ", gaze_direction=" + gazeDirection;
+        // BUG THẬT (26/09/2026): trước đây `detail` chỉ lưu chuỗi kỹ thuật thô
+        // "person_count=X, gaze_direction=Y" — bỏ phí hẳn `reasoning` (câu giải thích tự nhiên)
+        // Gemini đã trả về, trong khi đây chính là phần "phân tích chi tiết của AI" giảng viên
+        // muốn đọc khi mở rộng từng dòng vi phạm (giống cách Gia sư AI trích dẫn kèm giải thích).
+        String reasoning = res.get("reasoning") != null ? String.valueOf(res.get("reasoning")) : null;
+        String detail = reasoning != null && !reasoning.isBlank() ? reasoning
+                : "Gemini Vision phát hiện bất thường (person_count=" + personCount + ", gaze_direction=" + gazeDirection + ")";
         QuizAttemptDto.ViolationRes violationRes = recordViolation(studentEmail, attemptId,
                 new QuizAttemptDto.ViolationReq(type, detail));
 
@@ -779,7 +785,11 @@ public class QuizService {
             throw new com.lms.common.exception.InvalidRequestException("File tai len phai la video, nhan duoc: " + detectedMime);
         }
 
-        String key = "proctoring/" + attemptId + "/" + UUID.randomUUID() + ".webm";
+        // BUG THẬT (26/09/2026): trước đây hardcode ".webm" — nhưng Safari (macOS/iOS) không ghi
+        // được webm, FE đã đổi sang tự dò mimeType thật (mp4 trên Safari) nên key lưu trữ cũng
+        // phải khớp đúng định dạng thật, không phải cố định 1 đuôi.
+        String ext = detectedMime.contains("mp4") ? "mp4" : "webm";
+        String key = "proctoring/" + attemptId + "/" + UUID.randomUUID() + "." + ext;
         String url;
         try (InputStream in = file.getInputStream()) {
             url = storageService.upload(key, in, file.getSize(), detectedMime);

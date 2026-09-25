@@ -6,6 +6,20 @@ File này giữ đúng 1 nơi duy nhất để ghi việc còn phải làm — c
 
 ---
 
+## ✅ 3 bug thật + UX kế thừa Gia sư AI — phát hiện lúc test thật trên iPhone Safari (26/09/2026)
+
+Bạn test thật trên điện thoại (máy tính công ty không có mic/camera) và phát hiện đúng — Anti-Cheat vẫn ghi nhận vi phạm nhưng KHÔNG lưu được video, cộng thêm 1 báo động giả. Rà lại tận gốc, tìm ra 3 bug thật:
+
+1. **Video không bao giờ ghi được trên Safari (mọi thiết bị)**: `MediaRecorder` hardcode `video/webm;codecs=vp8,opus` — Safari (macOS lẫn iOS) không hỗ trợ WebM, `new MediaRecorder()` ném lỗi ngay lập tức, rơi vào catch rỗng, ghi hình fail âm thầm dù đã xin đủ quyền camera/mic. Sửa: dò `MediaRecorder.isTypeSupported()` tại runtime, chọn đúng định dạng máy hỗ trợ (webm hoặc mp4), đồng bộ từ FE (Blob type, tên file) tới BE (key lưu trữ B2, không hardcode `.webm` nữa).
+2. **iOS/iPadOS không bao giờ ghi được dù có webcam**: trước đây bắt buộc phải chia sẻ được màn hình (`getDisplayMedia`) mới bắt đầu ghi — nhưng Safari di động hoàn toàn KHÔNG hỗ trợ Screen Capture API (giới hạn nền tảng, không phải bug). Sửa: màn hình giờ optional — không chia sẻ được vẫn ghi webcam full khung, còn hơn không có gì.
+3. **Báo nhầm "Mở DevTools" trên điện thoại**: heuristic so `outerWidth/innerHeight` chỉ đúng trên desktop — trên Safari di động, các giá trị này đổi liên tục do thanh địa chỉ tự thu/hiện khi cuộn, tạo báo động giả dù người dùng không làm gì. Sửa: chặn hẳn check này trên thiết bị cảm ứng (`pointer: coarse`).
+
+**Đồng thời làm luôn tính năng bạn đề xuất** ("kế thừa" UX Gia sư AI — trích dẫn kèm tua video): trang chi tiết lượt thi giờ có video sticky bên trái (không mất khi cuộn), click 1 dòng vi phạm vừa tua video tới đúng thời điểm vừa xổ ra phân tích chi tiết thật của AI (trước đây `detail` chỉ lưu chuỗi kỹ thuật `person_count=X, gaze_direction=Y` — giờ lưu đúng câu giải thích tự nhiên Gemini trả về, vd "Không có người hoặc khuôn mặt nào xuất hiện trong khung hình...").
+
+**Đã test thật qua API** (curl với ảnh test) — xác nhận `detail` lưu đúng câu giải thích AI, không còn chuỗi kỹ thuật. **Chưa test lại qua điện thoại thật** — cần bạn thử lại 1 lượt thi proctored trên Safari (cả iPhone lẫn máy Mac nếu có) để xác nhận video giờ lưu được và không còn báo nhầm DevTools.
+
+---
+
 ## ✅ UX Giám sát thi + Materials Workspace — sửa theo phản hồi thật (26/09/2026)
 
 Phản hồi trực tiếp sau khi dùng thử: thiết kế "Giám sát thi" đợt trước vi phạm nhiều nguyên tắc UX cơ bản — quá nhiều bước (chọn khoá → chọn quiz → mới thấy lượt thi), quá nhiều chữ giải thích thừa, dùng ID vô nghĩa ("Bài thi #3"), ngôn từ dài dòng ("Xem bằng chứng", "Không có video bằng chứng cho lượt thi này"). Đã sửa toàn bộ:
