@@ -20,26 +20,24 @@ File này giữ đúng 1 nơi duy nhất để ghi việc còn phải làm — c
 
 **Bối cảnh**: rà lại cho thấy AI Gia sư (Socratic Tutor) và Dubbing đều đã có chủ trong nhóm, không dùng làm điểm nhấn riêng được. 3 mục dưới đây (Anti-Cheat, Auto-ban, Discovery) hiện đều là "vỏ rỗng" — có giao diện/field nhưng KHÔNG có logic thật phía sau — và đều đang **chưa ai nhận**, có thể trở thành thuật toán thật sự của riêng bạn để trình bày trước hội đồng.
 
-### 1. AI Anti-Cheat — giám sát thi cử thật, 2 tầng
+### 1. AI Anti-Cheat — Composite Behavioral Risk Engine ✅ PHẦN LÕI ĐÃ XONG (25/09/2026), còn 1 phần chưa làm
 
-**Hiện trạng thật**: `Quiz.isProctored`/`maxViolations` chỉ là cột dữ liệu được copy qua lại giữa DTO — đã grep toàn bộ BE/AI-worker/FE, **0 dòng code** phát hiện chuyển tab, mất focus, webcam. Giao diện bật/tắt "AI giám sát" đang đánh lừa cảm giác đã có logic thật phía sau.
+**Đã triển khai đầy đủ và test end-to-end thật** (không phải mock — đã curl trực tiếp qua tài khoản dev, xem `quiz_attempt_violations` trong DB):
+- Server-side violation tracking: bảng `quiz_attempt_violations` (audit trail vĩnh viễn, thay hẳn `localStorage` cũ mà học viên có thể sửa JS để vô hiệu hoá), endpoint `POST /api/v1/quizzes/attempts/{attemptId}/violations`, tự động báo `shouldAutoSubmit=true` khi vượt `maxViolations` — đã test thật: 3 vi phạm liên tiếp (maxViolations=3) → đúng `shouldAutoSubmit=true` ở lần thứ 3.
+- Tier 1 rule-based đầy đủ (FE `exam/[quizId]/page.tsx`): tab-switch, window-blur (bắt được cả trường hợp visibilitychange bỏ lỡ), bắt buộc fullscreen, copy/paste/contextmenu, DevTools mở, idle bất thường, **âm thanh giọng nói kéo dài bất thường** (100% client-side qua Web Audio API `AnalyserNode`, KHÔNG tốn API Gemini nào — đáp ứng đúng lo ngại chi phí, và đáp ứng góp ý của giảng viên bạn về kịch bản "agent đọc câu hỏi hộ bằng giọng nói").
+- Tier 2 AI thật: `POST /api/v1/proctoring/analyze-frame` (AI-worker) — Gemini Vision phân tích khung hình webcam thật (đếm người + đánh giá **định tính hướng nhìn/ánh mắt** như giám thị con người nhìn ảnh — đã test: ảnh xám không có mặt → đúng `person_count=0`), gọi định kỳ 25s, kết quả bất thường ghi thẳng vào cùng đường `quiz_attempt_violations`.
+- **Composite Risk Scoring** (điểm nhấn thật sự, trả lời đúng yêu cầu "suy đoán mức độ gian lận" chứ không đếm đơn thuần): lúc nộp bài, Gemini nhận toàn bộ tín hiệu hành vi đã ghi nhận trong phiên thi, suy luận ra `risk_level` (LOW/MEDIUM/HIGH) + giải thích tiếng Việt cụ thể — đã test thật, phân biệt rõ session "sạch" (LOW) vs session nhiều tín hiệu bất thường cùng lúc (MEDIUM, giải thích đúng lý do); Gemini còn đủ thông minh để nhận ra 1 attempt test giả (thời lượng 1 giây) không phải gian lận thật.
+- Giới hạn kỹ thuật đã xác nhận và cần nói rõ khi bảo vệ: **không thể phát hiện trực tiếp remote-desktop/AnyDesk** (ngoài khả năng JS trong trình duyệt, giới hạn sandbox OS — không riêng dự án này, mọi tool proctoring thương mại cũng vậy) — Composite Risk Engine là lớp phòng vệ hành vi gián tiếp đúng cách các tool đó tiếp cận vấn đề.
 
-**Tầng 1 — Rule-based (nền tảng bắt buộc, làm trước)**:
-- FE trang làm bài thi: bắt `visibilitychange`/`blur` (chuyển tab/thu nhỏ cửa sổ), phát hiện thoát fullscreen (nếu bài thi yêu cầu fullscreen), chặn `copy`/`paste`/`contextmenu` trên vùng đề, phát hiện DevTools mở (chênh lệch `window.outerWidth`/`innerWidth`).
-- API mới `POST /api/v1/quizzes/attempts/{attemptId}/violations` — BE tăng biến đếm, so với `maxViolations` có sẵn → vượt ngưỡng thì tự động nộp bài kèm cờ lý do.
+**Còn thiếu (chưa làm — kế hoạch chi tiết đã có, xem lịch sử làm việc)**: video bằng chứng (ghép màn hình + webcam song song bằng canvas-composite, ghi qua `MediaRecorder`, upload lúc nộp bài, lưu B2 30-90 ngày rồi tự xoá) + màn hình "Giám sát thi" mới cho giảng viên (sidebar item mới, xem danh sách lượt thi theo quiz/khoá, badge risk level, phát lại video kèm marker vi phạm click-to-seek). Cảnh báo AI hiện tại chỉ lưu ở DB dạng text/số đếm — chưa có bằng chứng hình ảnh trực quan để giảng viên đối chiếu khi có tranh chấp thật.
 
-**Tầng 2 — AI thật (điểm nhấn)**: chụp khung hình webcam định kỳ (vd 20-30s/lần), gửi AI-worker (tái dùng client Gemini đã có, không cần SDK mới) hỏi: đúng 1 người trong khung hình không, có đang nhìn màn hình không. Bất thường (0 người/>1 người/không nhìn nhiều lần liên tiếp) cộng vào bộ đếm violation chung. Đây là phần dùng AI đa phương thức ra quyết định thật, không phải if-else đơn thuần.
+### 2. Auto-ban bằng AI ✅ ĐÃ XONG (25/09/2026, human-in-the-loop, không tự khoá)
 
-**Việc cụ thể cần làm**:
-- [ ] BE: bảng/cột lưu lịch sử violation theo attempt (loại vi phạm, thời điểm), endpoint ghi nhận, ngưỡng tự động nộp bài dùng `maxViolations` có sẵn.
-- [ ] FE: listener phát hiện hành vi (tab/focus/fullscreen/devtools/copy-paste) ở trang làm bài thi.
-- [ ] FE: chụp webcam định kỳ, xin quyền camera, thông báo rõ cho học viên đang bị giám sát (vấn đề đạo đức/pháp lý — nên nêu rõ trong luận văn).
-- [ ] AI-worker: task mới nhận ảnh, gọi Gemini Vision phân tích, trả nhãn bất thường.
-- [ ] **Cần bạn quyết định**: bật webcam bắt buộc cho MỌI bài thi, hay chỉ bài có `isProctored=true` (đúng ý nghĩa field đã có sẵn)?
+**Đã triển khai và test end-to-end thật**: `AiLockScanService` quét 2 tín hiệu (rút gọn từ 3 — tín hiệu "Gemini phân loại nội dung prompt" không khả thi vì `AiUsageLog` không lưu nội dung prompt, chỉ lưu số token): (1) quota gần cạn liên tục 3 ngày, (2) tần suất >10 request/phút. Đạt 1 trong 2 → chỉ tạo **đề xuất** (`User.aiLockProposedAt/Reason`), KHÔNG tự khoá — Admin xem lý do cụ thể ở `GET /api/v1/admin/ai-lock-proposals` (đã có UI ở `app/admin/users/page.tsx`, banner đề xuất + nút Xác nhận/Bỏ qua) rồi mới quyết định qua `POST .../confirm-lock-proposal`. Celery beat gọi quét mỗi 6 giờ, đã confirm task đăng ký đúng trong worker.
 
-### 2. Auto-ban bằng AI — thiết kế mới hoàn toàn (hiện chưa có gì)
+<details><summary>Hiện trạng cũ trước khi làm (giữ lại để tham khảo lịch sử)</summary>
 
-**Hiện trạng thật**: `User.isAiLocked` chỉ được set thủ công qua 1 endpoint admin bấm tay (`AdminController`) — không có job/quy tắc tự động nào, dù comment trong code có nhắc ý định này (`AiUsageLog` javadoc).
+**Hiện trạng thật (trước 25/09/2026)**: `User.isAiLocked` chỉ được set thủ công qua 1 endpoint admin bấm tay (`AdminController`) — không có job/quy tắc tự động nào, dù comment trong code có nhắc ý định này (`AiUsageLog` javadoc).
 
 **Thiết kế đề xuất — human-in-the-loop** (an toàn hơn khi trình bày, tránh câu hỏi "AI khoá nhầm thì sao"):
 - Tín hiệu bất thường (khai thác `AiUsageLog` có sẵn, không cần bảng mới cho tín hiệu):
@@ -49,11 +47,8 @@ File này giữ đúng 1 nơi duy nhất để ghi việc còn phải làm — c
 - Đạt đủ 2/3 tín hiệu → **không tự khoá ngay**, tạo "đề xuất khoá" kèm lý do cụ thể, hiện ở màn Admin có sẵn → admin xác nhận mới thật sự khoá (dùng lại đúng `isAiLocked`).
 
 **Việc cụ thể cần làm**:
-- [ ] Job định kỳ (Celery beat bên AI-worker đã có cơ chế sẵn, đúng khuôn `cleanup_old_notifications`/`remind_flashcard_reviews`) quét `AiUsageLog` theo 2 tín hiệu rule-based đầu.
-- [ ] Tích hợp bước phân loại nội dung bằng Gemini cho tín hiệu thứ 3.
-- [ ] Bảng/field lưu "đề xuất khoá" + lý do, hiển thị ở màn Admin.
-- [ ] Endpoint admin xác nhận/bỏ qua đề xuất.
-- [ ] **Cần bạn quyết định**: ngưỡng cụ thể (bao nhiêu ngày liên tục, bao nhiêu request/phút là bất thường) — đề xuất trên chỉ là điểm khởi đầu.
+Ngưỡng đã chốt và triển khai: 3 ngày liên tục + >10 request/phút (xem mục ✅ ĐÃ XONG phía trên).
+</details>
 
 ### 3. Nâng cấp AI Discovery — từ "bộ lọc đội lốt AI" thành tìm kiếm ngữ nghĩa thật ✅ ĐÃ XONG (25/09/2026)
 
@@ -133,9 +128,11 @@ Cả 4 đều đã cập nhật vào `CLAUDE.md` (mục 3/4/8) để tránh lặ
 
 ## Task tiếp theo — thứ tự đề xuất
 
-1. **Momo/ZaloPay trả sai URL** (🔴, nhanh, làm ngay được) — vẫn còn treo từ đầu, chưa đụng tới.
-2. **AI Anti-Cheat** (🎯 #1) — còn lại đúng 2/3 thuật toán điểm nhấn cho luận văn, đã có thiết kế chi tiết (Tầng 1 rule-based + Tầng 2 AI Vision webcam), chỉ cần 1 quyết định nhỏ trước khi code (bật webcam bắt buộc mọi bài thi hay chỉ bài `isProctored=true`).
-3. **Auto-ban bằng AI** (🎯 #2) — thiết kế human-in-the-loop đã có, cần bạn chốt ngưỡng cụ thể (số ngày liên tục hết quota, số request/phút bất thường) trước khi code.
-4. Sau khi xong cả 3 thuật toán điểm nhấn: quay lại 3 mục 🟡 cần bạn quyết định hướng (Email OTP thật, VNPAY/Momo/ZaloPay production, thêm Facebook/Zalo login) — không gấp cho buổi bảo vệ, xử lý sau.
+Cả 3/3 thuật toán điểm nhấn (Discovery, Anti-Cheat lõi, Auto-ban) đã xong phần code và test thật. Còn lại:
+
+1. **Test tay qua UI thật cho Anti-Cheat** (ưu tiên trước — code đã test qua API/curl, chưa test qua trình duyệt thật): mở 1 quiz `isProctored=true`, thử chuyển tab/thoát fullscreen/mở DevTools/nói to liên tục, xác nhận UI phản ứng đúng (toast cảnh báo, tự nộp bài đúng lúc). **Lưu ý xin quyền Camera+Microphone khi bắt đầu thi** — trình duyệt sẽ hỏi 2 quyền riêng (trước đây chỉ 1).
+2. **Video bằng chứng + màn hình "Giám sát thi"** cho Anti-Cheat (mục 1.7 trong thiết kế, chưa làm) — ghép màn hình+webcam thành 1 video, lưu B2, màn hình mới cho giảng viên xem lại kèm marker vi phạm. Làm sau khi bạn test xong phần lõi ở bước 1, tránh phải sửa lại đôi lần nếu UI Anti-Cheat cần chỉnh trước.
+3. **Momo/ZaloPay trả sai URL** (🔴, nhanh, làm ngay được) — vẫn còn treo từ đầu, chưa đụng tới.
+4. 3 mục 🟡 cần bạn quyết định hướng (Email OTP thật, VNPAY/Momo/ZaloPay production, thêm Facebook/Zalo login) — không gấp cho buổi bảo vệ, xử lý sau.
 
 Bạn muốn bắt đầu từ mục nào?
