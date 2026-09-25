@@ -40,6 +40,19 @@ public class QuizAttempt extends BaseEntity {
     @Column(name = "status", nullable = false)
     private String status = "IN_PROGRESS";
 
+    /** Tổng số vi phạm đã ghi nhận (server-side, xem {@link QuizAttemptViolation}) — nguồn thật
+     * để so với {@code Quiz.maxViolations}, khác hẳn trước đây chỉ đếm ở FE/localStorage. */
+    @Column(name = "violation_count", nullable = false)
+    private Integer violationCount = 0;
+
+    /** Composite Risk Score do Gemini suy luận tổng hợp toàn bộ tín hiệu hành vi lúc nộp bài
+     * (mục 1.5 plan) — LOW/MEDIUM/HIGH. NULL nếu quiz không {@code isProctored}. */
+    @Column(name = "ai_risk_level", length = 10)
+    private String aiRiskLevel;
+
+    @Column(name = "ai_risk_explanation", columnDefinition = "TEXT")
+    private String aiRiskExplanation;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "quiz_id", nullable = false)
     private Quiz quiz;

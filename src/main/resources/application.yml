@@ -105,6 +105,12 @@ lms:
     tutor-msg-per-day: ${QUOTA_TUTOR_MSG_PER_DAY:30}              # BR-TUTOR-04
     discovery-guest-per-hour: ${QUOTA_DISCOVERY_GUEST_PER_HOUR:15} # BR-DISCOVERY-01
 
+  # Auto-ban bằng AI (25/09/2026) — ngưỡng tạo ĐỀ XUẤT khoá (không tự khoá), xem AiLockScanService.
+  ai-lock:
+    daily-request-threshold: ${AI_LOCK_DAILY_THRESHOLD:20}   # >= ngưỡng này/ngày tính là "gần hết quota"
+    consecutive-days: ${AI_LOCK_CONSECUTIVE_DAYS:3}          # liên tục bao nhiêu ngày thì đề xuất
+    per-minute-threshold: ${AI_LOCK_PER_MINUTE_THRESHOLD:10} # > ngưỡng request/phút là bất thường
+
   # Ngưỡng nghiệp vụ lấy từ business rules
   rules:
     lesson-complete-threshold-percent: 80    # BR-PROGRESS-01 (Task 1: chuẩn hóa theo Udemy — 80%)

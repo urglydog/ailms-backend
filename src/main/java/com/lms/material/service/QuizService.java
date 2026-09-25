@@ -34,6 +34,7 @@ public class QuizService {
     private final org.springframework.web.client.RestTemplate restTemplate;
     private final com.lms.common.config.AiWorkerConfig aiWorkerConfig;
     private final com.lms.enrollment.service.LessonProgressService lessonProgressService;
+    private final QuizAttemptViolationRepository quizAttemptViolationRepository;
 
     @Transactional
     public void updateQuizSettings(String instructorEmail, Long quizId, com.lms.material.dto.QuizDto.QuizSettingsReq req) {
@@ -629,7 +630,116 @@ public class QuizService {
                     attempt.getUser(), attempt.getQuiz().getMaterialGeneration().getCourse());
         }
 
-        return new QuizAttemptDto.SubmitRes(attemptId, score, correctCount, attempt.getTotalQuestions(), details, isArchived);
+        // UC-ANTICHEAT (25/09/2026) — Composite Risk Scoring: chỉ 1 lần/attempt, lúc nộp bài.
+        // Gemini tổng hợp TOÀN BỘ tín hiệu hành vi đã ghi nhận trong quiz_attempt_violations
+        // thành 1 nhận định rủi ro có giải thích, thay vì giảng viên chỉ thấy số đếm thô.
+        // Lỗi ở đây KHÔNG được làm hỏng việc nộp bài (fail-open, giống mọi tích hợp AI phụ khác
+        // trong dự án) — điểm số đã chốt xong ở trên trước khi bước này chạy.
+        if (Boolean.TRUE.equals(attempt.getQuiz().getIsProctored())) {
+            assessRisk(attempt);
+        }
+
+        return new QuizAttemptDto.SubmitRes(attemptId, score, correctCount, attempt.getTotalQuestions(), details, isArchived,
+                attempt.getAiRiskLevel(), attempt.getAiRiskExplanation());
+    }
+
+    /** Xem docblock ở lời gọi trong {@link #submitAttempt}. */
+    private void assessRisk(QuizAttempt attempt) {
+        try {
+            List<QuizAttemptViolation> violations = quizAttemptViolationRepository.findByAttempt_IdOrderByCreatedAtAsc(attempt.getId());
+            Map<String, Long> violationCounts = violations.stream()
+                    .collect(Collectors.groupingBy(QuizAttemptViolation::getType, Collectors.counting()));
+
+            long durationSec = attempt.getCreatedAt() != null
+                    ? java.time.Duration.between(attempt.getCreatedAt(), LocalDateTime.now()).getSeconds()
+                    : 0;
+
+            Map<String, Object> payload = Map.of(
+                    "violation_counts", violationCounts,
+                    "duration_sec", durationSec,
+                    "question_count", attempt.getTotalQuestions()
+            );
+
+            Map res = restTemplate.postForObject(aiWorkerConfig.getBaseUrl() + "/api/v1/proctoring/assess-risk", payload, Map.class);
+            if (res != null) {
+                attempt.setAiRiskLevel((String) res.get("risk_level"));
+                attempt.setAiRiskExplanation((String) res.get("explanation"));
+                quizAttemptRepository.save(attempt);
+            }
+        } catch (Exception e) {
+            // Fail-open — xem docblock lời gọi.
+        }
+    }
+
+    /** UC-ANTICHEAT — ghi nhận 1 vi phạm rời rạc (rule-based, tức thời) trong lúc làm bài. Nguồn
+     * thật thay cho {@code localStorage} trước đây (client-trust, mất sạch khi đóng tab). */
+    @Transactional
+    public QuizAttemptDto.ViolationRes recordViolation(String studentEmail, Long attemptId, QuizAttemptDto.ViolationReq req) {
+        QuizAttempt attempt = quizAttemptRepository.findById(attemptId)
+                .orElseThrow(() -> new ResourceNotFoundException("QuizAttempt", attemptId));
+        if (!attempt.getUser().getEmail().equals(studentEmail)) {
+            throw new AccessDeniedDomainException("Ban khong co quyen ghi nhan vi pham cho bai thi nay");
+        }
+        if (!"IN_PROGRESS".equals(attempt.getStatus())) {
+            // Bài đã nộp — không còn gì để ghi nhận, tránh vi phạm "ma" tới muộn.
+            return new QuizAttemptDto.ViolationRes(attempt.getViolationCount(), attempt.getQuiz().getMaxViolations(), false);
+        }
+
+        QuizAttemptViolation violation = new QuizAttemptViolation();
+        violation.setAttempt(attempt);
+        violation.setType(req.type());
+        violation.setDetail(req.detail());
+        quizAttemptViolationRepository.save(violation);
+
+        int newCount = attempt.getViolationCount() + 1;
+        attempt.setViolationCount(newCount);
+        quizAttemptRepository.save(attempt);
+
+        Integer maxViolations = attempt.getQuiz().getMaxViolations();
+        boolean shouldAutoSubmit = maxViolations != null && newCount >= maxViolations;
+        return new QuizAttemptDto.ViolationRes(newCount, maxViolations, shouldAutoSubmit);
+    }
+
+    /** UC-ANTICHEAT — xác minh khung hình webcam bằng Gemini Vision thật (đếm người + đánh giá
+     * hướng nhìn), gọi đồng bộ AI-worker đúng khuôn {@link #explainWrongAnswer}. Bất thường thì
+     * ghi nhận luôn qua {@link #recordViolation} — dùng chung 1 đường ghi nhận, không tách logic. */
+    @Transactional
+    public QuizAttemptDto.ProctorFrameRes analyzeProctorFrame(String studentEmail, Long attemptId, QuizAttemptDto.ProctorFrameReq req) {
+        QuizAttempt attempt = quizAttemptRepository.findById(attemptId)
+                .orElseThrow(() -> new ResourceNotFoundException("QuizAttempt", attemptId));
+        if (!attempt.getUser().getEmail().equals(studentEmail)) {
+            throw new AccessDeniedDomainException("Ban khong co quyen gui khung hinh cho bai thi nay");
+        }
+        if (!Boolean.TRUE.equals(attempt.getQuiz().getIsProctored())) {
+            throw new AccessDeniedDomainException("Bai thi nay khong bat giam sat AI");
+        }
+
+        Map<String, Object> payload = Map.of("image_base64", req.imageBase64(), "mime_type", req.mimeType());
+        Map res;
+        try {
+            res = restTemplate.postForObject(aiWorkerConfig.getBaseUrl() + "/api/v1/proctoring/analyze-frame", payload, Map.class);
+        } catch (Exception e) {
+            // AI-worker khong phan hoi duoc — khong tinh la vi pham (fail-open), chi bo qua lan quet nay.
+            return new QuizAttemptDto.ProctorFrameRes(null, null, false, attempt.getViolationCount(), attempt.getQuiz().getMaxViolations(), false);
+        }
+
+        Integer personCount = res != null && res.get("person_count") != null ? ((Number) res.get("person_count")).intValue() : null;
+        String gazeDirection = res != null ? (String) res.get("gaze_direction") : null;
+
+        boolean flagged = (personCount != null && personCount != 1) || (gazeDirection != null && !"screen".equals(gazeDirection));
+        if (!flagged) {
+            return new QuizAttemptDto.ProctorFrameRes(personCount, gazeDirection, false, attempt.getViolationCount(), attempt.getQuiz().getMaxViolations(), false);
+        }
+
+        String type = personCount != null && personCount == 0 ? "NO_FACE"
+                : personCount != null && personCount > 1 ? "MULTIPLE_FACES"
+                : "GAZE_AWAY";
+        String detail = "person_count=" + personCount + ", gaze_direction=" + gazeDirection;
+        QuizAttemptDto.ViolationRes violationRes = recordViolation(studentEmail, attemptId,
+                new QuizAttemptDto.ViolationReq(type, detail));
+
+        return new QuizAttemptDto.ProctorFrameRes(personCount, gazeDirection, true,
+                violationRes.violationCount(), violationRes.maxViolations(), violationRes.shouldAutoSubmit());
     }
 
     @Transactional(readOnly = true)
@@ -671,7 +781,8 @@ public class QuizService {
             ));
         }
         
-        return new QuizAttemptDto.SubmitRes(attemptId, attempt.getScore(), attempt.getCorrectCount(), attempt.getTotalQuestions(), details, Boolean.TRUE.equals(attempt.getQuiz().getIsDeleted()));
+        return new QuizAttemptDto.SubmitRes(attemptId, attempt.getScore(), attempt.getCorrectCount(), attempt.getTotalQuestions(), details,
+                Boolean.TRUE.equals(attempt.getQuiz().getIsDeleted()), attempt.getAiRiskLevel(), attempt.getAiRiskExplanation());
     }
 
 

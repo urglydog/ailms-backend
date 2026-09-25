@@ -14,4 +14,7 @@ import org.springframework.stereotype.Repository;
 public interface UserRepository extends JpaRepository<User, Long> {
     
     java.util.Optional<User> findByEmail(String email);
+
+    /** Auto-ban bằng AI (25/09/2026) — danh sách đề xuất khoá đang chờ Admin xử lý. */
+    java.util.List<User> findByAiLockProposedAtIsNotNull();
 }

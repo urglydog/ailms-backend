@@ -65,6 +65,18 @@ public class User extends BaseEntity {
     private Boolean isAiLocked = false;
 
     /**
+     * Auto-ban bằng AI (25/09/2026) — job định kỳ phát hiện tín hiệu bất thường (quota hết liên
+     * tục nhiều ngày HOẶC tần suất request bất thường) chỉ tạo ĐỀ XUẤT khoá ở đây, KHÔNG tự khoá
+     * ngay — Admin xem lý do rồi mới quyết định set {@code isAiLocked}. Human-in-the-loop, tránh
+     * rủi ro "AI khoá nhầm" khi trình bày.
+     */
+    @Column(name = "ai_lock_proposed_at")
+    private java.time.LocalDateTime aiLockProposedAt;
+
+    @Column(name = "ai_lock_proposed_reason", length = 500)
+    private String aiLockProposedReason;
+
+    /**
      * "View public profile" kiểu Udemy (14/09/2026, mở rộng ngoài đặc tả gốc) — cho phép
      * người khác xem danh sách khóa học đã học / wishlist của mình. 2 công tắc TÁCH RIÊNG
      * (không dùng chung 1 cờ) vì học viên có thể muốn khoe khóa đã học nhưng giấu wishlist
