@@ -20,7 +20,7 @@ File này giữ đúng 1 nơi duy nhất để ghi việc còn phải làm — c
 
 **Bối cảnh**: rà lại cho thấy AI Gia sư (Socratic Tutor) và Dubbing đều đã có chủ trong nhóm, không dùng làm điểm nhấn riêng được. 3 mục dưới đây (Anti-Cheat, Auto-ban, Discovery) hiện đều là "vỏ rỗng" — có giao diện/field nhưng KHÔNG có logic thật phía sau — và đều đang **chưa ai nhận**, có thể trở thành thuật toán thật sự của riêng bạn để trình bày trước hội đồng.
 
-### 1. AI Anti-Cheat — Composite Behavioral Risk Engine ✅ PHẦN LÕI ĐÃ XONG (25/09/2026), còn 1 phần chưa làm
+### 1. AI Anti-Cheat — Composite Behavioral Risk Engine ✅ ĐÃ XONG TOÀN BỘ (25/09/2026, kể cả video bằng chứng + màn hình giám sát)
 
 **Đã triển khai đầy đủ và test end-to-end thật** (không phải mock — đã curl trực tiếp qua tài khoản dev, xem `quiz_attempt_violations` trong DB):
 - Server-side violation tracking: bảng `quiz_attempt_violations` (audit trail vĩnh viễn, thay hẳn `localStorage` cũ mà học viên có thể sửa JS để vô hiệu hoá), endpoint `POST /api/v1/quizzes/attempts/{attemptId}/violations`, tự động báo `shouldAutoSubmit=true` khi vượt `maxViolations` — đã test thật: 3 vi phạm liên tiếp (maxViolations=3) → đúng `shouldAutoSubmit=true` ở lần thứ 3.
@@ -29,7 +29,9 @@ File này giữ đúng 1 nơi duy nhất để ghi việc còn phải làm — c
 - **Composite Risk Scoring** (điểm nhấn thật sự, trả lời đúng yêu cầu "suy đoán mức độ gian lận" chứ không đếm đơn thuần): lúc nộp bài, Gemini nhận toàn bộ tín hiệu hành vi đã ghi nhận trong phiên thi, suy luận ra `risk_level` (LOW/MEDIUM/HIGH) + giải thích tiếng Việt cụ thể — đã test thật, phân biệt rõ session "sạch" (LOW) vs session nhiều tín hiệu bất thường cùng lúc (MEDIUM, giải thích đúng lý do); Gemini còn đủ thông minh để nhận ra 1 attempt test giả (thời lượng 1 giây) không phải gian lận thật.
 - Giới hạn kỹ thuật đã xác nhận và cần nói rõ khi bảo vệ: **không thể phát hiện trực tiếp remote-desktop/AnyDesk** (ngoài khả năng JS trong trình duyệt, giới hạn sandbox OS — không riêng dự án này, mọi tool proctoring thương mại cũng vậy) — Composite Risk Engine là lớp phòng vệ hành vi gián tiếp đúng cách các tool đó tiếp cận vấn đề.
 
-**Còn thiếu (chưa làm — kế hoạch chi tiết đã có, xem lịch sử làm việc)**: video bằng chứng (ghép màn hình + webcam song song bằng canvas-composite, ghi qua `MediaRecorder`, upload lúc nộp bài, lưu B2 30-90 ngày rồi tự xoá) + màn hình "Giám sát thi" mới cho giảng viên (sidebar item mới, xem danh sách lượt thi theo quiz/khoá, badge risk level, phát lại video kèm marker vi phạm click-to-seek). Cảnh báo AI hiện tại chỉ lưu ở DB dạng text/số đếm — chưa có bằng chứng hình ảnh trực quan để giảng viên đối chiếu khi có tranh chấp thật.
+**Video bằng chứng + màn hình "Giám sát thi" — ĐÃ XONG (đợt 2 cùng ngày)**: FE ghép màn hình (`getDisplayMedia`) + webcam vào 1 canvas mỗi frame, `MediaRecorder` ghi thành 1 file `.webm`, upload lúc nộp bài (`POST .../recording`, tái dùng `StorageService`/B2, key `proctoring/{attemptId}/{uuid}.webm` — đúng quy ước đặt tên hiện có của dự án, KHÔNG nhúng tiêu đề/ngày giờ vào tên file). Màn hình mới **"Giám sát thi"** ở sidebar giảng viên (`/instructor/proctoring`) — chọn khoá học → danh sách quiz có giám sát (badge số lượt rủi ro cao) → danh sách lượt thi (badge màu theo risk level) → chi tiết 1 lượt thi: video + nhận định AI + danh sách marker vi phạm, click nhảy đúng tới thời điểm trên video (offset-giây tính sẵn ở BE). Đã test qua API thật: `GET .../courses/9/quizzes`, `.../quizzes/9/attempts`, `.../attempts/64` đều trả đúng dữ liệu thật kèm marker offset chính xác. Panel khoanh vùng + border nhẹ (`.card`/`border-line`), màu theo token có sẵn, không emoji/phối màu tuỳ tiện — đúng quy tắc thiết kế chung.
+
+**Lưu ý còn treo (nhỏ, không chặn demo)**: job Celery tự xoá video quá hạn (30-90 ngày) trong `maintenance.py` — CHƯA làm (video hiện lưu vô thời hạn trên B2), không gấp cho buổi bảo vệ nhưng nên làm trước khi đưa vào production thật lâu dài.
 
 ### 2. Auto-ban bằng AI ✅ ĐÃ XONG (25/09/2026, human-in-the-loop, không tự khoá)
 
@@ -128,11 +130,11 @@ Cả 4 đều đã cập nhật vào `CLAUDE.md` (mục 3/4/8) để tránh lặ
 
 ## Task tiếp theo — thứ tự đề xuất
 
-Cả 3/3 thuật toán điểm nhấn (Discovery, Anti-Cheat lõi, Auto-ban) đã xong phần code và test thật. Còn lại:
+Cả 3/3 thuật toán điểm nhấn (Discovery, Anti-Cheat + video bằng chứng + màn hình giám sát, Auto-ban) đã xong phần code và test qua API thật. Còn lại:
 
-1. **Test tay qua UI thật cho Anti-Cheat** (ưu tiên trước — code đã test qua API/curl, chưa test qua trình duyệt thật): mở 1 quiz `isProctored=true`, thử chuyển tab/thoát fullscreen/mở DevTools/nói to liên tục, xác nhận UI phản ứng đúng (toast cảnh báo, tự nộp bài đúng lúc). **Lưu ý xin quyền Camera+Microphone khi bắt đầu thi** — trình duyệt sẽ hỏi 2 quyền riêng (trước đây chỉ 1).
-2. **Video bằng chứng + màn hình "Giám sát thi"** cho Anti-Cheat (mục 1.7 trong thiết kế, chưa làm) — ghép màn hình+webcam thành 1 video, lưu B2, màn hình mới cho giảng viên xem lại kèm marker vi phạm. Làm sau khi bạn test xong phần lõi ở bước 1, tránh phải sửa lại đôi lần nếu UI Anti-Cheat cần chỉnh trước.
-3. **Momo/ZaloPay trả sai URL** (🔴, nhanh, làm ngay được) — vẫn còn treo từ đầu, chưa đụng tới.
-4. 3 mục 🟡 cần bạn quyết định hướng (Email OTP thật, VNPAY/Momo/ZaloPay production, thêm Facebook/Zalo login) — không gấp cho buổi bảo vệ, xử lý sau.
+1. **Test tay qua UI thật** (ưu tiên trước — code mới test qua API/curl, chưa test qua trình duyệt thật): mở 1 quiz `isProctored=true`, làm thử 1 lượt (xin quyền Camera+Micro+chia sẻ màn hình — 3 quyền riêng, trình duyệt hỏi lần lượt), thử chuyển tab/thoát fullscreen/mở DevTools/nói to liên tục, xác nhận toast cảnh báo + tự nộp bài đúng lúc. Sau đó vào `/instructor/proctoring` với tài khoản giảng viên, xác nhận thấy đúng lượt thi vừa làm, video phát được, click marker nhảy đúng thời điểm.
+2. **Momo/ZaloPay trả sai URL** (🔴, nhanh, làm ngay được) — vẫn còn treo từ đầu, chưa đụng tới.
+3. 3 mục 🟡 cần bạn quyết định hướng (Email OTP thật, VNPAY/Momo/ZaloPay production, thêm Facebook/Zalo login) — không gấp cho buổi bảo vệ, xử lý sau.
+4. (Nhỏ, không gấp) Job Celery tự xoá video proctoring quá hạn 30-90 ngày — video hiện lưu vô thời hạn.
 
 Bạn muốn bắt đầu từ mục nào?
