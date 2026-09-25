@@ -66,6 +66,7 @@ public class CourseService {
     private final CourseInviteRepository courseInviteRepository;
     private final PasswordEncoder passwordEncoder;
     private final CourseActivityLogService activityLogService;
+    private final CourseEmbeddingService courseEmbeddingService;
     private final Tika tika = new Tika();
 
     @Transactional
@@ -93,7 +94,9 @@ public class CourseService {
         course.setStatus(CourseStatus.DRAFT);
         course.setReferralCode(generateReferralCode());
 
-        return mapToDetailRes(courseRepository.save(course));
+        Course saved = courseRepository.save(course);
+        courseEmbeddingService.requestEmbedding(saved); // UC49 nâng cấp — index semantic search
+        return mapToDetailRes(saved);
     }
 
     /** Chia doanh thu 2 mức (20/09/2026) — mã liên kết giới thiệu, sinh 1 LẦN duy nhất lúc
@@ -141,7 +144,13 @@ public class CourseService {
         course.setIsFree(req.price().compareTo(BigDecimal.ZERO) == 0);
         course.setCategory(category);
 
-        return mapToDetailRes(courseRepository.save(course));
+        Course saved = courseRepository.save(course);
+        // UC49 nâng cấp — chỉ re-embed khi tiêu đề/mô tả thực sự đổi, tránh gọi Gemini thừa
+        // cho các lần sửa giá/thumbnail không ảnh hưởng nội dung tìm kiếm ngữ nghĩa.
+        if (changes.contains("tiêu đề") || changes.contains("mô tả")) {
+            courseEmbeddingService.requestEmbedding(saved);
+        }
+        return mapToDetailRes(saved);
     }
 
     @Transactional

@@ -49,6 +49,7 @@ public class LessonService {
     private final FfprobeService ffprobeService;
     private final YoutubeMetadataService youtubeMetadataService;
     private final TranscriptExtractionService transcriptExtractionService;
+    private final CourseEmbeddingService courseEmbeddingService;
 
     @Transactional
     public Res create(String instructorEmail, Long chapterId, CreateReq req) {
@@ -61,7 +62,9 @@ public class LessonService {
         lesson.setStatus("DRAFT");
         lesson.setIsPreview(false);
 
-        return mapToRes(lessonRepository.save(lesson));
+        Res res = mapToRes(lessonRepository.save(lesson));
+        courseEmbeddingService.requestEmbedding(chapter.getCourse()); // UC49 nâng cấp — tên bài ảnh hưởng semantic search
+        return res;
     }
 
     @Transactional
@@ -70,7 +73,9 @@ public class LessonService {
         lesson.setTitle(req.title());
         lesson.setIsPreview(req.isPreview());
         lesson.setDescription(req.description());
-        return mapToRes(lessonRepository.save(lesson));
+        Res res = mapToRes(lessonRepository.save(lesson));
+        courseEmbeddingService.requestEmbedding(lesson.getChapter().getCourse());
+        return res;
     }
 
     @Transactional
