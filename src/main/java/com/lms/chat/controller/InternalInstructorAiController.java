@@ -24,8 +24,9 @@ public class InternalInstructorAiController {
     private final InternalInstructorAiService internalInstructorAiService;
 
     @GetMapping("/dashboard")
-    public ResponseEntity<Map<String, Object>> getDashboard(@RequestParam String email) {
-        return ResponseEntity.ok(internalInstructorAiService.getInstructorDashboard(email));
+    public ResponseEntity<Map<String, Object>> getDashboard(
+            @RequestParam String email, @RequestParam(required = false) String period) {
+        return ResponseEntity.ok(internalInstructorAiService.getInstructorDashboard(email, period));
     }
 
     @GetMapping("/courses/{courseId}/reviews")
