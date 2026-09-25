@@ -6,6 +6,19 @@ File này giữ đúng 1 nơi duy nhất để ghi việc còn phải làm — c
 
 ---
 
+## ✅ Fix bug: Click mốc vi phạm không tua đúng chỗ trong video & lọc chi tiết vi phạm (25/09/2026)
+
+Đã hoàn thành theo plan đã được user duyệt:
+1. **Video không tua đúng khi click mốc vi phạm**:
+   - (FE) Đã sửa hàm `seekTo` trong màn hình giám sát thi: áp dụng thủ thuật gán `currentTime = 1e8` rồi đợi sự kiện `timeupdate`/`durationchange` để ép trình duyệt tính lại `duration` thật cho video `webm` ghi từ `MediaRecorder`, hoặc đợi sự kiện `loadedmetadata` trước khi thao tác nếu video chưa load xong.
+   - (BE) Đã đổi công thức tính mốc gốc cho `offsetSec` (trong `InstructorProctoringController`): thay vì lấy `attempt.createdAt` (bị lệch vài giây), giờ dùng công thức `attempt.getSubmittedAt().minusSeconds(recording.getDurationSec())` để lấy đúng thời điểm bắt đầu ghi video, đảm bảo marker trỏ chính xác thời điểm.
+2. **Dropdown hiển thị cho mọi vi phạm dù không có mô tả AI thật**:
+   - (FE) Đã lọc chỉ hiện dropdown cho các loại vi phạm có phân tích thực sự của AI (`NO_FACE`, `MULTIPLE_FACES`, `HEAD_TURNED`, `GAZE_AWAY`). Đối với vi phạm rule-based (như chuyển tab, mở DevTools, copy/paste), click vào chỉ tua video chứ không hiện thêm mô tả cứng vô nghĩa nữa.
+
+**Đã test**: `npx tsc --noEmit` + lint sạch trên file sửa ở FE. `mvn clean compile -DskipTests` sạch ở BE. Cần test tay bằng thiết bị có camera/mic thực tế để kiểm chứng. Đã tự commit & push.
+
+---
+
 ## ✅ 3 bug thật + UX kế thừa Gia sư AI — phát hiện lúc test thật trên iPhone Safari (26/09/2026)
 
 Bạn test thật trên điện thoại (máy tính công ty không có mic/camera) và phát hiện đúng — Anti-Cheat vẫn ghi nhận vi phạm nhưng KHÔNG lưu được video, cộng thêm 1 báo động giả. Rà lại tận gốc, tìm ra 3 bug thật:
