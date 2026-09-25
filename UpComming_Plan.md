@@ -55,20 +55,21 @@ File này giữ đúng 1 nơi duy nhất để ghi việc còn phải làm — c
 - [ ] Endpoint admin xác nhận/bỏ qua đề xuất.
 - [ ] **Cần bạn quyết định**: ngưỡng cụ thể (bao nhiêu ngày liên tục, bao nhiêu request/phút là bất thường) — đề xuất trên chỉ là điểm khởi đầu.
 
-### 3. Nâng cấp AI Discovery — từ "bộ lọc đội lốt AI" thành tìm kiếm ngữ nghĩa thật
+### 3. Nâng cấp AI Discovery — từ "bộ lọc đội lốt AI" thành tìm kiếm ngữ nghĩa thật ✅ ĐÃ XONG (25/09/2026)
 
-**Hiện trạng thật** (đúng như bạn tự nhận ra): `discovery.py` chỉ dùng Gemini trích `category/level/price/keyword` rồi chạy `WHERE` thường — không có embedding/similarity nào, nên gõ sai/thiếu từ khoá chính xác là không ra kết quả. Khác hẳn AI Gia sư (đã có RAG thật) dù nghe tên tương tự.
+**Đã triển khai đầy đủ** — hybrid search filter-first + rerank bằng cosine similarity (pgvector, Supabase, tái dùng đúng hạ tầng của AI Gia sư):
+- BE: `CourseEmbeddingService` (LPUSH Redis job) hook vào `CourseService.create/update`, `ChapterService.create/update`, `LessonService.create/update` — tự động re-embed khi tiêu đề/mô tả/tên chương/bài đổi. Backfill 1 lần cho course cũ qua `POST /api/internal/courses/embeddings/backfill`.
+- AI-worker: `course_indexing.py` (sinh embedding), `tasks/course_embedding.py` (Celery task), consumer mới trong `main.py`, `discovery.py` thêm bước rerank similarity sau bước lọc cứng category/level/priceType.
+- Bảng `course_embeddings` + RPC `match_courses_by_ids`/`match_courses` tạo thủ công trong Supabase (giống tiền lệ `transcript_embeddings`).
 
-**Thiết kế nâng cấp — tái dùng đúng hạ tầng vector/embedding đã chứng minh hoạt động ở AI Gia sư** (`supabase_vector.py`/pgvector, rủi ro kỹ thuật thấp vì pattern đã có sẵn), áp dụng cho khoá học thay vì transcript:
-1. Sinh embedding cho từng khoá học (title + description + tên chương/bài), tự động chạy lại khi khoá học được tạo/sửa.
-2. Câu hỏi tự nhiên của học viên → sinh embedding → tìm khoá học gần nhất bằng cosine similarity (pgvector có sẵn) — hiểu được **ý nghĩa**, không chỉ khớp chữ.
-3. **Hybrid search**: vẫn giữ bước lọc cứng `category/level/price` bằng Gemini như hiện tại, rồi xếp hạng trong nhóm đã lọc bằng similarity score — vừa chính xác vừa hiểu ngữ nghĩa, đúng thiết kế phổ biến của hệ tìm kiếm thật.
+**Test case xác nhận đã nâng cấp thật — ĐÃ PASS**: hỏi "tôi muốn học cách giao tiếp lưu loát hơn với đồng nghiệp nước ngoài trong công việc lập trình" (không chứa "tiếng Anh") vẫn ra đúng 2 khoá "Tiếng Anh giao tiếp" / "Tiếng Anh giao tiếp cho IT". Câu hỏi gốc bị báo lỗi ("có khóa học ngôn ngữ nào không?") cũng đã ra đúng kết quả thay vì "không có khoá nào phù hợp" như trước.
 
-**Việc cụ thể cần làm**:
-- [ ] BE/DB: cột/bảng lưu embedding vector cho `Course`, theo đúng mô hình `supabase_vector.py` đang dùng cho transcript.
-- [ ] Job sinh embedding khi tạo/sửa khoá học (qua Celery task, tránh chặn request tạo khoá).
-- [ ] AI-worker: sửa `discovery.py` — sau bước trích lọc hiện tại, thêm bước similarity search + xếp hạng lại.
-- [ ] **Test case xác nhận đã nâng cấp thật**: hỏi bằng câu KHÔNG chứa từ khoá trùng tên/mô tả khoá học, vẫn phải ra đúng khoá liên quan — nếu vẫn không ra thì chưa xong.
+**3 bug thật phát sinh lúc làm, đã sửa cùng đợt** (không nằm trong scope ban đầu nhưng chặn đứng tính năng nếu không sửa):
+1. Celery `include=[...]` thiếu module task mới → job bị `Received unregistered task` và discard âm thầm.
+2. `gemini`/`supabase_vector` client không đóng đúng giữa các task Celery (prefork worker tái sử dụng process, mỗi task 1 event loop riêng) → `RuntimeError: Event loop is closed`. Sửa cả ở `transcript_extraction.py` (bug có từ trước, cùng pattern, bị nuốt lỗi âm thầm nên chưa ai phát hiện — Gia sư AI có thể đã mất index 1 số lesson mà không ai biết).
+3. System prompt Discovery đưa ví dụ `categorySlug` sai ("it, language, business", không khớp slug thật trong DB) khiến Gemini tự bịa slug không tồn tại → BE lọc cứng ra 0 kết quả, che khuất cả bước rerank mới thêm. Sửa bằng cách lấy danh mục thật từ BE làm `enum` cho tool schema.
+4. Index `ivfflat` (`lists=100`) dư thừa ở quy mô catalog nhỏ (~20 dòng) khiến pgvector trả kết quả rỗng ngẫu nhiên (approximate search, không đủ dữ liệu để phân cụm đúng) — đã gỡ index, dùng quét tuần tự chính xác (đủ nhanh ở quy mô này).
+5. Ngưỡng `discovery_min_similarity` mặc định 0.5 quá lỏng (khoá không liên quan vẫn ~0.55-0.63) — tinh chỉnh lên 0.65 dựa trên test thực tế, tách rõ khoá liên quan (~0.70+) khỏi nhiễu.
 
 ---
 

@@ -30,6 +30,7 @@ public class ChapterService {
     private final CourseRepository courseRepository;
     private final LessonRepository lessonRepository;
     private final LessonService lessonService;
+    private final CourseEmbeddingService courseEmbeddingService;
 
     @Transactional
     public Res create(String instructorEmail, Long courseId, CreateReq req) {
@@ -40,7 +41,9 @@ public class ChapterService {
         chapter.setCourse(course);
         chapter.setDisplayOrder((int) chapterRepository.countByCourseId(courseId));
 
-        return mapToRes(chapterRepository.save(chapter));
+        Res res = mapToRes(chapterRepository.save(chapter));
+        courseEmbeddingService.requestEmbedding(course); // UC49 nâng cấp — tên chương ảnh hưởng semantic search
+        return res;
     }
 
     @Transactional
@@ -48,7 +51,9 @@ public class ChapterService {
         Chapter chapter = loadOwnedChapter(chapterId, instructorEmail);
         chapter.setTitle(req.title());
         chapter.setDescription(req.description());
-        return mapToRes(chapterRepository.save(chapter));
+        Res res = mapToRes(chapterRepository.save(chapter));
+        courseEmbeddingService.requestEmbedding(chapter.getCourse());
+        return res;
     }
 
     /**
