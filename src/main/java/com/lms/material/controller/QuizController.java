@@ -177,6 +177,18 @@ public class QuizController {
         return ResponseEntity.ok(quizService.analyzeProctorFrame(principal.getName(), attemptId, req));
     }
 
+    /** UC-ANTICHEAT — upload video bằng chứng (màn hình+webcam ghép) lúc nộp bài xong. */
+    @PostMapping(value = "/quizzes/attempts/{attemptId}/recording", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
+    public ResponseEntity<Void> uploadRecording(
+            Principal principal,
+            @PathVariable Long attemptId,
+            @RequestPart("file") org.springframework.web.multipart.MultipartFile file,
+            @RequestParam(required = false) Integer durationSec) {
+        quizService.uploadRecording(principal.getName(), attemptId, file, durationSec);
+        return ResponseEntity.ok().build();
+    }
+
     @PostMapping("/quizzes/tutor/explain")
     @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     public ResponseEntity<QuizAttemptDto.ExplainRes> explainWrongAnswer(

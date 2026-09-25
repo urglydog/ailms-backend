@@ -23,6 +23,10 @@ public interface QuizAttemptRepository extends JpaRepository<QuizAttempt, Long> 
     QuizAttempt findFirstByUser_EmailAndQuiz_IdAndStatusOrderByCreatedAtDesc(String email, Long quizId, String status);
     
     int countByQuiz_Id(Long quizId);
+
+    /** UC-ANTICHEAT — màn hình "Giám sát thi" cho giảng viên. */
+    List<QuizAttempt> findByQuiz_IdAndStatusOrderBySubmittedAtDesc(Long quizId, String status);
+    long countByQuiz_IdAndAiRiskLevel(Long quizId, String aiRiskLevel);
     
     List<QuizAttempt> findByUser_EmailAndQuiz_MaterialGeneration_Course_IdOrderBySubmittedAtDesc(String email, Long courseId);
     
