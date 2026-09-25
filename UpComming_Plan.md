@@ -1,8 +1,19 @@
-# Kế Hoạch Các Hạng Mục Còn Lại (Cập nhật 25/09/2026)
+# Kế Hoạch Các Hạng Mục Còn Lại (Cập nhật 26/09/2026)
 
 Các hạng mục A1, A2, A3, A4a, A4b, A5, B1, B2 của đợt trước (Certificate PDF, gộp điểm Quiz vào %, gỡ trang `/progress`, Mermaid Live Preview + Tree-card, Export PDF cheatsheet/đề trắng, nút Tài nguyên tĩnh, Import Anki/Quizlet) **đã xong toàn bộ phần code** — chỉ còn chờ bạn test tay qua UI (chi tiết từng test case đã có ở lịch sử làm việc, không lặp lại ở đây). Không phát hiện lỗi/dở dang nào khi rà lại.
 
 File này giữ đúng 1 nơi duy nhất để ghi việc còn phải làm — cập nhật mỗi phiên làm việc, xoá mục nào xong.
+
+---
+
+## ✅ UX Giám sát thi + Materials Workspace — sửa theo phản hồi thật (26/09/2026)
+
+Phản hồi trực tiếp sau khi dùng thử: thiết kế "Giám sát thi" đợt trước vi phạm nhiều nguyên tắc UX cơ bản — quá nhiều bước (chọn khoá → chọn quiz → mới thấy lượt thi), quá nhiều chữ giải thích thừa, dùng ID vô nghĩa ("Bài thi #3"), ngôn từ dài dòng ("Xem bằng chứng", "Không có video bằng chứng cho lượt thi này"). Đã sửa toàn bộ:
+
+- **IA**: bỏ hẳn 2 trang trung gian (chọn khoá, chọn quiz) — "Giám sát thi" giờ là 1 tab ngay trong sidebar sửa khoá học (cùng cấp "Chương trình giảng dạy"/"Học liệu & Quiz thi cử"), courseId đã có sẵn từ URL nên chỉ còn 1 bảng phẳng gộp mọi lượt thi của mọi quiz giám sát trong khoá — 1 API duy nhất (`GET .../courses/{courseId}/attempts`), không cần vào 1 quiz cụ thể mới xem được dữ liệu.
+- **Chữ nghĩa**: bỏ phụ đề giải thích thừa dưới tiêu đề; "Bài thi #3" → tên thật (fallback "Đề thi không tên" nếu instructor chưa đặt tên, khớp quy ước "Học liệu không tên" đã dùng ở Workspace — KHÔNG hiện ID DB vô nghĩa nữa); "Xem bằng chứng" → icon mắt + tooltip; "Không có video bằng chứng cho lượt thi này" → "Chưa có video".
+- **Chỉ nổi bật thứ đáng chú ý**: badge rủi ro chỉ hiện màu khi MEDIUM/HIGH — LOW/chưa có đánh giá để trống (dấu gạch ngang), không kéo mắt người xem vào thứ không quan trọng.
+- **Materials Workspace — tìm ra nguyên nhân gốc "nhìn như ảnh tĩnh, không phân biệt được"**: `MaterialFolderTree.tsx` dùng `border-gray-50` (literal Tailwind, gần như vô hình trên nền trắng) thay vì token `border-line` của dự án — sau hơn chục lần "fix" trước đó không cải thiện vì không ai tìm đúng dòng này. Đã sửa + audit toàn bộ `border-gray-*`/token literal khác trong khu vực. Panel "Phân Phối (Shortcuts)" bên trái: các dòng shortcut trước đây là text trần không border/nền/màu nhạt (`text-ink-muted`) — giờ có border + nền + `text-ink` đậm, rõ ràng là object bấm được.
 
 ---
 
@@ -138,7 +149,7 @@ Cả 4 đều đã cập nhật vào `CLAUDE.md` (mục 3/4/8) để tránh lặ
 
 Cả 3/3 thuật toán điểm nhấn (Discovery, Anti-Cheat + video bằng chứng + màn hình giám sát, Auto-ban) đã xong phần code và test qua API thật. Momo/ZaloPay + 3 bug/thiếu-sót nhỏ liên đới cũng đã dứt điểm (xem mục ✅ phía trên). Còn lại:
 
-1. **Test tay qua UI thật cho Anti-Cheat** (ưu tiên trước — code mới test qua API/curl, chưa test qua trình duyệt thật): mở 1 quiz `isProctored=true`, làm thử 1 lượt (xin quyền Camera+Micro+chia sẻ màn hình — 3 quyền riêng, trình duyệt hỏi lần lượt), thử chuyển tab/thoát fullscreen/mở DevTools/nói to liên tục, xác nhận toast cảnh báo + tự nộp bài đúng lúc. Sau đó vào `/instructor/proctoring` với tài khoản giảng viên, xác nhận thấy đúng lượt thi vừa làm, video phát được, click marker nhảy đúng thời điểm.
+1. **Test tay qua UI thật cho Anti-Cheat** (ưu tiên trước — code mới test qua API/curl, chưa test qua trình duyệt thật): mở 1 quiz `isProctored=true`, làm thử 1 lượt (xin quyền Camera+Micro+chia sẻ màn hình — 3 quyền riêng, trình duyệt hỏi lần lượt), thử chuyển tab/thoát fullscreen/mở DevTools/nói to liên tục, xác nhận toast cảnh báo + tự nộp bài đúng lúc. Sau đó vào sửa khoá học → tab "Giám sát thi" (đã dời vào đây, không còn ở sidebar Giảng viên top-level nữa), xác nhận thấy đúng lượt thi vừa làm, video phát được, click marker nhảy đúng thời điểm.
 2. 3 mục 🟡 cần bạn quyết định hướng (Email OTP thật, VNPAY/Momo/ZaloPay production, thêm Facebook/Zalo login) — không gấp cho buổi bảo vệ, xử lý sau.
 3. (Nhỏ, không gấp) Job Celery tự xoá video proctoring quá hạn 30-90 ngày — video hiện lưu vô thời hạn.
 
