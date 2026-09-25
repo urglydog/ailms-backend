@@ -95,7 +95,11 @@ public class InstructorProctoringController {
 
         var recording = proctoringRecordingRepository.findByAttempt_Id(attemptId).orElse(null);
         List<QuizAttemptViolation> violations = quizAttemptViolationRepository.findByAttempt_IdOrderByCreatedAtAsc(attemptId);
-        LocalDateTime startedAt = attempt.getCreatedAt();
+        LocalDateTime tempStartedAt = attempt.getCreatedAt();
+        if (recording != null && attempt.getSubmittedAt() != null && recording.getDurationSec() != null) {
+            tempStartedAt = attempt.getSubmittedAt().minusSeconds(recording.getDurationSec());
+        }
+        final LocalDateTime startedAt = tempStartedAt;
 
         List<ViolationMarkerDto> markers = violations.stream().map(v -> ViolationMarkerDto.builder()
                         .type(v.getType())
