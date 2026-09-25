@@ -7,13 +7,18 @@ import com.lms.catalog.repository.CourseRepository;
 import com.lms.common.exception.AccessDeniedDomainException;
 import com.lms.common.exception.ResourceNotFoundException;
 import com.lms.enrollment.repository.EnrollmentRepository;
+import com.lms.common.storage.StorageService;
 import com.lms.material.dto.QuizAttemptDto;
 import com.lms.material.entity.*;
 import com.lms.material.repository.*;
 import lombok.RequiredArgsConstructor;
+import org.apache.tika.Tika;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -35,6 +40,9 @@ public class QuizService {
     private final com.lms.common.config.AiWorkerConfig aiWorkerConfig;
     private final com.lms.enrollment.service.LessonProgressService lessonProgressService;
     private final QuizAttemptViolationRepository quizAttemptViolationRepository;
+    private final ProctoringRecordingRepository proctoringRecordingRepository;
+    private final StorageService storageService;
+    private final Tika tika = new Tika();
 
     @Transactional
     public void updateQuizSettings(String instructorEmail, Long quizId, com.lms.material.dto.QuizDto.QuizSettingsReq req) {
@@ -740,6 +748,51 @@ public class QuizService {
 
         return new QuizAttemptDto.ProctorFrameRes(personCount, gazeDirection, true,
                 violationRes.violationCount(), violationRes.maxViolations(), violationRes.shouldAutoSubmit());
+    }
+
+    /** UC-ANTICHEAT — video bằng chứng (màn hình + webcam ghép cạnh nhau, canvas-composite +
+     * MediaRecorder phía FE), upload lúc nộp bài xong. Cảnh báo AI chỉ là marker hỗ trợ; video
+     * mới là bằng chứng cuối cùng giảng viên xem lại khi có tranh chấp.
+     *
+     * <p>Key lưu trữ {@code "proctoring/" + attemptId + "/" + UUID + ".webm"} — đúng quy ước đặt
+     * tên hiện có của dự án (opaque, KHÔNG bao giờ nhúng tiêu đề bài thi/ngày giờ vào tên file);
+     * màn hình giám sát hiển thị tên/ngày giờ từ dữ liệu DB (join qua attempt), không suy ra từ
+     * filename. */
+    @Transactional
+    public void uploadRecording(String studentEmail, Long attemptId, MultipartFile file, Integer durationSec) {
+        QuizAttempt attempt = quizAttemptRepository.findById(attemptId)
+                .orElseThrow(() -> new ResourceNotFoundException("QuizAttempt", attemptId));
+        if (!attempt.getUser().getEmail().equals(studentEmail)) {
+            throw new AccessDeniedDomainException("Ban khong co quyen tai video cho bai thi nay");
+        }
+        if (!Boolean.TRUE.equals(attempt.getQuiz().getIsProctored())) {
+            throw new AccessDeniedDomainException("Bai thi nay khong bat giam sat AI");
+        }
+
+        String detectedMime;
+        try {
+            detectedMime = tika.detect(file.getBytes(), file.getOriginalFilename());
+        } catch (IOException e) {
+            throw new com.lms.common.exception.InvalidRequestException("Khong doc duoc file video: " + e.getMessage());
+        }
+        if (!detectedMime.startsWith("video/")) {
+            throw new com.lms.common.exception.InvalidRequestException("File tai len phai la video, nhan duoc: " + detectedMime);
+        }
+
+        String key = "proctoring/" + attemptId + "/" + UUID.randomUUID() + ".webm";
+        String url;
+        try (InputStream in = file.getInputStream()) {
+            url = storageService.upload(key, in, file.getSize(), detectedMime);
+        } catch (IOException e) {
+            throw new com.lms.common.exception.InvalidRequestException("Khong tai duoc video len kho luu tru: " + e.getMessage());
+        }
+
+        ProctoringRecording recording = proctoringRecordingRepository.findByAttempt_Id(attemptId)
+                .orElseGet(ProctoringRecording::new);
+        recording.setAttempt(attempt);
+        recording.setVideoUrl(url);
+        recording.setDurationSec(durationSec);
+        proctoringRecordingRepository.save(recording);
     }
 
     @Transactional(readOnly = true)
