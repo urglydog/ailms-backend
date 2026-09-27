@@ -139,4 +139,20 @@ class NotificationServiceTest {
 
         verify(messagingTemplate).convertAndSend(eq("/topic/notifications/" + userId), any(NotificationRes.class));
     }
+
+    // ── markAllAsRead / markAsRead (26/09/2026, sửa lỗi) ──────────────
+
+    @Test
+    void markAllAsRead_delegatesToRepositoryBulkUpdate() {
+        notificationService.markAllAsRead(9L);
+
+        verify(notificationRepository).markAllAsRead(9L);
+    }
+
+    @Test
+    void markAsRead_delegatesToRepositoryWithOwnershipCheck() {
+        notificationService.markAsRead(9L, 50L);
+
+        verify(notificationRepository).markAsRead(50L, 9L);
+    }
 }

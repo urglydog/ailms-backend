@@ -75,6 +75,8 @@ public class WishlistService {
         WishlistItem item = new WishlistItem();
         item.setUser(user);
         item.setCourse(course);
+        // Chốt giá hiện tại làm mốc so sánh cho lần giảm giá đầu tiên sau khi thêm (26/09/2026).
+        item.setPriceAtAdd(course.getPrice());
         return toRes(wishlistItemRepository.save(item));
     }
 

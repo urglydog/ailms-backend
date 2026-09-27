@@ -83,6 +83,10 @@ public class UserDto {
             Role role,
             LocalDateTime memberSince,
             List<PublicCourseRes> courses,
-            List<PublicCourseRes> wishlist
+            List<PublicCourseRes> wishlist,
+            /** doc/DacTa_ChucNangChungChi.md — LUÔN công khai (không có cờ ẩn/hiện riêng như
+             * courses/wishlist), chỉ lọc chứng chỉ ACTIVE; đây là thành tích để khoe, không phải
+             * dữ liệu riêng tư cần cân nhắc ẩn. */
+            List<com.lms.certificate.dto.CertificateDto.PublicRes> certificates
     ) {}
 }

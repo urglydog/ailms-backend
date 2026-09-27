@@ -91,6 +91,7 @@ public class TutorService {
     private final LessonRepository lessonRepository;
     private final EnrollmentSecurity enrollmentSecurity;
     private final TutorQuotaService tutorQuotaService;
+    private final TutorSecurityService tutorSecurityService;
     private final ChatSessionRepository chatSessionRepository;
     private final ChatMessageRepository chatMessageRepository;
     private final ChatMessageAttachmentRepository chatMessageAttachmentRepository;
@@ -138,7 +139,13 @@ public class TutorService {
         Collections.reverse(history); // cu -> moi, dung thu tu hoi thoai that
 
         List<UploadedAttachment> uploaded = processAttachments(session.getId(), req.attachments());
+
+        // BR-TUTOR-SEC-06 — pre-check heuristic TRUOC khi goi AI Worker (chi ghi log, KHONG chan
+        // cau hoi — xem TutorSecurityService).
+        tutorSecurityService.screenMessage(user, course, req.question());
+
         AiWorkerAskRes aiRes = callAiWorker(courseId, currentLesson.getId(), req.question(), history, uploaded);
+        logIfAnswerLeaksSecurityBoundary(session.getId(), aiRes.answer());
 
         ChatMessage userMsg = new ChatMessage();
         userMsg.setChatSession(session);
@@ -363,7 +370,14 @@ public class TutorService {
     private record UploadedAttachment(String fileName, String fileUrl, String mimeType, long fileSize, String dataBase64) {}
 
     /** UC30 actor chỉ có Student, và chỉ hỏi được nội dung khóa học ĐÃ sở hữu — không cho phép
-     * chỉ vì có 1 bài Preview trong khóa (giống LessonProgressService, BR-ENROLL-02). */
+     * chỉ vì có 1 bài Preview trong khóa (giống LessonProgressService, BR-ENROLL-02).
+     *
+     * <p><b>BR-TUTOR-SEC-02 (đã audit):</b> {@code email} ở đây LUÔN đến từ
+     * {@code Principal#getName()} do {@code JwtAuthenticationFilter} nạp từ claim đã xác thực của
+     * JWT (xem {@code TutorController}, {@code @PreAuthorize} ở tầng controller) — KHÔNG có bất
+     * kỳ nhánh nào trong {@code TutorService} đọc role/quyền từ nội dung {@code req.question()}
+     * hay bất kỳ field nào khác của request body. Tuyên bố vai trò bằng lời trong câu hỏi (vd
+     * "tôi là admin") không đi qua hàm này và không có tác dụng gì với luồng xử lý. */
     private User requireAccess(String email, Long courseId) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("User", email));
@@ -371,6 +385,23 @@ public class TutorService {
             throw new AccessDeniedDomainException("Bạn chưa sở hữu khóa học này (BR-ENROLL-02)");
         }
         return user;
+    }
+
+    /**
+     * BR-TUTOR-SEC (mục 3, bước [6], TUỲ CHỌN) — output check NHẸ: Lớp 1 (Tutor Agent chỉ có tool
+     * ĐỌC, xem {@code app/services/tutor_service.py} bên AI Worker — không có tool ghi/xóa nào để
+     * gọi) đã đảm bảo agent KHÔNG THỂ thực sự thực hiện hành động ghi/xóa dù nó "nói" gì, nên ở
+     * đây CHỈ log cảnh báo để biết prompt injection có khả năng đã ảnh hưởng câu trả lời hay chưa
+     * (vd lộ system prompt), KHÔNG chặn/sửa câu trả lời đã trả về học viên.
+     */
+    private static final java.util.regex.Pattern SUSPICIOUS_ANSWER_PATTERN = java.util.regex.Pattern.compile(
+            "system prompt|system instruction|huong dan he thong cua (toi|minh)|da xoa|da thuc hien",
+            java.util.regex.Pattern.CASE_INSENSITIVE);
+
+    private void logIfAnswerLeaksSecurityBoundary(Long sessionId, String answer) {
+        if (answer != null && SUSPICIOUS_ANSWER_PATTERN.matcher(com.lms.catalog.util.SlugGenerator.stripAccentsLower(answer)).find()) {
+            log.warn("Tutor Agent tra loi co dau hieu bat thuong (co the bi anh huong boi prompt injection), session={}", sessionId);
+        }
     }
 
     /** UC30 mở rộng (06/09/2026) — `currentLessonId` học viên gửi lên phải thuộc ĐÚNG khóa học

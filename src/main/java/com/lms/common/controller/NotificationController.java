@@ -6,6 +6,8 @@ import com.lms.auth.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -36,5 +38,21 @@ public class NotificationController {
         Long userId = userService.getUserByEmail(principal.getName()).id();
         List<NotificationRes> notifications = notificationService.getNotifications(userId);
         return ResponseEntity.ok(notifications);
+    }
+
+    /** (26/09/2026, sửa lỗi) — trước đây "Đánh dấu đã đọc" chỉ đổi state ở FE, tải lại trang là
+     * mất, badge số chưa đọc không giảm — thiếu hẳn endpoint để lưu xuống DB. */
+    @PatchMapping("/read-all")
+    public ResponseEntity<Void> markAllAsRead(Principal principal) {
+        Long userId = userService.getUserByEmail(principal.getName()).id();
+        notificationService.markAllAsRead(userId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/{id}/read")
+    public ResponseEntity<Void> markAsRead(Principal principal, @PathVariable Long id) {
+        Long userId = userService.getUserByEmail(principal.getName()).id();
+        notificationService.markAsRead(userId, id);
+        return ResponseEntity.noContent().build();
     }
 }

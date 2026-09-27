@@ -71,6 +71,7 @@ class TutorServiceTest {
     @Mock private LessonRepository lessonRepository;
     @Mock private EnrollmentSecurity enrollmentSecurity;
     @Mock private TutorQuotaService tutorQuotaService;
+    @Mock private TutorSecurityService tutorSecurityService;
     @Mock private ChatSessionRepository chatSessionRepository;
     @Mock private ChatMessageRepository chatMessageRepository;
     @Mock private ChatMessageAttachmentRepository chatMessageAttachmentRepository;

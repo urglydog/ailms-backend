@@ -6,6 +6,7 @@ import com.lms.catalog.entity.Course;
 import com.lms.catalog.repository.CourseRepository;
 import com.lms.catalog.repository.LessonRepository;
 import com.lms.catalog.service.CourseAccessService;
+import com.lms.certificate.repository.CertificateRepository;
 import com.lms.common.enums.CourseStatus;
 import com.lms.common.enums.CourseVisibility;
 import com.lms.common.exception.AccessDeniedDomainException;
@@ -49,6 +50,7 @@ class EnrollmentServiceTest {
     @Mock private LessonProgressRepository lessonProgressRepository;
     @Mock private CartItemRepository cartItemRepository;
     @Mock private CourseAccessService courseAccessService;
+    @Mock private CertificateRepository certificateRepository;
 
     @InjectMocks
     private EnrollmentService enrollmentService;

@@ -137,6 +137,19 @@
             <version>1.3.42</version>
         </dependency>
 
+        <!-- ── doc/DacTa_ChucNangChungChi.md, BR-CERT-10: QR code THẬT (encode verifyUrl) in trên
+             chứng chỉ PDF — javase kèm MatrixToImageWriter để xuất BufferedImage nhúng vào OpenPDF. ── -->
+        <dependency>
+            <groupId>com.google.zxing</groupId>
+            <artifactId>core</artifactId>
+            <version>3.5.3</version>
+        </dependency>
+        <dependency>
+            <groupId>com.google.zxing</groupId>
+            <artifactId>javase</artifactId>
+            <version>3.5.3</version>
+        </dependency>
+
         <!-- ── Giai đoạn 3: Tích hợp cổng thanh toán PayOS ── -->
         <dependency>
             <groupId>vn.payos</groupId>

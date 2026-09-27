@@ -30,6 +30,10 @@ public class EnrollmentDto {
             /** Ngày ghi danh — dùng cho sort "Recently Enrolled". */
             LocalDateTime enrolledAt,
             /** Lần gần nhất học viên xem 1 bài bất kỳ trong khóa — dùng cho sort "Recently Accessed"; null nếu ghi danh xong chưa xem bài nào. */
-            LocalDateTime lastAccessedAt
+            LocalDateTime lastAccessedAt,
+            /** doc/DacTa_ChucNangChungChi.md — chỉ có giá trị khi đã hoàn thành 100% VÀ chứng chỉ
+             * đã được cấp (luôn đi cùng {@code completedAt != null}, xem CertificateService);
+             * FE dùng để điều hướng "Xem chứng chỉ" tới {@code /certificates/{code}}. */
+            String certificateCode
     ) {}
 }

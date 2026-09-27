@@ -6,6 +6,7 @@ import com.lms.catalog.entity.Chapter;
 import com.lms.catalog.entity.Course;
 import com.lms.catalog.entity.Lesson;
 import com.lms.catalog.repository.LessonRepository;
+import com.lms.certificate.service.CertificateService;
 import com.lms.common.exception.AccessDeniedDomainException;
 import com.lms.enrollment.dto.LessonProgressDto.RecordReq;
 import com.lms.enrollment.dto.LessonProgressDto.Res;
@@ -46,6 +47,7 @@ class LessonProgressServiceTest {
     @Mock private EnrollmentRepository enrollmentRepository;
     @Mock private QuizRepository quizRepository;
     @Mock private QuizAttemptRepository quizAttemptRepository;
+    @Mock private CertificateService certificateService;
 
     private LessonProgressService service;
 
@@ -57,7 +59,7 @@ class LessonProgressServiceTest {
     void setUp() {
         service = new LessonProgressService(
                 lessonRepository, userRepository, enrollmentSecurity, lessonProgressRepository, enrollmentRepository,
-                quizRepository, quizAttemptRepository);
+                quizRepository, quizAttemptRepository, certificateService);
         ReflectionTestUtils.setField(service, "completeThresholdPercent", 90);
 
         user = new User();

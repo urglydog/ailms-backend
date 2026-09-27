@@ -7,6 +7,8 @@ import com.lms.auth.dto.UserDto.UserRes;
 import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
 import com.lms.catalog.entity.Course;
+import com.lms.certificate.repository.CertificateRepository;
+import com.lms.certificate.service.CertificateService;
 import com.lms.common.enums.Role;
 import com.lms.common.storage.StorageService;
 import com.lms.enrollment.entity.Enrollment;
@@ -55,6 +57,12 @@ class UserServiceTest {
 
     @Mock
     private CourseReviewRepository courseReviewRepository;
+
+    @Mock
+    private CertificateRepository certificateRepository;
+
+    @Mock
+    private CertificateService certificateService;
 
     @InjectMocks
     private UserService userService;

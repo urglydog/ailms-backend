@@ -28,6 +28,18 @@ public class NotificationService {
                 .collect(Collectors.toList());
     }
 
+    /** (26/09/2026, sửa lỗi) — persist "đã đọc" xuống DB, xem docblock
+     * {@code NotificationRepository.markAllAsRead}. */
+    @Transactional
+    public void markAllAsRead(Long userId) {
+        notificationRepository.markAllAsRead(userId);
+    }
+
+    @Transactional
+    public void markAsRead(Long userId, Long notificationId) {
+        notificationRepository.markAsRead(notificationId, userId);
+    }
+
     /**
      * BR-NOTIFY-01 — mọi sự kiện phải VỪA lưu DB (người offline xem lại) VỪA bắn WebSocket
      * (người đang online thấy ngay). Dùng cho DUBBING_COMPLETED/DUBBING_FAILED (F5.3) và các

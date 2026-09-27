@@ -1,6 +1,7 @@
 package com.lms.auth.repository;
 
 import com.lms.auth.entity.User;
+import com.lms.common.enums.Role;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -12,9 +13,12 @@ import org.springframework.stereotype.Repository;
  */
 @Repository
 public interface UserRepository extends JpaRepository<User, Long> {
-    
+
     java.util.Optional<User> findByEmail(String email);
 
     /** Auto-ban bằng AI (25/09/2026) — danh sách đề xuất khoá đang chờ Admin xử lý. */
     java.util.List<User> findByAiLockProposedAtIsNotNull();
+
+    /** Thông báo hệ thống từ Admin (26/09/2026) — phạm vi INSTRUCTOR/STUDENT. */
+    java.util.List<User> findByRole(Role role);
 }
