@@ -39,4 +39,10 @@ public interface AiUsageLogRepository extends JpaRepository<AiUsageLog, Long> {
      * cần quét tín hiệu, tránh duyệt toàn bộ bảng `users`. */
     @Query("SELECT DISTINCT l.userId FROM AiUsageLog l WHERE l.createdAt >= :since")
     List<Long> findDistinctActiveUserIdsSince(java.time.LocalDateTime since);
+
+    /** Auto-ban tín hiệu 3 (27/09/2026) — tổng token tiêu thụ của 1 user trong khoảng thời gian
+     * gần nhất, chống Denial of Wallet qua Prompt Injection (1 request "nhồi" quá nhiều token
+     * vẫn bị bắt, khác tín hiệu 2 chỉ đếm SỐ LƯỢNG request). */
+    @Query("SELECT COALESCE(SUM(l.totalTokens), 0) FROM AiUsageLog l WHERE l.userId = :userId AND l.createdAt >= :since")
+    long getTotalTokensForUserSince(Long userId, java.time.LocalDateTime since);
 }
