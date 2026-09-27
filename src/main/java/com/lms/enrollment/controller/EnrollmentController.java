@@ -40,16 +40,8 @@ public class EnrollmentController {
         return ResponseEntity.ok().build();
     }
 
-    /** UpComming_Plan.md A1 — tải PDF chứng chỉ hoàn thành, sinh on-the-fly, chỉ khi đã hoàn thành 100%. */
-    @GetMapping("/{courseId}/certificate")
-    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
-    public ResponseEntity<byte[]> getCertificate(
-            Principal principal,
-            @org.springframework.web.bind.annotation.PathVariable Long courseId) {
-        byte[] pdf = enrollmentService.generateCertificatePdf(principal.getName(), courseId);
-        return ResponseEntity.ok()
-                .contentType(org.springframework.http.MediaType.APPLICATION_PDF)
-                .header("Content-Disposition", "attachment; filename=\"certificate-" + courseId + ".pdf\"")
-                .body(pdf);
-    }
+    // Endpoint tải chứng chỉ cũ (UpComming_Plan.md A1) đã chuyển hẳn sang
+    // CertificateController#getPdf (GET /api/v1/certificates/{certificateCode}/pdf) — xem
+    // doc/DacTa_ChucNangChungChi.md. EnrollmentDto.Res.certificateCode là cầu nối cho FE điều
+    // hướng từ danh sách "Khóa học của tôi" sang endpoint mới.
 }

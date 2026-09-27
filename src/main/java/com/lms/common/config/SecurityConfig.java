@@ -99,8 +99,15 @@ public class SecurityConfig {
             // literal luôn được Spring ưu tiên khớp trước {biến} cùng vị trí — không cần thêm gì
             // để tránh 2 route đó "cắn" nhau). Tab "Khóa học của tôi" (endpoint /enrolled) CỐ TÌNH
             // không liệt kê ở đây — bắt buộc JWT, rơi vào anyRequest().authenticated() mặc định.
-            "/api/v1/live-sessions/public"
+            "/api/v1/live-sessions/public",
             // /api/v1/discovery/** đã chuyển sang PUBLIC_ENDPOINTS vì discovery/chat là POST, không phải GET
+            // BR-CERT-06 — trang xác thực chứng chỉ công khai, nhà tuyển dụng không có tài khoản
+            // cũng xem được. KHÔNG khớp "/api/v1/certificates/{code}"/"/{code}/pdf" (đoạn "verify"
+            // literal khác số đoạn đường dẫn) nên 2 endpoint đó vẫn bắt buộc JWT như bình thường.
+            "/api/v1/certificates/verify/**",
+            // (26/09/2026, tính năng mới) — banner "Bảo trì hệ thống" (severity HIGH) phải hiện
+            // được cho CẢ khách vãng lai chưa đăng nhập, không chỉ user đã đăng nhập.
+            "/api/v1/system-announcements/banner"
     };
 
     /**

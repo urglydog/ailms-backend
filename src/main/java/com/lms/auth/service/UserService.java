@@ -9,6 +9,9 @@ import com.lms.auth.dto.UserDto.UserRes;
 import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
 import com.lms.catalog.entity.Course;
+import com.lms.certificate.repository.CertificateRepository;
+import com.lms.certificate.service.CertificateService;
+import com.lms.common.enums.CertificateStatus;
 import com.lms.common.exception.BusinessRuleViolationException;
 import com.lms.common.exception.InvalidRequestException;
 import com.lms.common.exception.ResourceNotFoundException;
@@ -40,6 +43,8 @@ public class UserService {
     private final EnrollmentRepository enrollmentRepository;
     private final WishlistItemRepository wishlistItemRepository;
     private final CourseReviewRepository courseReviewRepository;
+    private final CertificateRepository certificateRepository;
+    private final CertificateService certificateService;
     private final Tika tika = new Tika();
 
     @Transactional(readOnly = true)
@@ -222,10 +227,15 @@ public class UserService {
                         .toList()
                 : null;
 
+        List<com.lms.certificate.dto.CertificateDto.PublicRes> certificates = certificateRepository
+                .findByStudent_IdAndStatusOrderByIssuedAtDesc(userId, CertificateStatus.ACTIVE).stream()
+                .map(certificateService::toPublicRes)
+                .toList();
+
         return new PublicProfileRes(
                 user.getId(), user.getFullName(), user.getAvatarUrl(),
                 user.getHeadline(), user.getBio(),
-                user.getRole(), user.getCreatedAt(), courses, wishlist
+                user.getRole(), user.getCreatedAt(), courses, wishlist, certificates
         );
     }
 

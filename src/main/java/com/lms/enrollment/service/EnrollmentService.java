@@ -5,6 +5,7 @@ import com.lms.auth.repository.UserRepository;
 import com.lms.catalog.entity.Course;
 import com.lms.catalog.repository.LessonRepository;
 import com.lms.catalog.service.CourseAccessService;
+import com.lms.certificate.repository.CertificateRepository;
 import com.lms.common.exception.ResourceNotFoundException;
 import com.lms.enrollment.dto.EnrollmentDto.Res;
 import com.lms.enrollment.entity.Enrollment;
@@ -40,74 +41,7 @@ public class EnrollmentService {
     private final LessonProgressRepository lessonProgressRepository;
     private final CartItemRepository cartItemRepository;
     private final CourseAccessService courseAccessService;
-
-    /**
-     * UpComming_Plan.md A1 — sinh PDF chứng chỉ hoàn thành on-the-fly (không lưu file lên B2,
-     * không có entity Certificate riêng). Chỉ cho tải khi enrollment đã có completedAt.
-     */
-    @Transactional(readOnly = true)
-    public byte[] generateCertificatePdf(String email, Long courseId) {
-        Enrollment enrollment = enrollmentRepository.findByUser_EmailAndCourse_Id(email, courseId)
-                .orElseThrow(() -> new ResourceNotFoundException("Enrollment", courseId));
-
-        if (enrollment.getCompletedAt() == null) {
-            throw new BusinessRuleViolationException(
-                    "CERTIFICATE_NOT_READY", "Bạn chưa hoàn thành 100% khóa học này nên chưa có chứng chỉ.");
-        }
-
-        try {
-            var document = new com.lowagie.text.Document(com.lowagie.text.PageSize.A4.rotate(), 50, 50, 60, 60);
-            var out = new java.io.ByteArrayOutputStream();
-            com.lowagie.text.pdf.PdfWriter.getInstance(document, out);
-            document.open();
-
-            // Base-14 Helvetica không có glyph tiếng Việt — dùng DejaVu Sans nhúng (VietnamesePdfFonts).
-            com.lowagie.text.pdf.BaseFont bfRegular = com.lms.common.util.VietnamesePdfFonts.loadRegular();
-            com.lowagie.text.pdf.BaseFont bfBold = com.lms.common.util.VietnamesePdfFonts.loadBold();
-            var borderFont = new com.lowagie.text.Font(bfRegular, 12);
-            var titleFont = new com.lowagie.text.Font(bfBold, 32, com.lowagie.text.Font.NORMAL, new java.awt.Color(37, 99, 235));
-            var nameFont = new com.lowagie.text.Font(bfBold, 24);
-            var bodyFont = new com.lowagie.text.Font(bfRegular, 14);
-            var smallFont = new com.lowagie.text.Font(bfRegular, 10, com.lowagie.text.Font.NORMAL, java.awt.Color.GRAY);
-
-            var title = new com.lowagie.text.Paragraph("CHỨNG CHỈ HOÀN THÀNH", titleFont);
-            title.setAlignment(com.lowagie.text.Element.ALIGN_CENTER);
-            title.setSpacingAfter(30);
-            document.add(title);
-
-            var introLine = new com.lowagie.text.Paragraph("Chứng nhận", bodyFont);
-            introLine.setAlignment(com.lowagie.text.Element.ALIGN_CENTER);
-            document.add(introLine);
-
-            var nameLine = new com.lowagie.text.Paragraph(enrollment.getUser().getFullName(), nameFont);
-            nameLine.setAlignment(com.lowagie.text.Element.ALIGN_CENTER);
-            nameLine.setSpacingBefore(10);
-            nameLine.setSpacingAfter(10);
-            document.add(nameLine);
-
-            var courseLine = new com.lowagie.text.Paragraph(
-                    "đã hoàn thành khóa học \"" + enrollment.getCourse().getTitle() + "\"", bodyFont);
-            courseLine.setAlignment(com.lowagie.text.Element.ALIGN_CENTER);
-            courseLine.setSpacingAfter(30);
-            document.add(courseLine);
-
-            var dateLine = new com.lowagie.text.Paragraph(
-                    "Ngày hoàn thành: " + enrollment.getCompletedAt().toLocalDate(), borderFont);
-            dateLine.setAlignment(com.lowagie.text.Element.ALIGN_CENTER);
-            document.add(dateLine);
-
-            var codeLine = new com.lowagie.text.Paragraph(
-                    "Mã xác thực: " + enrollment.getCertificateCode(), smallFont);
-            codeLine.setAlignment(com.lowagie.text.Element.ALIGN_CENTER);
-            codeLine.setSpacingBefore(40);
-            document.add(codeLine);
-
-            document.close();
-            return out.toByteArray();
-        } catch (Exception e) {
-            throw new IllegalStateException("Không sinh được PDF chứng chỉ", e);
-        }
-    }
+    private final CertificateRepository certificateRepository;
 
     @Transactional(readOnly = true)
     public List<Res> getMyEnrollments(String email) {
@@ -149,7 +83,10 @@ public class EnrollmentService {
                 course.getInstructor().getFullName(),
                 myRating,
                 enrollment.getEnrolledAt(),
-                lastAccessedAt
+                lastAccessedAt,
+                certificateRepository.findByStudent_IdAndCourse_Id(user.getId(), course.getId())
+                        .map(cert -> cert.getCertificateCode())
+                        .orElse(null)
         );
     }
 

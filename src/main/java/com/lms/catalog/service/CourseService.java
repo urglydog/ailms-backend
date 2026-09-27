@@ -67,6 +67,7 @@ public class CourseService {
     private final PasswordEncoder passwordEncoder;
     private final CourseActivityLogService activityLogService;
     private final CourseEmbeddingService courseEmbeddingService;
+    private final com.lms.wishlist.service.WishlistPriceDropService wishlistPriceDropService;
     private final Tika tika = new Tika();
 
     @Transactional
@@ -126,10 +127,11 @@ public class CourseService {
                 .orElseThrow(() -> new ResourceNotFoundException("Category", req.categoryId()));
 
         // Ghi log các thay đổi trước khi ghi đè — mô tả cụ thể cho panel "Hoạt động gần đây".
+        BigDecimal oldPrice = course.getPrice();
         List<String> changes = new java.util.ArrayList<>();
         if (!java.util.Objects.equals(course.getTitle(), req.title())) changes.add("tiêu đề");
         if (!java.util.Objects.equals(course.getDescription(), req.description())) changes.add("mô tả");
-        if (course.getPrice() == null || course.getPrice().compareTo(req.price()) != 0) changes.add("giá");
+        if (oldPrice == null || oldPrice.compareTo(req.price()) != 0) changes.add("giá");
         if (!changes.isEmpty()) {
             activityLogService.log(course, instructorEmail, "Đã cập nhật " + String.join(", ", changes) + " của khóa học");
         }
@@ -149,6 +151,12 @@ public class CourseService {
         // cho các lần sửa giá/thumbnail không ảnh hưởng nội dung tìm kiếm ngữ nghĩa.
         if (changes.contains("tiêu đề") || changes.contains("mô tả")) {
             courseEmbeddingService.requestEmbedding(saved);
+        }
+        // (26/09/2026, tính năng mới) — chỉ báo GIẢM giá thật sự (oldPrice != null, tránh báo
+        // giảm giá "ảo" ngay lần đầu set giá lúc tạo khóa), đẩy qua Redis xử lý nền, không gửi
+        // email/thông báo đồng bộ ngay trong request này (xem WishlistPriceDropService).
+        if (oldPrice != null && oldPrice.compareTo(req.price()) > 0) {
+            wishlistPriceDropService.enqueuePriceDrop(saved, oldPrice, req.price());
         }
         return mapToDetailRes(saved);
     }

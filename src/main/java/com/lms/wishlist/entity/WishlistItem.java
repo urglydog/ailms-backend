@@ -4,6 +4,7 @@ import com.lms.auth.entity.User;
 import com.lms.catalog.entity.Course;
 import com.lms.common.entity.BaseEntity;
 import jakarta.persistence.*;
+import java.math.BigDecimal;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -12,9 +13,6 @@ import lombok.Setter;
  * gốc của đồ án, cùng tinh thần {@link com.lms.payment.entity.CartItem} (giỏ hàng). Học viên
  * lưu lại khóa học CHƯA SỞ HỮU để theo dõi, không nhất thiết đã có trong giỏ hàng — 2 danh
  * sách độc lập, không loại trừ nhau.
- *
- * <p>Chỗ dành cho tương lai: khi khóa học có logic giảm giá, hệ thống sẽ gửi email cho mọi
- * học viên có khóa đó trong wishlist (chưa làm ở giai đoạn này — chưa có logic giảm giá).
  */
 @Entity
 @Table(name = "wishlist_items",
@@ -30,4 +28,10 @@ public class WishlistItem extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "course_id", nullable = false)
     private Course course;
+
+    /** Giá khóa học tại thời điểm thêm vào wishlist (26/09/2026, tính năng mới) — cập nhật lại
+     * mỗi lần {@code WishlistPriceDropService} báo giảm giá thành công, để lần giảm giá TIẾP
+     * THEO vẫn so sánh đúng với mức giá gần nhất học viên đã biết, không báo lại giá cũ. */
+    @Column(name = "price_at_add", precision = 12, scale = 2)
+    private BigDecimal priceAtAdd;
 }

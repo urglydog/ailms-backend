@@ -19,4 +19,9 @@ public interface WishlistItemRepository extends JpaRepository<WishlistItem, Long
     boolean existsByUser_IdAndCourse_Id(Long userId, Long courseId);
 
     void deleteByUser_IdAndCourse_Id(Long userId, Long courseId);
+
+    /** WishlistPriceDropService — mọi học viên đang wishlist 1 khóa cụ thể, kèm sẵn {@code user}
+     * (email) qua entity graph để job nền không phải lazy-load thêm phát nào. */
+    @EntityGraph(attributePaths = "user")
+    List<WishlistItem> findByCourse_Id(Long courseId);
 }

@@ -11,6 +11,7 @@ import com.lms.enrollment.dto.LessonProgressDto.RecordReq;
 import com.lms.enrollment.dto.LessonProgressDto.Res;
 import com.lms.enrollment.entity.Enrollment;
 import com.lms.enrollment.entity.LessonProgress;
+import com.lms.certificate.service.CertificateService;
 import com.lms.enrollment.repository.EnrollmentRepository;
 import com.lms.enrollment.repository.LessonProgressRepository;
 import com.lms.enrollment.security.EnrollmentSecurity;
@@ -48,6 +49,7 @@ public class LessonProgressService {
     private final EnrollmentRepository enrollmentRepository;
     private final QuizRepository quizRepository;
     private final QuizAttemptRepository quizAttemptRepository;
+    private final CertificateService certificateService;
 
     /** A2 (UpComming_Plan.md) — ngưỡng "đạt" Quiz, tái dùng đúng quy ước đã có ở Gradebook
      * (thang điểm 0-10, xem InstructorGradebookController) — không bịa ngưỡng mới. */
@@ -159,7 +161,14 @@ public class LessonProgressService {
 
         if (isFullyComplete && enrollment.getCompletedAt() == null) {
             enrollment.setCompletedAt(LocalDateTime.now());
-            enrollment.setCertificateCode(java.util.UUID.randomUUID().toString());
+            enrollmentRepository.save(enrollment);
+            // doc/DacTa_ChucNangChungChi.md, BR-CERT-01 — cấp chứng chỉ TỰ ĐỘNG ngay tại đây, lần
+            // đầu tiên progressPct đạt 100%. Đặt SAU save() ở trên để CertificateService chắc
+            // chắn đọc được enrollment.completedAt đã có giá trị (snapshot BR-CERT-04 dùng giá
+            // trị này). Trước đây chỉ sinh 1 mã UUID trên Enrollment, không có bản ghi Certificate
+            // riêng — xem lịch sử V127 (đã bị thay thế hoàn toàn bởi bảng certificates ở V129).
+            certificateService.issueIfEligible(enrollment);
+            return;
         }
         enrollmentRepository.save(enrollment);
     }

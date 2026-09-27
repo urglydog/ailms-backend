@@ -60,6 +60,7 @@ class CourseServiceTest {
     @Mock private CourseInviteRepository courseInviteRepository;
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private CourseEmbeddingService courseEmbeddingService;
+    @Mock private com.lms.wishlist.service.WishlistPriceDropService wishlistPriceDropService;
 
     @InjectMocks
     private CourseService courseService;
