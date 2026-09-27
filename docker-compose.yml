@@ -109,9 +109,15 @@ services:
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD:?Thieu_Mat_Khau_Redis_trong_env}
-      # Mail (Mailpit)
-      SPRING_MAIL_HOST: mailpit
-      SPRING_MAIL_PORT: 1025
+      # Mail — mặc định Mailpit (local dev), điền SPRING_MAIL_* trong be/.env để chuyển
+      # sang Gmail SMTP thật (production) mà không cần đổi file này (27/09/2026).
+      SPRING_MAIL_HOST: ${SPRING_MAIL_HOST:-mailpit}
+      SPRING_MAIL_PORT: ${SPRING_MAIL_PORT:-1025}
+      SPRING_MAIL_USERNAME: ${SPRING_MAIL_USERNAME:-}
+      SPRING_MAIL_PASSWORD: ${SPRING_MAIL_PASSWORD:-}
+      SPRING_MAIL_SMTP_AUTH: ${SPRING_MAIL_SMTP_AUTH:-false}
+      SPRING_MAIL_SMTP_STARTTLS: ${SPRING_MAIL_SMTP_STARTTLS:-false}
+      MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-noreply@lms.local}
       # JWT — thời hạn theo BR-AUTH-04
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET chua duoc dat trong .env}
       JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
