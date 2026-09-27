@@ -651,12 +651,34 @@ public class QuizService {
                 attempt.getAiRiskLevel(), attempt.getAiRiskExplanation());
     }
 
+    /** Nhãn tiếng Việt cho từng loại vi phạm — CHỈ dùng để build prompt gửi Gemini ở
+     * {@link #assessRisk}, không phải nguồn dữ liệu cho FE (FE có bản nhãn riêng ở
+     * {@code VIOLATION_LABEL}, `proctoring/attempts/[attemptId]/page.tsx`). Bug thật (27/09/2026):
+     * trước đây gửi thẳng mã enum thô (vd "GAZE_AWAY", "IDLE_TOO_LONG") vào prompt, Gemini lặp lại
+     * y nguyên các mã này trong `explanation` — giảng viên đọc thấy tên biến nội bộ thay vì câu
+     * chữ dễ hiểu. */
+    private static final Map<String, String> VIOLATION_LABEL_VI = Map.ofEntries(
+            Map.entry("TAB_SWITCH", "Chuyển tab"),
+            Map.entry("WINDOW_BLUR", "Chuyển cửa sổ/ứng dụng khác"),
+            Map.entry("FULLSCREEN_EXIT", "Thoát chế độ toàn màn hình"),
+            Map.entry("NO_FACE", "Không thấy khuôn mặt"),
+            Map.entry("MULTIPLE_FACES", "Phát hiện nhiều người"),
+            Map.entry("HEAD_TURNED", "Quay đầu sang 1 bên"),
+            Map.entry("GAZE_AWAY", "Ánh mắt rời màn hình"),
+            Map.entry("AUDIO_VOICE_DETECTED", "Phát hiện giọng nói kéo dài"),
+            Map.entry("DEVTOOLS_OPEN", "Mở công cụ nhà phát triển (DevTools)"),
+            Map.entry("COPY_PASTE_BLOCKED", "Cố gắng copy/paste hoặc chuột phải"),
+            Map.entry("IDLE_TOO_LONG", "Không tương tác quá lâu")
+    );
+
     /** Xem docblock ở lời gọi trong {@link #submitAttempt}. */
     private void assessRisk(QuizAttempt attempt) {
         try {
             List<QuizAttemptViolation> violations = quizAttemptViolationRepository.findByAttempt_IdOrderByCreatedAtAsc(attempt.getId());
             Map<String, Long> violationCounts = violations.stream()
-                    .collect(Collectors.groupingBy(QuizAttemptViolation::getType, Collectors.counting()));
+                    .collect(Collectors.groupingBy(
+                            v -> VIOLATION_LABEL_VI.getOrDefault(v.getType(), v.getType()),
+                            Collectors.counting()));
 
             long durationSec = attempt.getCreatedAt() != null
                     ? java.time.Duration.between(attempt.getCreatedAt(), LocalDateTime.now()).getSeconds()
