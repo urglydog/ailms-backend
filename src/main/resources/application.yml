@@ -47,14 +47,20 @@ spring:
       timeout: 5s
 
   mail:
+    # Local dev: Mailpit (không set các env dưới) — Production: Gmail SMTP thật (set đủ
+    # SPRING_MAIL_HOST=smtp.gmail.com, SPRING_MAIL_PORT=587, SPRING_MAIL_USERNAME/PASSWORD =
+    # địa chỉ Gmail + App Password, SPRING_MAIL_SMTP_AUTH/STARTTLS=true). Cùng 1 jar chạy được cả
+    # 2 môi trường chỉ bằng biến môi trường, không cần profile riêng.
     host: ${SPRING_MAIL_HOST:localhost}
     port: ${SPRING_MAIL_PORT:1025}
+    username: ${SPRING_MAIL_USERNAME:}
+    password: ${SPRING_MAIL_PASSWORD:}
     properties:
       mail:
         smtp:
-          auth: false
+          auth: ${SPRING_MAIL_SMTP_AUTH:false}
           starttls:
-            enable: false
+            enable: ${SPRING_MAIL_SMTP_STARTTLS:false}
 
   servlet:
     multipart:
@@ -110,6 +116,14 @@ lms:
     daily-request-threshold: ${AI_LOCK_DAILY_THRESHOLD:20}   # >= ngưỡng này/ngày tính là "gần hết quota"
     consecutive-days: ${AI_LOCK_CONSECUTIVE_DAYS:3}          # liên tục bao nhiêu ngày thì đề xuất
     per-minute-threshold: ${AI_LOCK_PER_MINUTE_THRESHOLD:10} # > ngưỡng request/phút là bất thường
+    token-threshold: ${AI_LOCK_TOKEN_THRESHOLD:50000}        # > ngưỡng token trong khoảng dưới là bất thường (DoW)
+    token-window-minutes: ${AI_LOCK_TOKEN_WINDOW_MINUTES:5}  # khoảng thời gian tính tổng token
+
+  mail:
+    # Địa chỉ "From" cho mọi email hệ thống gửi (OTP, thông báo...) — Gmail SMTP thường yêu cầu
+    # From khớp đúng địa chỉ đã xác thực, nên production PHẢI set MAIL_FROM_ADDRESS = đúng địa
+    # chỉ Gmail dùng làm SPRING_MAIL_USERNAME. Mailpit (local dev) không quan tâm giá trị này.
+    from-address: ${MAIL_FROM_ADDRESS:noreply@lms.local}
 
   # Ngưỡng nghiệp vụ lấy từ business rules
   rules:

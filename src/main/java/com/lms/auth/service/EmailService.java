@@ -18,10 +18,13 @@ public class EmailService {
     @Value("${lms.frontend-base-url:http://localhost:3000}")
     private String frontendBaseUrl;
 
+    @Value("${lms.mail.from-address:noreply@lms.local}")
+    private String fromAddress;
+
     public void sendOtpEmail(String toEmail, String otp) {
         try {
             SimpleMailMessage message = new SimpleMailMessage();
-            message.setFrom("noreply@lms.local");
+            message.setFrom(fromAddress);
             message.setTo(toEmail);
             message.setSubject("Mã xác thực OTP - AI Powered LMS");
             message.setText("Mã xác thực của bạn là: " + otp + "\n"
@@ -42,7 +45,7 @@ public class EmailService {
     public void sendPriceDropEmail(String toEmail, String courseTitle, String courseSlug, BigDecimal oldPrice, BigDecimal newPrice) {
         try {
             SimpleMailMessage message = new SimpleMailMessage();
-            message.setFrom("noreply@lms.local");
+            message.setFrom(fromAddress);
             message.setTo(toEmail);
             message.setSubject("🔥 Khóa học trong danh sách yêu thích của bạn vừa giảm giá!");
             message.setText(String.format(

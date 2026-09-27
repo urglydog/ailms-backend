@@ -19,16 +19,18 @@ import org.springframework.transaction.annotation.Transactional;
  * thường và chỉ tạo ĐỀ XUẤT khoá ({@code User.aiLockProposedAt/Reason}) — KHÔNG tự khoá ngay.
  * Admin xem lý do cụ thể ở `GET /api/v1/admin/ai-lock-proposals` rồi mới quyết định.
  *
- * <p>2 tín hiệu (rút gọn từ thiết kế gốc 3 tín hiệu — tín hiệu thứ 3 "Gemini phân loại nội dung
- * prompt" không có dữ liệu để đọc vì {@code AiUsageLog} không lưu nội dung prompt, chỉ lưu số
- * token):
+ * <p>3 tín hiệu:
  * <ol>
  *   <li>Quota gần cạn LIÊN TỤC N ngày gần nhất (mặc định 3) — số request/ngày đạt/vượt
  *       {@code daily-request-threshold}.</li>
  *   <li>Tần suất bất thường — có phút nào trong 24h gần nhất vượt {@code per-minute-threshold}
  *       request (dấu hiệu script/bot).</li>
+ *   <li>Tiêu thụ token bất thường (27/09/2026, chống Denial of Wallet qua Prompt Injection) —
+ *       tổng {@code total_tokens} trong {@code token-window-minutes} phút gần nhất vượt
+ *       {@code token-threshold}, BẤT KỂ số request là 1 hay 10 (khác tín hiệu 2 chỉ đếm số
+ *       lượng request, không đếm được 1 request "nhồi" quá nhiều token qua context dài).</li>
  * </ol>
- * Đạt 1 trong 2 tín hiệu → tạo đề xuất (chỉ khi chưa bị khoá và chưa có đề xuất đang chờ xử lý,
+ * Đạt 1 trong 3 tín hiệu → tạo đề xuất (chỉ khi chưa bị khoá và chưa có đề xuất đang chờ xử lý,
  * tránh ghi đè đề xuất cũ).
  */
 @Slf4j
@@ -47,6 +49,12 @@ public class AiLockScanService {
 
     @Value("${lms.ai-lock.per-minute-threshold}")
     private long perMinuteThreshold;
+
+    @Value("${lms.ai-lock.token-threshold}")
+    private long tokenThreshold;
+
+    @Value("${lms.ai-lock.token-window-minutes}")
+    private int tokenWindowMinutes;
 
     @Transactional
     public int scan() {
@@ -99,6 +107,14 @@ public class AiLockScanService {
                 return String.format("Tần suất bất thường: %d request trong 1 phút (ngưỡng %d) — dấu hiệu script/bot.",
                         maxPerMinute, perMinuteThreshold);
             }
+        }
+
+        // Tín hiệu 3 — tiêu thụ token bất thường trong khoảng thời gian gần nhất.
+        long totalTokens = aiUsageLogRepository.getTotalTokensForUserSince(
+                userId, LocalDateTime.now().minusMinutes(tokenWindowMinutes));
+        if (totalTokens > tokenThreshold) {
+            return String.format("Tiêu thụ token bất thường: %d token trong %d phút gần nhất (ngưỡng %d).",
+                    totalTokens, tokenWindowMinutes, tokenThreshold);
         }
 
         return null;
