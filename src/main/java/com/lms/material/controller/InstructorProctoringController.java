@@ -101,10 +101,15 @@ public class InstructorProctoringController {
         }
         final LocalDateTime startedAt = tempStartedAt;
 
+        // (27/09/2026, sửa lỗi lệch ~5s) — ưu tiên `offsetSec` FE tự tính tại thời điểm phát hiện
+        // (cùng đồng hồ với lúc video bắt đầu ghi); công thức suy ngược qua `submittedAt` bên dưới
+        // chỉ còn dùng cho vi phạm cũ ghi TRƯỚC bản vá này (không có `offsetSec`), vốn không chính
+        // xác vì `submittedAt` bị chốt sớm hơn thời điểm FE thật sự dừng ghi hình.
         List<ViolationMarkerDto> markers = violations.stream().map(v -> ViolationMarkerDto.builder()
                         .type(v.getType())
                         .detail(v.getDetail())
-                        .offsetSec(startedAt != null ? Duration.between(startedAt, v.getCreatedAt()).getSeconds() : 0)
+                        .offsetSec(v.getOffsetSec() != null ? v.getOffsetSec()
+                                : startedAt != null ? Duration.between(startedAt, v.getCreatedAt()).getSeconds() : 0)
                         .build())
                 .toList();
 

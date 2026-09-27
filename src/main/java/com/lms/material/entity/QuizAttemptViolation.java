@@ -27,6 +27,12 @@ public class QuizAttemptViolation extends BaseEntity {
     @Column(name = "detail", columnDefinition = "TEXT")
     private String detail;
 
+    /** Offset (giây) do FE tự tính tại thời điểm phát hiện, cùng đồng hồ với lúc video bắt đầu ghi
+     * (27/09/2026, sửa lỗi lệch ~5s — xem {@code InstructorProctoringController.getAttemptDetail}).
+     * {@code null} cho vi phạm ghi trước bản vá này, hoặc khi FE chưa kịp bắt đầu ghi hình. */
+    @Column(name = "offset_sec")
+    private Integer offsetSec;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "attempt_id", nullable = false)
     private QuizAttempt attempt;

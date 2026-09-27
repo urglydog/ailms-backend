@@ -697,6 +697,7 @@ public class QuizService {
         violation.setAttempt(attempt);
         violation.setType(req.type());
         violation.setDetail(req.detail());
+        violation.setOffsetSec(req.clientOffsetSec());
         quizAttemptViolationRepository.save(violation);
 
         int newCount = attempt.getViolationCount() + 1;
@@ -750,7 +751,7 @@ public class QuizService {
         String detail = reasoning != null && !reasoning.isBlank() ? reasoning
                 : "Gemini Vision phát hiện bất thường (person_count=" + personCount + ", gaze_direction=" + gazeDirection + ")";
         QuizAttemptDto.ViolationRes violationRes = recordViolation(studentEmail, attemptId,
-                new QuizAttemptDto.ViolationReq(type, detail));
+                new QuizAttemptDto.ViolationReq(type, detail, req.clientOffsetSec()));
 
         return new QuizAttemptDto.ProctorFrameRes(personCount, gazeDirection, true,
                 violationRes.violationCount(), violationRes.maxViolations(), violationRes.shouldAutoSubmit());

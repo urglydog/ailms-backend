@@ -57,10 +57,14 @@ public class QuizAttemptDto {
     ) {}
 
     /** UC-ANTICHEAT — request FE gửi khi bắt được 1 vi phạm (tab-switch, copy/paste, DevTools,
-     * idle, âm thanh, Gemini Vision flag...). */
+     * idle, âm thanh, Gemini Vision flag...). {@code clientOffsetSec} (27/09/2026, sửa lỗi lệch
+     * ~5s) là offset FE tự tính tại thời điểm phát hiện, cùng đồng hồ với lúc bắt đầu ghi hình —
+     * chính xác hơn suy ngược qua {@code submittedAt} phía BE (xem
+     * {@code InstructorProctoringController.getAttemptDetail}). */
     public record ViolationReq(
             String type,
-            String detail
+            String detail,
+            Integer clientOffsetSec
     ) {}
 
     public record ViolationRes(
@@ -72,7 +76,8 @@ public class QuizAttemptDto {
     /** Request chụp khung hình webcam định kỳ để AI-worker xác minh bằng Gemini Vision. */
     public record ProctorFrameReq(
             String imageBase64,
-            String mimeType
+            String mimeType,
+            Integer clientOffsetSec
     ) {}
 
     public record ProctorFrameRes(
