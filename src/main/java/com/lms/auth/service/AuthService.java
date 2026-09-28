@@ -231,8 +231,10 @@ public class AuthService {
         }
         redisTemplate.delete(USER_TOKENS_PREFIX + email);
         redisTemplate.delete(USER_SESSIONS_PREFIX + email);
-        // Xoá cả phiên xem video hiện tại (nếu có)
-        redisTemplate.delete("user_stream:" + email); // Wait, user_stream uses userId!
+        // Xoá cả phiên xem video hiện tại (nếu có) — key "user_stream:" dùng userId (Long), không
+        // phải email (PlayerHeartbeatService), nên phải tra User trước.
+        userRepository.findByEmail(email).ifPresent(user ->
+                redisTemplate.delete("user_stream:" + user.getId()));
     }
 
     /** Task 10: liệt kê các thiết bị/phiên đang đăng nhập (dựa trên refresh token còn hiệu lực). */

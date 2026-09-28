@@ -85,10 +85,19 @@ public class AiLockScanService {
         List<Map<String, Object>> dailyCounts = aiUsageLogRepository.getDailyRequestCountForUser(
                 userId, LocalDate.now().minusDays(consecutiveDays).atStartOfDay());
         long consecutiveHighDays = 0;
+        LocalDate expectedDay = null;
         for (Map<String, Object> row : dailyCounts) {
+            // dailyCounts chỉ có 1 dòng cho MỖI NGÀY CÓ HOẠT ĐỘNG (GROUP BY), ngày không có
+            // request nào không xuất hiện trong danh sách — phải tự kiểm tra khoảng cách ngày
+            // giữa 2 dòng liên tiếp, không được suy diễn "liền kề trong list" = "liền kề lịch".
+            LocalDate day = toLocalDate(row.get("day"));
+            if (expectedDay != null && !day.equals(expectedDay)) {
+                break; // có ngày hoàn toàn không hoạt động xen giữa — gãy chuỗi liên tục.
+            }
             long count = ((Number) row.get("requestCount")).longValue();
             if (count >= dailyRequestThreshold) {
                 consecutiveHighDays++;
+                expectedDay = day.minusDays(1);
             } else {
                 break; // dailyCounts đã sắp xếp DESC theo ngày — gãy chuỗi liên tục thì dừng.
             }
@@ -118,5 +127,24 @@ public class AiLockScanService {
         }
 
         return null;
+    }
+
+    /** Kết quả `FUNCTION('DATE', ...)` qua Hibernate thường là {@link java.sql.Date}, nhưng chuẩn
+     * hoá luôn các kiểu ngày phổ biến khác để không phụ thuộc driver/version cụ thể. */
+    private LocalDate toLocalDate(Object value) {
+        if (value instanceof LocalDate localDate) {
+            return localDate;
+        }
+        if (value instanceof java.sql.Date sqlDate) {
+            return sqlDate.toLocalDate();
+        }
+        if (value instanceof LocalDateTime localDateTime) {
+            return localDateTime.toLocalDate();
+        }
+        if (value instanceof java.util.Date date) {
+            return date.toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDate();
+        }
+        throw new IllegalStateException("Kieu ngay khong ho tro tu query: "
+                + (value == null ? "null" : value.getClass()));
     }
 }
