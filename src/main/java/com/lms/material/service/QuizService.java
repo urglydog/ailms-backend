@@ -705,7 +705,10 @@ public class QuizService {
      * thật thay cho {@code localStorage} trước đây (client-trust, mất sạch khi đóng tab). */
     @Transactional
     public QuizAttemptDto.ViolationRes recordViolation(String studentEmail, Long attemptId, QuizAttemptDto.ViolationReq req) {
-        QuizAttempt attempt = quizAttemptRepository.findById(attemptId)
+        // PESSIMISTIC_WRITE — nhiều nguồn (event rời rạc từ FE + quét webcam định kỳ) có thể gọi
+        // gần như đồng thời cho cùng 1 attempt; khoá dòng để đọc-cộng-ghi violationCount bên dưới
+        // không bị lost-update.
+        QuizAttempt attempt = quizAttemptRepository.findByIdForUpdate(attemptId)
                 .orElseThrow(() -> new ResourceNotFoundException("QuizAttempt", attemptId));
         if (!attempt.getUser().getEmail().equals(studentEmail)) {
             throw new AccessDeniedDomainException("Ban khong co quyen ghi nhan vi pham cho bai thi nay");
