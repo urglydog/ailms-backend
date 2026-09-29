@@ -28,6 +28,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.apache.tika.Tika;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -208,6 +209,13 @@ public class UserService {
      * {@code wishlist} trả {@code null} khi chủ tài khoản đã tắt công khai mục đó — KHÔNG trả
      * mảng rỗng, để FE phân biệt được "đã ẩn" với "công khai nhưng chưa có gì".
      */
+    // TTL 10 phút, không evict thủ công (29/09/2026) — dữ liệu ghép từ 4 nguồn (user/
+    // enrollments/wishlist/certificates), chấp nhận trễ vài phút thay vì phải nhớ evict cache
+    // này ở EnrollmentService/WishlistService/CertificateService (nhiều điểm ghi, dễ sót).
+    // Không có tham số theo requester nên an toàn cache theo userId (khác bug PRIVATE_INVITE ở
+    // CoursePublicService.getBySlug — method đó có nhánh quyền theo requester, method này thì
+    // không, mọi người xem cùng 1 nội dung công khai).
+    @Cacheable(value = "publicProfile", key = "#userId")
     @Transactional(readOnly = true)
     public PublicProfileRes getPublicProfile(Long userId) {
         User user = userRepository.findById(userId)

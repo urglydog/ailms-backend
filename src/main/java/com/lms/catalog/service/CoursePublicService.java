@@ -21,6 +21,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
@@ -45,6 +47,16 @@ public class CoursePublicService {
     private final EnrollmentRepository enrollmentRepository;
     private final CouponService couponService;
     private final CourseAccessService courseAccessService;
+
+    // Self-injection QUA SETTER (không qua constructor — giữ nguyên @RequiredArgsConstructor,
+    // không đụng test @InjectMocks cũ). Bắt buộc để gọi loadCachedDetail() QUA proxy Spring AOP,
+    // vì gọi this.loadCachedDetail() trực tiếp trong cùng class sẽ ÂM THẦM bỏ qua @Cacheable.
+    private CoursePublicService self;
+
+    @Autowired
+    public void setSelf(@Lazy CoursePublicService self) {
+        this.self = self;
+    }
 
     @Cacheable(value = "publicCourseSearch", condition = "#keyword == null and #pageable.pageNumber == 0")
     @Transactional(readOnly = true)
@@ -129,9 +141,13 @@ public class CoursePublicService {
      *                       trang chi tiết), nhưng KHÔNG xem được khóa PRIVATE_INVITE trừ khi
      *                       email nằm trong danh sách mời (BR mới, 19/09/2026).
      */
-    @Cacheable(value = "courseDetails", key = "#slug")
     @Transactional(readOnly = true)
     public DetailRes getBySlug(String slug, String requesterEmail) {
+        // Kiểm tra quyền xem PHẢI chạy MỌI lần gọi, không được cache — bug thật (29/09/2026):
+        // trước đây @Cacheable bọc nguyên method này, nên với khóa PRIVATE_INVITE, sau khi 1
+        // người được mời xem thành công, TOÀN BỘ nội dung khóa bị cache theo slug và bất kỳ ai
+        // khác (kể cả Guest) gọi lại slug đó trong TTL sẽ nhận thẳng data từ cache, bỏ qua hoàn
+        // toàn bước kiểm tra mời bên dưới — lộ nội dung VÀ lộ luôn sự tồn tại của khóa riêng tư.
         // Không phân biệt "không tồn tại" và "chưa PUBLISHED" — tránh lộ thông tin khóa
         // DRAFT/PENDING/REJECTED cho Guest chỉ vì họ đoán đúng slug. Áp dụng cùng nguyên tắc cho
         // PRIVATE_INVITE: người ngoài không được biết khóa "riêng tư mời" này có tồn tại hay không.
@@ -147,6 +163,20 @@ public class CoursePublicService {
             }
         }
 
+        // Nội dung khóa học (courses/chapters/lessons/giá hiển thị) giống hệt nhau cho MỌI
+        // người được phép xem — không có field cá nhân hóa theo requester trong DetailRes, nên
+        // an toàn để cache theo slug, tách biệt khỏi bước kiểm tra quyền ở trên. Gọi QUA self
+        // (proxy) — gọi trực tiếp loadCachedDetail(slug) ở đây sẽ không đi qua @Cacheable.
+        return self.loadCachedDetail(slug);
+    }
+
+    /** Chỉ gọi từ {@link #getBySlug} SAU KHI đã qua kiểm tra quyền — bản thân method này không
+     * biết gì về requester, chỉ cache dữ liệu công khai theo slug. */
+    @Cacheable(value = "courseDetails", key = "#slug")
+    @Transactional(readOnly = true)
+    public DetailRes loadCachedDetail(String slug) {
+        Course course = courseRepository.findBySlugAndStatus(slug, CourseStatus.PUBLISHED)
+                .orElseThrow(() -> new ResourceNotFoundException("Course", slug));
         return mapToDetailRes(course);
     }
 
