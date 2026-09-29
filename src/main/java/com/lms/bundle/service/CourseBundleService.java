@@ -112,6 +112,16 @@ public class CourseBundleService {
         return bundles.stream().map(this::mapToRes).collect(Collectors.toList());
     }
 
+    /** Gộp tra bundle cho nhiều courseId (giỏ hàng) trong 1 lần gọi — tránh N+1 request. */
+    @Transactional(readOnly = true)
+    public List<CourseBundleDto.Res> getActiveBundlesForCourses(List<Long> courseIds) {
+        if (courseIds == null || courseIds.isEmpty()) {
+            return List.of();
+        }
+        List<CourseBundle> bundles = bundleRepository.findActiveBundlesByCourseIds(courseIds);
+        return bundles.stream().map(this::mapToRes).collect(Collectors.toList());
+    }
+
     private CourseBundleDto.Res mapToRes(CourseBundle bundle) {
         BigDecimal originalPrice = BigDecimal.ZERO;
         List<CourseBundleDto.CourseItemRes> courseItems = bundle.getCourses().stream().map(c -> {

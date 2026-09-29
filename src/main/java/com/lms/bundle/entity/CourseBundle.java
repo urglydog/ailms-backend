@@ -31,11 +31,16 @@ public class CourseBundle extends BaseEntity {
     @Column(name = "is_active", nullable = false)
     private Boolean isActive = true;
 
+    // @OrderBy bắt buộc: thứ tự khóa học trong bundle quyết định khóa nào "hấp thụ" phần dư làm
+    // tròn khi tính pro-rated (xem PaymentService.createBatchPayment) — không có @OrderBy, thứ
+    // tự Hibernate trả về không xác định giữa các lần fetch, gây lệch giá vài đồng giữa lúc FE
+    // preview và lúc BE chốt thanh toán.
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(
             name = "course_bundle_items",
             joinColumns = @JoinColumn(name = "bundle_id"),
             inverseJoinColumns = @JoinColumn(name = "course_id")
     )
+    @OrderBy("id ASC")
     private List<Course> courses = new ArrayList<>();
 }
