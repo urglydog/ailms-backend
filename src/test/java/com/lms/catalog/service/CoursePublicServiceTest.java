@@ -20,6 +20,7 @@ import com.lms.enrollment.repository.EnrollmentRepository;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -53,6 +54,16 @@ class CoursePublicServiceTest {
 
     @InjectMocks
     private CoursePublicService coursePublicService;
+
+    /** {@code self} (self-injection @Lazy cho @Cacheable, xem CoursePublicService.getBySlug) chỉ
+     * được set qua Spring container thật lúc runtime — test đơn vị này không chạy trong Spring
+     * context nên phải tự set tay, trỏ về chính instance đang test (không qua proxy cache, đúng
+     * tinh thần unit test: kiểm tra LOGIC nghiệp vụ, không kiểm tra hành vi cache của Spring AOP
+     * — hành vi cache đã verify thủ công qua Redis thật, xem README/plan). */
+    @BeforeEach
+    void setUp() {
+        coursePublicService.setSelf(coursePublicService);
+    }
 
     @Test
     void getBySlug_throwsNotFound_whenMissingOrNotPublished() {
