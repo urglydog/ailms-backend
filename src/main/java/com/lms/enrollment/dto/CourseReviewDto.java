@@ -25,6 +25,7 @@ public class CourseReviewDto {
             Integer rating,
             String comment,
             Boolean isHidden,
+            String moderationReason,
             LocalDateTime createdAt
     ) {}
 }

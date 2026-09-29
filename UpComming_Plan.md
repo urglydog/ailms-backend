@@ -8,7 +8,7 @@ Trước mỗi tính năng đều đi kèm với **Bối cảnh & Nỗi đau (Pa
 
 ## SPRINT 1: NỀN MÓNG HẠ TẦNG & DÒNG TIỀN (INFRASTRUCTURE & MONETIZATION)
 
-### 1. Caching với Redis (Technical Story)
+### ~~1. Caching với Redis (Technical Story)~~ [ĐÃ HOÀN THÀNH]
 * **Bối cảnh & Nỗi đau (Pain Point):** Khi lượng truy cập lớn (hàng nghìn học viên cùng vào xem bài giảng hoặc truy cập dashboard), việc query liên tục vào DB quan hệ sẽ làm nghẽn connection, tăng độ trễ và đẩy CPU database lên 100%. Các API đọc dữ liệu tĩnh/bán tĩnh đang tạo áp lực không cần thiết lên hệ thống.
 * **Technical Story:** Là một Hệ thống Backend, chúng tôi cần áp dụng bộ nhớ đệm Redis Cache cho các API đọc dữ liệu tĩnh/bán tĩnh (thông tin khóa học, mục lục bài giảng, hồ sơ công khai), để giảm tải 70-80% truy vấn trực tiếp vào Database chính và giữ thời gian phản hồi của API dưới 100ms ngay cả khi traffic tăng đột biến.
 * **Acceptance Criteria (AC):**
@@ -43,7 +43,7 @@ Trước mỗi tính năng đều đi kèm với **Bối cảnh & Nỗi đau (Pa
 
 ## SPRINT 2: TRẢI NGHIỆM NGƯỜI HỌC, GIỮ CHÂN & TƯƠNG TÁC (ENGAGEMENT)
 
-### 5. Hệ thống Streak (Chuỗi ngày học)
+### ~~5. Hệ thống Streak (Chuỗi ngày học)~~ [ĐÃ HOÀN THÀNH]
 * **Bối cảnh & Nỗi đau (Pain Point):** Tỷ lệ bỏ dở khóa học trực tuyến (drop-off rate) thường rất cao do học viên thiếu động lực tự giác duy trì thói quen hàng ngày.
 * **User Story:** Là một học viên tự học, tôi muốn hệ thống ghi nhận và hiển thị chuỗi ngày học liên tục (Streak) kèm thông báo nhắc nhở giữ chuỗi, để tôi có thêm động lực duy trì kỷ luật học tập đều đặn mỗi ngày mà không bị ngắt quãng.
 * **Acceptance Criteria (AC):**

@@ -46,8 +46,11 @@ public class CourseReviewController {
     @GetMapping("/api/v1/reviews")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Page<Res>> listAll(
+            @RequestParam(required = false) String courseTitle,
+            @RequestParam(required = false) String instructorEmail,
+            @RequestParam(required = false) String status,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
-        return ResponseEntity.ok(courseReviewService.listAll(pageable));
+        return ResponseEntity.ok(courseReviewService.listAll(courseTitle, instructorEmail, status, pageable));
     }
 
     @PostMapping("/api/v1/reviews/{id}/hide")

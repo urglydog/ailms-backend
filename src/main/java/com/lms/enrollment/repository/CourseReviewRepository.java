@@ -42,7 +42,20 @@ public interface CourseReviewRepository extends JpaRepository<CourseReview, Long
             + "WHERE r.course.instructor.email = :email AND r.isHidden = false AND r.createdAt >= :after")
     Double findAverageRatingByInstructorEmailSince(@Param("email") String email, @Param("after") java.time.LocalDateTime after);
 
-    /** Trang "Hiệu suất" > Đánh giá — toàn bộ đánh giá (không ẩn) trên các khóa của giảng viên. */
     @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"user", "course"})
     java.util.List<CourseReview> findByCourse_Instructor_EmailAndIsHiddenFalseOrderByCreatedAtDesc(String email);
+
+    @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"course", "course.instructor", "user"})
+    @Query(value = "SELECT r FROM CourseReview r " +
+           "WHERE (:courseTitle IS NULL OR LOWER(r.course.title) LIKE LOWER(CONCAT('%', :courseTitle, '%'))) " +
+           "AND (:instructorEmail IS NULL OR r.course.instructor.email = :instructorEmail) " +
+           "AND (:status IS NULL OR (:status = 'HIDDEN' AND r.isHidden = true) OR (:status = 'VISIBLE' AND r.isHidden = false))",
+           countQuery = "SELECT COUNT(r) FROM CourseReview r " +
+           "WHERE (:courseTitle IS NULL OR LOWER(r.course.title) LIKE LOWER(CONCAT('%', :courseTitle, '%'))) " +
+           "AND (:instructorEmail IS NULL OR r.course.instructor.email = :instructorEmail) " +
+           "AND (:status IS NULL OR (:status = 'HIDDEN' AND r.isHidden = true) OR (:status = 'VISIBLE' AND r.isHidden = false))")
+    Page<CourseReview> searchAdminReviews(@Param("courseTitle") String courseTitle,
+                                          @Param("instructorEmail") String instructorEmail,
+                                          @Param("status") String status,
+                                          Pageable pageable);
 }

@@ -35,6 +35,7 @@ class CourseReviewServiceTest {
     private static final String STUDENT_EMAIL = "student1@lms.local";
 
     @Mock private CourseReviewRepository courseReviewRepository;
+    @Mock private com.lms.common.util.CacheEvictionHelper cacheEvictionHelper;
     @Mock private CourseRepository courseRepository;
     @Mock private EnrollmentRepository enrollmentRepository;
     @Mock private UserRepository userRepository;

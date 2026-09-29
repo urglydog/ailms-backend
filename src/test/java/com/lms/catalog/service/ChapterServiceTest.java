@@ -32,6 +32,7 @@ class ChapterServiceTest {
     private static final String OWNER_EMAIL = "instructor@lms.local";
 
     @Mock private ChapterRepository chapterRepository;
+    @Mock private com.lms.common.util.CacheEvictionHelper cacheEvictionHelper;
     @Mock private CourseRepository courseRepository;
     @Mock private LessonRepository lessonRepository;
     @Mock private LessonService lessonService;
