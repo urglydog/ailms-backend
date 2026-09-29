@@ -42,6 +42,7 @@ public class QuizService {
     private final QuizAttemptViolationRepository quizAttemptViolationRepository;
     private final ProctoringRecordingRepository proctoringRecordingRepository;
     private final StorageService storageService;
+    private final org.springframework.context.ApplicationEventPublisher eventPublisher;
     private final Tika tika = new Tika();
 
     @Transactional
@@ -630,6 +631,7 @@ public class QuizService {
         attempt.setStatus("COMPLETED");
         attempt.setSubmittedAt(LocalDateTime.now());
         quizAttemptRepository.save(attempt);
+        eventPublisher.publishEvent(new com.lms.enrollment.event.LessonCompletedEvent(this, attempt.getUser().getId(), java.time.Instant.now()));
 
         // A2 (UpComming_Plan.md) — Quiz chính thức giờ chiếm 30% công thức % tiến độ khóa học,
         // nên nộp bài xong phải tính lại ngay, không chỉ lúc xem video mới tính (LessonProgressService).
