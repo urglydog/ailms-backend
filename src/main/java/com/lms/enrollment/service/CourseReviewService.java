@@ -104,8 +104,11 @@ public class CourseReviewService {
     }
 
     @Transactional(readOnly = true)
-    public Page<Res> listAll(Pageable pageable) {
-        return courseReviewRepository.findAll(pageable).map(this::mapToRes);
+    public Page<Res> listAll(String courseTitle, String instructorEmail, String status, Pageable pageable) {
+        String finalCourseTitle = (courseTitle == null || courseTitle.isBlank()) ? null : courseTitle;
+        String finalInstructorEmail = (instructorEmail == null || instructorEmail.isBlank()) ? null : instructorEmail;
+        String finalStatus = (status == null || status.isBlank()) ? null : status;
+        return courseReviewRepository.searchAdminReviews(finalCourseTitle, finalInstructorEmail, finalStatus, pageable).map(this::mapToRes);
     }
 
     @Transactional
@@ -134,8 +137,14 @@ public class CourseReviewService {
         CourseReview review = courseReviewRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("CourseReview", id));
         review.setIsHidden(hidden);
+        if (hidden) {
+            review.setModerationReason("Ẩn thủ công bởi Admin");
+        } else {
+            review.setModerationReason(null);
+        }
         CourseReview saved = courseReviewRepository.save(review);
         recalcAvgRating(review.getCourse());
+        cacheEvictionHelper.evictCourseCacheAfterCommit(review.getCourse().getSlug());
         return mapToRes(saved);
     }
 
@@ -156,6 +165,7 @@ public class CourseReviewService {
                 review.getRating(),
                 review.getComment(),
                 review.getIsHidden(),
+                review.getModerationReason(),
                 review.getCreatedAt()
         );
     }
