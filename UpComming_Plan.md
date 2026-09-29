@@ -74,13 +74,14 @@ Trước mỗi tính năng đều đi kèm với **Bối cảnh & Nỗi đau (Pa
   - Câu hỏi gắn Topic Tag. Nút "Ôn tập ngay" dẫn tới mốc thời gian (seconds) trong video.
   - **Refined AC (Rolling Window):** Phân tích điểm yếu phải dựa trên cửa sổ trượt thời gian (VD: kết quả 5 lần test gần nhất, hoặc trong 30 ngày qua), không cộng dồn các lỗi sai từ quá khứ xa xôi khi học viên đã tiến bộ.
 
-### 10. Advanced Instructor Dashboard & Revenue Analytics
+### ~~10. Advanced Instructor Dashboard & Revenue Analytics~~ [ĐÃ HOÀN THÀNH]
 * **Bối cảnh & Nỗi đau (Pain Point):** Giảng viên như "ném đá vào hư không", không biết đoạn video nào nhàm chán, câu hỏi nào bị lỗi. Khó theo dõi dòng tiền thực nhận.
 * **User Story:** Là giảng viên, tôi muốn xem biểu đồ rớt nhịp (Drop-off rate), độ khó câu hỏi và báo cáo dòng tiền chia sẻ lợi nhuận.
 * **Acceptance Criteria (AC):**
   - Biểu đồ giữ chân (Retention Heatmap).
   - Bảng xếp hạng Top câu hỏi có tỷ lệ sai > 60%.
   - Báo cáo phân tích doanh thu gộp (Gross), phí nền tảng, thực nhận (Net).
+* **Đã làm (29/09/2026):** BE: 3 endpoint mới (`/instructor/revenue/summary`, `/instructor/hard-questions`, `/instructor/retention/{lessonId}`) + bảng `lesson_watch_checkpoints` (V137) ghi tự động qua chu kỳ gửi tiến độ 15s có sẵn của video player, không cần sửa FE player. Đã vá kèm: hardcode doanh thu Admin còn sót, comment sai lệch tỷ lệ platformFee/instructorEarning, và 1 bug thật gây restart loop (lệch kiểu cột `decile` TINYINT vs Integer). FE: 3 trang mới trong "Hiệu suất" Giảng viên (`/instructor/revenue/summary`, `/hard-questions`, `/retention`) — đã test qua API thật + render OK trên dev server.
 
 ---
 
