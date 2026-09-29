@@ -8,23 +8,15 @@ Trước mỗi tính năng đều đi kèm với **Bối cảnh & Nỗi đau (Pa
 
 ## SPRINT 1: NỀN MÓNG HẠ TẦNG & DÒNG TIỀN (INFRASTRUCTURE & MONETIZATION)
 
-### ~~1. Caching với Redis (Technical Story)~~ [ĐÃ HOÀN THÀNH]
 * **Bối cảnh & Nỗi đau (Pain Point):** Khi lượng truy cập lớn (hàng nghìn học viên cùng vào xem bài giảng hoặc truy cập dashboard), việc query liên tục vào DB quan hệ sẽ làm nghẽn connection, tăng độ trễ và đẩy CPU database lên 100%. Các API đọc dữ liệu tĩnh/bán tĩnh đang tạo áp lực không cần thiết lên hệ thống.
 * **Technical Story:** Là một Hệ thống Backend, chúng tôi cần áp dụng bộ nhớ đệm Redis Cache cho các API đọc dữ liệu tĩnh/bán tĩnh (thông tin khóa học, mục lục bài giảng, hồ sơ công khai), để giảm tải 70-80% truy vấn trực tiếp vào Database chính và giữ thời gian phản hồi của API dưới 100ms ngay cả khi traffic tăng đột biến.
 * **Acceptance Criteria (AC):**
   - Áp dụng chiến lược Cache-Aside hoặc Write-Through phù hợp.
   - Cơ chế Cache Invalidation chính xác: Khi giảng viên cập nhật nội dung bài học, cache tương ứng phải được làm mới ngay lập tức.
 
-### 2. Tối ưu hóa Storage & CDN (Technical Story)
-* **Bối cảnh & Nỗi đau (Pain Point):** Học viên gặp tình trạng giật lag, xoay vòng khi tua video bài học. Việc tải file trực tiếp từ server lưu trữ chính (B2 Storage) vừa gây tốn băng thông, chi phí lớn, vừa rò rỉ link gốc khiến khóa học dễ bị tải lậu.
-* **Technical Story:** Là một Hệ thống Phân phối Nội dung, chúng tôi cần phân phối toàn bộ Video và Asset bài học qua mạng phân phối toàn cầu (CDN) kết nối với B2 Storage và áp dụng HLS/DASH streaming kèm bảo mật Token, để học viên stream video mượt mà, tiết kiệm băng thông gốc và chống tải lậu.
-* **Acceptance Criteria (AC):**
-  - Cache hit ratio trên CDN đạt > 85% cho các video phổ biến.
-  - Video được nén và mã hóa đa độ phân giải (360p, 720p, 1080p) theo định dạng HLS.
-  - Thiết lập Signed URL / Token Authentication qua CDN (ví dụ Cloudflare).
-  - **Refined AC (Bảo mật linh hoạt):** Token chỉ giới hạn TTL ngắn (Time-To-Live, ví dụ 2-4 tiếng), refresh tự động qua session đăng nhập thay vì khóa cứng theo IP (tránh lỗi 403 khi người dùng Mobile đổi từ Wifi sang 4G).
 
-### 3. Hệ thống Khuyến mãi (Coupons & Vouchers)
+
+### ~~3. Hệ thống Khuyến mãi (Coupons & Vouchers)~~ [ĐÃ HOÀN THÀNH]
 * **Bối cảnh & Nỗi đau (Pain Point):** Hiện tại nền tảng thiếu công cụ tạo ưu đãi linh hoạt để kích thích chuyển đổi cho các chiến dịch ra mắt hoặc bán hàng qua mạng xã hội, làm mất đi lượng lớn khách hàng nhạy cảm về giá.
 * **User Story:** Là một quản trị viên (Admin) hoặc Giảng viên, tôi muốn tạo mã giảm giá linh hoạt (theo %, số tiền cố định, giới hạn lượt dùng hoặc thời hạn sử dụng), để tôi triển khai các chiến dịch Marketing thúc đẩy doanh số bán khóa học.
 * **Acceptance Criteria (AC):**
@@ -52,7 +44,7 @@ Trước mỗi tính năng đều đi kèm với **Bối cảnh & Nỗi đau (Pa
   - Cơ chế "đóng băng streak" (Streak Freeze) để tránh mất chuỗi khi có việc đột xuất.
   - **Refined AC (Timezone):** Hệ thống phải tính ngày Streak dựa trên Múi giờ Local của trình duyệt thiết bị người học, không fix cứng theo giờ UTC của Server để tránh mất streak oan uổng.
 
-### 6. Đánh giá & Review nâng cao (AI Sentiment Filter)
+### ~~6. Đánh giá & Review nâng cao (AI Sentiment Filter)~~ [ĐÃ HOÀN THÀNH]
 * **Bối cảnh & Nỗi đau (Pain Point):** Khóa học bị spam đánh giá rác, bot cạnh tranh không lành mạnh hoặc những bình luận mang tính xúc phạm làm sai lệch chất lượng thực tế.
 * **User Story:** Là một người mua hàng, tôi muốn đọc đánh giá chân thực; Là một Admin, tôi muốn AI tự động phát hiện, gắn cờ các đánh giá toxic/spam.
 * **Acceptance Criteria (AC):**
@@ -64,13 +56,6 @@ Trước mỗi tính năng đều đi kèm với **Bối cảnh & Nỗi đau (Pa
 
 ## SPRINT 3: TỐI ƯU HÓA BẰNG AI & BÁO CÁO (ADVANCED AI & ANALYTICS)
 
-### 7. AI Auto-Subtitles & Translation
-* **Bối cảnh & Nỗi đau (Pain Point):** Giảng viên tốn kém tự làm phụ đề/dịch thuật; Học viên xem video ở môi trường ồn ào hoặc gặp rào cản ngôn ngữ.
-* **User Story:** Là học viên, tôi muốn bật/dịch phụ đề; Là giảng viên, tôi muốn video tự trích xuất phụ đề để tiết kiệm thời gian.
-* **Acceptance Criteria (AC):**
-  - Sinh phụ đề (.vtt/.srt) tự động khi upload video.
-  - Có trình biên tập để giảng viên sửa thuật ngữ AI nhận diện sai.
-  - **Refined AC:** Luôn có cơ chế Fallback cho phép upload thủ công file `.srt/.vtt` nếu dịch vụ AI lỗi/chậm.
 
 ### 8. AI Personalized Study Plan (Lộ trình học cá nhân hóa)
 * **Bối cảnh & Nỗi đau (Pain Point):** Khóa học có dung lượng lớn, học viên dễ bị choáng ngợp, không biết phân bổ thời gian học sao cho kịp thi.

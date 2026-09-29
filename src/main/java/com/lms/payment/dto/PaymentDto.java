@@ -44,7 +44,9 @@ public class PaymentDto {
              * giỏ, khoá theo {@code courseId} (cùng tinh thần {@code couponCode}: mỗi khóa tự
              * kiểm tra khớp {@code Course.referralCode} của CHÍNH nó, không dùng chéo được).
              * NULL hoặc thiếu entry cho 1 khóa → khóa đó tính {@code ORGANIC}. */
-            Map<Long, String> referralCodes
+            Map<Long, String> referralCodes,
+            /** Tính năng Course Bundles (29/09/2026) — danh sách ID các gói khóa học mà học viên chọn mua. */
+            List<Long> bundleIds
     ) {}
 
     public record PaymentUrlRes(

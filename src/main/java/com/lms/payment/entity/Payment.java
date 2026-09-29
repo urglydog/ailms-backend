@@ -6,6 +6,7 @@ import com.lms.catalog.entity.Course;
 import com.lms.common.enums.PaymentStatus;
 import com.lms.common.enums.RevenueSource;
 import com.lms.coupon.entity.Coupon;
+import com.lms.bundle.entity.CourseBundle;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import jakarta.persistence.*;
@@ -61,10 +62,13 @@ public class Payment extends BaseEntity {
     @Column(name = "discount_amount", nullable = false, precision = 12, scale = 2)
     private BigDecimal discountAmount = BigDecimal.ZERO;
 
-    /** Coupon đã áp dụng cho giao dịch này — NULL nếu không dùng coupon (15/09/2026, mở rộng). */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "coupon_id")
     private Coupon coupon;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "bundle_id")
+    private CourseBundle bundle;
 
     /** = amount x 30%, chốt cứng lúc PAID (BR-PAY-05). */
     @Column(name = "platform_fee", nullable = false, precision = 12, scale = 2)

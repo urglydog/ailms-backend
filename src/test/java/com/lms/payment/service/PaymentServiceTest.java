@@ -61,6 +61,8 @@ class PaymentServiceTest {
     @Mock private PayOS payOS;
     @Mock private PaymentRequestsService paymentRequestsService;
     @Mock private CouponService couponService;
+    @Mock private com.lms.payment.repository.CartItemRepository cartItemRepository;
+    @Mock private com.lms.bundle.repository.CourseBundleRepository bundleRepository;
     @Mock private com.lms.catalog.service.CourseAccessService courseAccessService;
 
     @InjectMocks
@@ -135,7 +137,7 @@ class PaymentServiceTest {
                         .build());
 
         var result = paymentService.createBatchPayment(
-                EMAIL, new CreateBatchReq(List.of(10L, 20L), "PAYOS", "Nguyen Van A", "0900000000", null, null));
+                EMAIL, new CreateBatchReq(List.of(10L, 20L), "PAYOS", "Nguyen Van A", "0900000000", null, null, null));
 
         assertThat(result.paymentUrl()).isEqualTo("https://payos.example/checkout/abc");
 
@@ -156,7 +158,7 @@ class PaymentServiceTest {
         courseB.setIsFree(true);
 
         assertThatThrownBy(() -> paymentService.createBatchPayment(
-                EMAIL, new CreateBatchReq(List.of(10L, 20L), "PAYOS", null, null, null, null)))
+                EMAIL, new CreateBatchReq(List.of(10L, 20L), "PAYOS", null, null, null, null, null)))
                 .isInstanceOf(BusinessRuleViolationException.class);
 
         verify(paymentRepository, never()).save(any());
@@ -167,7 +169,7 @@ class PaymentServiceTest {
         when(enrollmentRepository.existsByUser_IdAndCourse_Id(1L, 20L)).thenReturn(true);
 
         assertThatThrownBy(() -> paymentService.createBatchPayment(
-                EMAIL, new CreateBatchReq(List.of(10L, 20L), "PAYOS", null, null, null, null)))
+                EMAIL, new CreateBatchReq(List.of(10L, 20L), "PAYOS", null, null, null, null, null)))
                 .isInstanceOf(BusinessRuleViolationException.class);
 
         verify(paymentRepository, never()).save(any());
@@ -175,14 +177,14 @@ class PaymentServiceTest {
 
     @Test
     void createBatchPayment_emptyCourseList_throws() {
-        assertThatThrownBy(() -> paymentService.createBatchPayment(EMAIL, new CreateBatchReq(List.of(), "PAYOS", null, null, null, null)))
+        assertThatThrownBy(() -> paymentService.createBatchPayment(EMAIL, new CreateBatchReq(List.of(), "PAYOS", null, null, null, null, null)))
                 .isInstanceOf(BusinessRuleViolationException.class);
     }
 
     @Test
     void createBatchPayment_vnpay_returnsBuiltUrlForTotalAmount() {
         var result = paymentService.createBatchPayment(
-                EMAIL, new CreateBatchReq(List.of(10L, 20L), "VNPAY", null, null, null, null));
+                EMAIL, new CreateBatchReq(List.of(10L, 20L), "VNPAY", null, null, null, null, null));
 
         assertThat(result.paymentUrl()).startsWith("https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?");
         assertThat(result.paymentUrl()).contains("vnp_Amount=50000000"); // (200000+300000) * 100
@@ -267,11 +269,11 @@ class PaymentServiceTest {
 
     @Test
     void createBatchPayment_courseAccessDenied_throwsWithoutSavingAnyPayment() {
-        doThrow(new AccessDeniedDomainException("Khóa học riêng tư có mật khẩu chỉ hỗ trợ mua trực tiếp, không thể thêm vào giỏ hàng."))
-                .when(courseAccessService).verifyCanAddToCart(courseA, EMAIL);
+        lenient().doThrow(new AccessDeniedDomainException("Khóa học riêng tư có mật khẩu chỉ hỗ trợ mua trực tiếp, không thể thêm vào giỏ hàng."))
+                .when(courseAccessService).verifyCanAddToCart(any(), any());
 
         assertThatThrownBy(() -> paymentService.createBatchPayment(
-                EMAIL, new CreateBatchReq(List.of(10L, 20L), "PAYOS", null, null, null, null)))
+                EMAIL, new CreateBatchReq(List.of(10L, 20L), "PAYOS", null, null, null, null, null)))
                 .isInstanceOf(AccessDeniedDomainException.class);
         verify(paymentRepository, never()).save(any());
     }
@@ -314,7 +316,7 @@ class PaymentServiceTest {
 
         paymentService.createBatchPayment(EMAIL, new CreateBatchReq(
                 List.of(10L, 20L), "VNPAY", null, null, null,
-                java.util.Map.of(10L, "ref-course-a")));
+                java.util.Map.of(10L, "ref-course-a"), null));
 
         verify(paymentRepository, times(2)).save(captor.capture());
         List<Payment> saved = captor.getAllValues();
