@@ -45,6 +45,20 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
             + "AND p.paidAt >= :monthStart")
     BigDecimal sumInstructorEarningSince(@Param("email") String email, @Param("monthStart") LocalDateTime monthStart);
 
+    /** Dashboard Admin (29/09/2026, sửa lỗi) — doanh thu GỘP toàn nền tảng (mọi giảng viên),
+     * thay số "15400000" gắn cứng cũ với TODO "chờ module Payment" — module đã có thật từ lâu. */
+    @Query("SELECT COALESCE(SUM(p.amount), 0) FROM Payment p WHERE p.status = com.lms.common.enums.PaymentStatus.PAID")
+    BigDecimal sumTotalRevenue();
+
+    /** Sprint 3 mục 10 — Báo cáo doanh thu gộp/phí nền tảng/thực nhận theo khoảng thời gian cho 1
+     * giảng viên. `start`/`end` là khoảng NỬA-MỞ [start, end) — tầng Service phải tự quy đổi
+     * LocalDate sang LocalDateTime (BUG THẬT nếu truyền thẳng LocalDate: bị ép kiểu ngầm thành
+     * `end 00:00:00`, mất trọn giao dịch trong ngày `end`). Trả 1 dòng duy nhất: [gross, platformFee, net, count]. */
+    @Query("SELECT COALESCE(SUM(p.amount), 0), COALESCE(SUM(p.platformFee), 0), COALESCE(SUM(p.instructorEarning), 0), COUNT(p) "
+            + "FROM Payment p WHERE p.course.instructor.email = :email AND p.status = com.lms.common.enums.PaymentStatus.PAID "
+            + "AND p.paidAt >= :start AND p.paidAt < :end")
+    List<Object[]> sumRevenueSummaryBetween(@Param("email") String email, @Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
+
     /** Trang "Hiệu suất" > Doanh thu (19/09/2026, mở rộng) — danh sách giao dịch THÀNH CÔNG
      * trong khoảng thời gian chọn, trên mọi khóa của giảng viên. */
     @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"course", "coupon"})

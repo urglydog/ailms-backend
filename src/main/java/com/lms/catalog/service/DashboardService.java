@@ -1,17 +1,26 @@
 package com.lms.catalog.service;
 
 import com.lms.catalog.entity.Course;
+import com.lms.catalog.entity.Lesson;
 import com.lms.catalog.repository.CourseRepository;
+import com.lms.catalog.repository.LessonRepository;
 import com.lms.common.enums.PaymentStatus;
+import com.lms.common.exception.AccessDeniedDomainException;
+import com.lms.common.exception.ResourceNotFoundException;
 import com.lms.enrollment.entity.CourseReview;
 import com.lms.enrollment.entity.Enrollment;
 import com.lms.enrollment.repository.CourseReviewRepository;
 import com.lms.enrollment.repository.EnrollmentRepository;
+import com.lms.enrollment.repository.LessonProgressRepository;
+import com.lms.enrollment.repository.LessonWatchCheckpointRepository;
+import com.lms.material.repository.QuizAnswerRepository;
 import com.lms.payment.entity.Payment;
 import com.lms.payment.repository.PaymentRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
@@ -36,6 +45,10 @@ public class DashboardService {
     private final EnrollmentRepository enrollmentRepository;
     private final CourseReviewRepository courseReviewRepository;
     private final PaymentRepository paymentRepository;
+    private final QuizAnswerRepository quizAnswerRepository;
+    private final LessonRepository lessonRepository;
+    private final LessonProgressRepository lessonProgressRepository;
+    private final LessonWatchCheckpointRepository lessonWatchCheckpointRepository;
 
     /** "7d"/"30d"/"12m"/"all" — quy ước tham số `range` dùng chung cho mọi endpoint bên dưới. */
     private LocalDateTime resolveRangeStart(String range) {
@@ -119,6 +132,92 @@ public class DashboardService {
                     return row;
                 })
                 .toList();
+    }
+
+    /** Sprint 3 mục 10 — Báo cáo doanh thu gộp/phí nền tảng/thực nhận theo khoảng thời gian tự
+     * chọn (khác {@link #getPerformanceOverview}, vốn chỉ hỗ trợ preset "7d"/"30d"/"12m"/"all").
+     *
+     * <p>`from`/`to` là {@link LocalDate} (chỉ có ngày) trong khi cột {@code paid_at} là
+     * DATETIME — BẮT BUỘC quy đổi sang khoảng NỬA-MỞ {@code [start, end)} ở tầng Service này
+     * TRƯỚC khi truyền vào repository: nếu truyền thẳng {@code to} dạng LocalDate, JPA ép kiểu
+     * ngầm thành {@code to 00:00:00}, làm mất trọn các giao dịch phát sinh TRONG ngày {@code to}. */
+    @Transactional(readOnly = true)
+    public Map<String, Object> getRevenueSummary(String email, LocalDate from, LocalDate to) {
+        LocalDateTime start = from.atStartOfDay();
+        LocalDateTime end = to.plusDays(1).atStartOfDay();
+        Object[] row = paymentRepository.sumRevenueSummaryBetween(email, start, end).get(0);
+        return Map.of(
+                "grossRevenue", row[0],
+                "platformFee", row[1],
+                "netRevenue", row[2],
+                "transactionCount", row[3]
+        );
+    }
+
+    /** Sprint 3 mục 10 — Top câu hỏi có tỷ lệ sai > 60% (ngưỡng mẫu tối thiểu 5 lượt trả lời, xem
+     * {@code QuizAnswerRepository.findHardQuestionsByInstructor}), CHỈ của đúng giảng viên đang
+     * gọi (RBAC đã lọc ở tầng query). */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getHardQuestions(String email) {
+        return quizAnswerRepository.findHardQuestionsByInstructor(email).stream()
+                .map(row -> {
+                    long totalAnswers = (Long) row[4];
+                    long wrongCount = (Long) row[5];
+                    double wrongRatePercent = BigDecimal.valueOf(wrongCount * 100.0 / totalAnswers)
+                            .setScale(1, RoundingMode.HALF_UP).doubleValue();
+                    Map<String, Object> item = new java.util.HashMap<>();
+                    item.put("questionId", row[0]);
+                    item.put("content", row[1]);
+                    item.put("courseTitle", row[2]);
+                    item.put("lessonTitle", row[3]);
+                    item.put("totalAnswers", totalAnswers);
+                    item.put("wrongRatePercent", wrongRatePercent);
+                    return item;
+                })
+                .toList();
+    }
+
+    /** Sprint 3 mục 10 — Retention Heatmap (Drop-off Rate) của 1 bài học, dựa trên
+     * {@code lesson_watch_checkpoints} (ghi tự động mỗi khi học viên gửi tiến độ xem, xem
+     * {@code LessonProgressService.recordWatchCheckpoints}).
+     *
+     * <p>2 guard bắt buộc:
+     * <ul>
+     *   <li><b>RBAC</b> — {@code lessonId} là tham số tự do trên URL; nếu không kiểm tra quyền sở
+     *   hữu, giảng viên A truyền lessonId thuộc khóa của giảng viên B sẽ xem trộm được số liệu
+     *   học viên/retention của người khác.</li>
+     *   <li><b>Baseline = 0</b> — bài học mới, chưa ai xem → tránh chia cho 0.</li>
+     * </ul>
+     */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getLessonRetention(String instructorEmail, Long lessonId) {
+        Lesson lesson = lessonRepository.findById(lessonId)
+                .orElseThrow(() -> new ResourceNotFoundException("Lesson", lessonId));
+        if (!lesson.getChapter().getCourse().getInstructor().getEmail().equals(instructorEmail)) {
+            throw new AccessDeniedDomainException("Bạn không sở hữu bài học này");
+        }
+
+        long baseline = lessonProgressRepository.countByLesson_Id(lessonId);
+        if (baseline == 0) {
+            return List.of();
+        }
+
+        Map<Integer, Long> countByDecile = new java.util.HashMap<>();
+        for (Object[] row : lessonWatchCheckpointRepository.countDistinctUsersPerDecile(lessonId)) {
+            countByDecile.put((Integer) row[0], (Long) row[1]);
+        }
+
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (int decile = 1; decile <= 10; decile++) {
+            long reached = countByDecile.getOrDefault(decile, 0L);
+            double retainedPercent = BigDecimal.valueOf(reached * 100.0 / baseline)
+                    .setScale(1, RoundingMode.HALF_UP).doubleValue();
+            Map<String, Object> point = new java.util.HashMap<>();
+            point.put("decile", decile);
+            point.put("retainedPercent", retainedPercent);
+            result.add(point);
+        }
+        return result;
     }
 
     /** Danh sách khóa học của giảng viên để đổ vào dropdown lọc ở trang "Học viên"/"Đánh giá". */

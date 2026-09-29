@@ -14,6 +14,7 @@ import com.lms.enrollment.entity.LessonProgress;
 import com.lms.certificate.service.CertificateService;
 import com.lms.enrollment.repository.EnrollmentRepository;
 import com.lms.enrollment.repository.LessonProgressRepository;
+import com.lms.enrollment.repository.LessonWatchCheckpointRepository;
 import com.lms.enrollment.security.EnrollmentSecurity;
 import com.lms.material.entity.Quiz;
 import com.lms.material.entity.QuizAttempt;
@@ -47,6 +48,7 @@ public class LessonProgressService {
     private final UserRepository userRepository;
     private final EnrollmentSecurity enrollmentSecurity;
     private final LessonProgressRepository lessonProgressRepository;
+    private final LessonWatchCheckpointRepository lessonWatchCheckpointRepository;
     private final EnrollmentRepository enrollmentRepository;
     private final QuizRepository quizRepository;
     private final QuizAttemptRepository quizAttemptRepository;
@@ -83,6 +85,8 @@ public class LessonProgressService {
                 });
 
         progress.setWatchedSec(Math.max(progress.getWatchedSec(), req.watchedSec()));
+        // Đọc vị trí CŨ trước khi bị ghi đè — cần để so sánh decile cũ/mới cho Retention Heatmap.
+        recordWatchCheckpoints(lesson, user.getId(), progress.getLastPositionSec(), req.lastPositionSec());
         progress.setLastPositionSec(req.lastPositionSec());
 
         boolean reachedThreshold = lesson.getDurationSec() > 0
@@ -97,6 +101,48 @@ public class LessonProgressService {
         recalculateEnrollmentProgress(user, course);
 
         return new Res(progress.getWatchedSec(), progress.getLastPositionSec(), progress.getIsCompleted());
+    }
+
+    /** Ngưỡng lệch vị trí (giây) để phân biệt "xem thật liên tục" (delta nhỏ, khớp nhịp gửi 15s +
+     * dư cho jitter mạng) với "tua/skip" (delta lớn bất thường) — Sprint 3 mục 10. */
+    private static final int SEEK_JUMP_THRESHOLD_SEC = 30;
+
+    /**
+     * Sprint 3 mục 10 — Retention Heatmap: ghi nhận các mốc decile (1..10, ứng 10%/.../100% thời
+     * lượng) mà học viên đã đi qua, tận dụng ĐÚNG chu kỳ gửi tiến độ 15s có sẵn của FE — không
+     * cần sửa gì ở video player.
+     *
+     * <p>3 guard bắt buộc (API này bị gọi liên tục bởi mọi học viên đang xem video, phải rẻ và
+     * đúng dữ liệu):
+     * <ul>
+     *   <li>Bài không phải video ({@code durationSec <= 0}, vd tài liệu/slide) — bỏ qua hoàn
+     *   toàn, không chia cho 0.</li>
+     *   <li>Chưa vượt sang decile mới — bỏ qua hoàn toàn, không query/ghi gì (đa số các lần gọi
+     *   mỗi 15s với video dài sẽ rơi vào nhánh này, gần như miễn phí).</li>
+     *   <li>Lệch vị trí quá lớn (tua/skip, {@code deltaSec > SEEK_JUMP_THRESHOLD_SEC}) — chỉ ghi
+     *   ĐÚNG decile tại điểm dừng chân mới, KHÔNG backfill các decile bị nhảy cóc ở giữa (tránh
+     *   làm giả biểu đồ: học viên tua thẳng tới cuối để lấy "hoàn thành" không được tính là đã
+     *   "xem qua" mọi đoạn ở giữa).</li>
+     * </ul>
+     */
+    private void recordWatchCheckpoints(Lesson lesson, Long userId, int oldPositionSec, int newPositionSec) {
+        Integer durationSec = lesson.getDurationSec();
+        if (durationSec == null || durationSec <= 0) {
+            return;
+        }
+        int oldDecile = Math.min(10, oldPositionSec * 10 / durationSec);
+        int newDecile = Math.min(10, newPositionSec * 10 / durationSec);
+        if (newDecile <= oldDecile) {
+            return;
+        }
+        int deltaSec = newPositionSec - oldPositionSec;
+        if (deltaSec > SEEK_JUMP_THRESHOLD_SEC) {
+            lessonWatchCheckpointRepository.upsertCheckpoint(lesson.getId(), userId, newDecile);
+            return;
+        }
+        for (int decile = oldDecile + 1; decile <= newDecile; decile++) {
+            lessonWatchCheckpointRepository.upsertCheckpoint(lesson.getId(), userId, decile);
+        }
     }
 
     /**
