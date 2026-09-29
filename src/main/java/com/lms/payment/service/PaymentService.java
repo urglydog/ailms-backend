@@ -12,11 +12,14 @@ import com.lms.common.exception.BusinessRuleViolationException;
 import com.lms.common.exception.ResourceNotFoundException;
 import com.lms.coupon.entity.Coupon;
 import com.lms.coupon.service.CouponService;
+import com.lms.bundle.repository.CourseBundleRepository;
+import com.lms.bundle.entity.CourseBundle;
 import com.lms.enrollment.repository.EnrollmentRepository;
 import com.lms.enrollment.service.EnrollmentService;
 import com.lms.payment.dto.PaymentDto;
 import com.lms.payment.entity.Payment;
 import com.lms.payment.repository.PaymentRepository;
+import com.lms.payment.repository.CartItemRepository;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
@@ -47,6 +50,8 @@ public class PaymentService {
     private final EnrollmentService enrollmentService;
     private final CouponService couponService;
     private final CourseAccessService courseAccessService;
+    private final CourseBundleRepository bundleRepository;
+    private final CartItemRepository cartItemRepository;
     private final PayOS payOS;
 
     @Value("${payment.vnpay.tmnCode:}")
@@ -154,28 +159,101 @@ public class PaymentService {
      */
     @Transactional
     public PaymentDto.PaymentUrlRes createBatchPayment(String email, PaymentDto.CreateBatchReq req) {
-        if (req.courseIds() == null || req.courseIds().isEmpty()) {
-            throw new BusinessRuleViolationException("Chọn ít nhất 1 khóa học để thanh toán.");
+        if ((req.courseIds() == null || req.courseIds().isEmpty()) && (req.bundleIds() == null || req.bundleIds().isEmpty())) {
+            throw new BusinessRuleViolationException("Chọn ít nhất 1 khóa học hoặc gói khóa học để thanh toán.");
         }
-        // BUG THẬT (25/09/2026) — xem docblock nhánh tương tự ở createPayment(): validate NGAY
-        // từ đầu (trước khi tạo N dòng Payment PENDING) thay vì để rơi vào fallback VNPAY sai ở
-        // cuối hàm.
+        
         if (!"PAYOS".equalsIgnoreCase(req.paymentMethod()) && !"VNPAY".equalsIgnoreCase(req.paymentMethod())) {
             throw new BusinessRuleViolationException("PAYMENT_METHOD_UNAVAILABLE",
                     "Phương thức thanh toán \"" + req.paymentMethod() + "\" hiện chưa được hỗ trợ. Vui lòng chọn VNPAY hoặc PayOS.");
         }
-        List<Long> distinctIds = req.courseIds().stream().distinct().toList();
 
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("User", email));
 
-        List<Course> courses = distinctIds.stream()
-                .map(id -> courseRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Course", id)))
-                .toList();
-        for (Course course : courses) {
-            // (19/09/2026) — cùng quy tắc với CartService.addItem: khóa "Riêng tư mật khẩu"
-            // không hỗ trợ thanh toán gộp (không có chỗ cho mật khẩu RIÊNG từng khóa trong 1
-            // lần checkout nhiều khóa) — học viên dùng "Mua ngay" riêng cho khóa đó.
+        // 1. Thu thập tất cả các khóa học từ Course lẻ và Bundle
+        java.util.Set<Long> standaloneCourseIds = new java.util.HashSet<>();
+        if (req.courseIds() != null) {
+            standaloneCourseIds.addAll(req.courseIds());
+        }
+
+        java.util.List<CourseBundle> activeBundles = new ArrayList<>();
+        if (req.bundleIds() != null && !req.bundleIds().isEmpty()) {
+            activeBundles = bundleRepository.findAllById(req.bundleIds());
+            for (CourseBundle bundle : activeBundles) {
+                if (!bundle.getIsActive()) {
+                    throw new BusinessRuleViolationException("Gói khóa học " + bundle.getTitle() + " hiện không hoạt động.");
+                }
+            }
+        }
+
+        // 2. Tách khóa học thành các nhóm (Bundle Items và Standalone Items)
+        // Để làm tròn chính xác, ta sẽ tạo một class tạm để chứa thông tin thanh toán cho từng khóa học
+        class CheckoutItem {
+            Course course;
+            CourseBundle bundle; // null if standalone
+            BigDecimal originalPrice;
+            BigDecimal finalPrice;
+            BigDecimal discountAmount;
+        }
+
+        java.util.List<CheckoutItem> checkoutItems = new ArrayList<>();
+        java.util.Set<Long> processedCourseIds = new java.util.HashSet<>();
+
+        // Xử lý Bundle trước (De-duplicate: Nếu có trong bundle thì bỏ qua ở standalone)
+        for (CourseBundle bundle : activeBundles) {
+            List<Course> bundleCourses = bundle.getCourses();
+            List<Course> validBundleCourses = new ArrayList<>();
+
+            for (Course course : bundleCourses) {
+                if (processedCourseIds.contains(course.getId())) continue;
+                if (enrollmentRepository.existsByUser_IdAndCourse_Id(user.getId(), course.getId())) continue; // Pro-rated: Khách đã sở hữu
+                
+                validBundleCourses.add(course);
+                processedCourseIds.add(course.getId());
+                standaloneCourseIds.remove(course.getId()); // Loại khỏi danh sách lẻ nếu bị trùng
+            }
+
+            if (validBundleCourses.isEmpty()) continue;
+
+            // Tính tiền cho Bundle (Rounding Absorbtion)
+            BigDecimal bundleOriginalSum = BigDecimal.ZERO;
+            for (Course c : validBundleCourses) {
+                bundleOriginalSum = bundleOriginalSum.add(c.getPrice());
+            }
+
+            BigDecimal discountRatio = new BigDecimal(bundle.getDiscountPercent()).divide(new BigDecimal(100));
+            BigDecimal totalDiscountAmount = bundleOriginalSum.multiply(discountRatio).setScale(0, java.math.RoundingMode.HALF_UP);
+            BigDecimal bundleFinalSum = bundleOriginalSum.subtract(totalDiscountAmount);
+
+            BigDecimal currentSum = BigDecimal.ZERO;
+            for (int i = 0; i < validBundleCourses.size(); i++) {
+                Course c = validBundleCourses.get(i);
+                CheckoutItem item = new CheckoutItem();
+                item.course = c;
+                item.bundle = bundle;
+                item.originalPrice = c.getPrice();
+
+                if (i == validBundleCourses.size() - 1) {
+                    // Item cuối cùng: Hấp thụ sai số làm tròn
+                    item.finalPrice = bundleFinalSum.subtract(currentSum);
+                    item.discountAmount = item.originalPrice.subtract(item.finalPrice);
+                } else {
+                    // Các item đầu: Tính theo tỷ lệ
+                    BigDecimal itemDiscount = c.getPrice().multiply(discountRatio).setScale(0, java.math.RoundingMode.HALF_UP);
+                    item.finalPrice = c.getPrice().subtract(itemDiscount);
+                    item.discountAmount = itemDiscount;
+                    currentSum = currentSum.add(item.finalPrice);
+                }
+                checkoutItems.add(item);
+            }
+        }
+
+        // Xử lý Standalone Courses
+        for (Long courseId : standaloneCourseIds) {
+            if (processedCourseIds.contains(courseId)) continue;
+            Course course = courseRepository.findById(courseId).orElseThrow(() -> new ResourceNotFoundException("Course", courseId));
+            
             courseAccessService.verifyCanAddToCart(course, email);
             if (course.getStatus() != CourseStatus.PUBLISHED) {
                 throw new BusinessRuleViolationException("BR-PAY-01: Khóa học \"" + course.getTitle() + "\" chưa được xuất bản.");
@@ -186,44 +264,79 @@ public class PaymentService {
             if (enrollmentRepository.existsByUser_IdAndCourse_Id(user.getId(), course.getId())) {
                 throw new BusinessRuleViolationException("BR-ENROLL-01: Bạn đã sở hữu khóa học \"" + course.getTitle() + "\".");
             }
+
+            // Coupon CHỈ áp dụng cho khóa lẻ
+            CouponService.PricingResult pricing = couponService.resolveBestPrice(course, user, req.couponCode());
+            
+            CheckoutItem item = new CheckoutItem();
+            item.course = course;
+            item.bundle = null;
+            item.originalPrice = pricing.originalPrice();
+            item.finalPrice = pricing.finalPrice();
+            item.discountAmount = pricing.originalPrice().subtract(pricing.finalPrice());
+            checkoutItems.add(item);
+            
+            processedCourseIds.add(courseId);
         }
 
-        // UC57 mở rộng (15/09/2026) — BR-COUPON-05: mỗi khóa tự kiểm tra coupon tốt nhất RIÊNG
-        // (cùng 1 mã học viên nhập cho cả giỏ, nhưng khóa nào mã không áp dụng được vẫn tính
-        // giá gốc/coupon autoApply của chính khóa đó, không ảnh hưởng các khóa khác).
-        List<CouponService.PricingResult> pricingResults = courses.stream()
-                .map(course -> couponService.resolveBestPrice(course, user, req.couponCode()))
-                .toList();
+        if (checkoutItems.isEmpty()) {
+            throw new BusinessRuleViolationException("Bạn đã sở hữu tất cả khóa học trong danh sách thanh toán.");
+        }
 
         String orderGroupRef = String.valueOf(System.currentTimeMillis() % 1000000000L);
         BigDecimal totalAmount = BigDecimal.ZERO;
-        for (int i = 0; i < courses.size(); i++) {
-            Course course = courses.get(i);
-            CouponService.PricingResult pricing = pricingResults.get(i);
+        
+        for (CheckoutItem item : checkoutItems) {
             Payment payment = new Payment();
             payment.setTxnRef(UUID.randomUUID().toString().substring(0, 8));
             payment.setOrderGroupRef(orderGroupRef);
-            payment.setAmount(pricing.finalPrice());
-            applyCouponToPayment(payment, pricing);
+            payment.setAmount(item.finalPrice);
+            payment.setOriginalAmount(item.originalPrice);
+            payment.setDiscountAmount(item.discountAmount);
+            payment.setBundle(item.bundle);
+            
+            // Nếu là khóa lẻ thì mới cho áp coupon (nếu logic pricing có trả về coupon)
+            if (item.bundle == null) {
+                CouponService.PricingResult pricing = couponService.resolveBestPrice(item.course, user, req.couponCode());
+                if (pricing.appliedCoupon() != null) {
+                    payment.setCoupon(pricing.appliedCoupon());
+                }
+            }
+            
             payment.setPaymentMethod(req.paymentMethod());
             payment.setStatus(PaymentStatus.PENDING);
             payment.setUser(user);
-            payment.setCourse(course);
+            payment.setCourse(item.course);
             payment.setBillingName(req.billingName());
             payment.setBillingPhone(req.billingPhone());
-            String referralCode = req.referralCodes() != null ? req.referralCodes().get(course.getId()) : null;
-            payment.setRevenueSource(resolveRevenueSource(course, referralCode));
+            
+            String referralCode = req.referralCodes() != null ? req.referralCodes().get(item.course.getId()) : null;
+            payment.setRevenueSource(resolveRevenueSource(item.course, referralCode));
+            
             paymentRepository.save(payment);
-            totalAmount = totalAmount.add(pricing.finalPrice());
+            totalAmount = totalAmount.add(item.finalPrice);
+        }
+
+        // Zero-dollar logic
+        if (totalAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            // Thay vì gọi qua API, chúng ta cập nhật trực tiếp Payment thành PAID và enroll
+            // Giả lập callback thành công nội bộ
+            for (Payment p : paymentRepository.findByOrderGroupRef(orderGroupRef)) {
+                p.setStatus(PaymentStatus.PAID);
+                p.setPaidAt(LocalDateTime.now());
+                enrollmentService.createFromPayment(p);
+            }
+            // Trả về một URL giả để FE xử lý success
+            return new PaymentDto.PaymentUrlRes("/payments/callback?status=success&orderCode=" + orderGroupRef);
         }
 
         if ("PAYOS".equalsIgnoreCase(req.paymentMethod())) {
             long orderCode = Long.parseLong(orderGroupRef);
             List<PaymentLinkItem> items = new ArrayList<>();
-            for (int i = 0; i < courses.size(); i++) {
+            for (CheckoutItem item : checkoutItems) {
                 items.add(PaymentLinkItem.builder()
-                        .name("Khóa học: " + courses.get(i).getTitle())
-                        .price(pricingResults.get(i).finalPrice().longValue())
+                        .name("Khóa học: " + item.course.getTitle())
+                        .price(item.finalPrice.longValue())
                         .quantity(1)
                         .build());
             }
@@ -232,19 +345,15 @@ public class PaymentService {
         }
 
         if ("VNPAY".equalsIgnoreCase(req.paymentMethod())) {
-            String orderInfo = courses.size() == 1
-                    ? "Thanh toan khoa hoc " + courses.get(0).getId()
-                    : "Thanh toan " + courses.size() + " khoa hoc";
+            String orderInfo = checkoutItems.size() == 1
+                    ? "Thanh toan khoa hoc " + checkoutItems.get(0).course.getId()
+                    : "Thanh toan " + checkoutItems.size() + " khoa hoc";
             return new PaymentDto.PaymentUrlRes(buildVnpayUrl(orderGroupRef, totalAmount, orderInfo));
         }
 
-        // Không thể tới đây nữa — đã validate paymentMethod ngay đầu hàm.
         throw new IllegalStateException("Unreachable: paymentMethod đã được validate ở đầu hàm");
     }
 
-    /** Chia doanh thu 2 mức (20/09/2026) — so khớp mã giới thiệu client gửi lên với
-     * {@code Course.referralCode} của ĐÚNG khóa đang mua. Không khớp/không gửi mã → coi là
-     * {@code ORGANIC}, KHÔNG ném lỗi (mã hết hạn/gõ sai không nên chặn thanh toán). */
     private RevenueSource resolveRevenueSource(Course course, String referralCode) {
         if (referralCode != null && !referralCode.isBlank()
                 && referralCode.trim().equalsIgnoreCase(course.getReferralCode())) {
@@ -405,6 +514,9 @@ public class PaymentService {
 
             // Phụ thuộc F3.1
             enrollmentService.createFromPayment(payment);
+            
+            // Dọn dẹp Giỏ hàng (Cart Cleanup) sau khi thanh toán thành công
+            cartItemRepository.deleteByUser_IdAndCourse_Id(payment.getUser().getId(), payment.getCourse().getId());
         } else {
             payment.setStatus(PaymentStatus.FAILED);
             paymentRepository.save(payment);
