@@ -52,4 +52,11 @@ public class CourseBundleController {
     public ResponseEntity<List<CourseBundleDto.Res>> getBundlesForCourse(@PathVariable Long courseId) {
         return ResponseEntity.ok(bundleService.getActiveBundlesForCourse(courseId));
     }
+
+    /** Gộp tra bundle cho nhiều courseId (giỏ hàng tự phát hiện combo) — tránh N+1 request khi
+     * giỏ có nhiều khóa. Public, giống {@link #getBundlesForCourse}. */
+    @GetMapping("/courses/bundles/active")
+    public ResponseEntity<List<CourseBundleDto.Res>> getBundlesForCourses(@RequestParam List<Long> courseIds) {
+        return ResponseEntity.ok(bundleService.getActiveBundlesForCourses(courseIds));
+    }
 }
