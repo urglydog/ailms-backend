@@ -14,6 +14,7 @@ import com.lms.enrollment.entity.Enrollment;
 import com.lms.enrollment.entity.LessonProgress;
 import com.lms.enrollment.repository.EnrollmentRepository;
 import com.lms.enrollment.repository.LessonProgressRepository;
+import com.lms.enrollment.repository.LessonWatchCheckpointRepository;
 import com.lms.enrollment.security.EnrollmentSecurity;
 import com.lms.material.repository.QuizAttemptRepository;
 import com.lms.material.repository.QuizRepository;
@@ -44,6 +45,7 @@ class LessonProgressServiceTest {
     @Mock private UserRepository userRepository;
     @Mock private EnrollmentSecurity enrollmentSecurity;
     @Mock private LessonProgressRepository lessonProgressRepository;
+    @Mock private LessonWatchCheckpointRepository lessonWatchCheckpointRepository;
     @Mock private EnrollmentRepository enrollmentRepository;
     @Mock private QuizRepository quizRepository;
     @Mock private QuizAttemptRepository quizAttemptRepository;
@@ -59,7 +61,8 @@ class LessonProgressServiceTest {
     @BeforeEach
     void setUp() {
         service = new LessonProgressService(
-                lessonRepository, userRepository, enrollmentSecurity, lessonProgressRepository, enrollmentRepository,
+                lessonRepository, userRepository, enrollmentSecurity, lessonProgressRepository,
+                lessonWatchCheckpointRepository, enrollmentRepository,
                 quizRepository, quizAttemptRepository, certificateService, eventPublisher);
         ReflectionTestUtils.setField(service, "completeThresholdPercent", 90);
 

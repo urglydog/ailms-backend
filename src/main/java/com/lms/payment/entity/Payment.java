@@ -70,11 +70,16 @@ public class Payment extends BaseEntity {
     @JoinColumn(name = "bundle_id")
     private CourseBundle bundle;
 
-    /** = amount x 30%, chốt cứng lúc PAID (BR-PAY-05). */
+    /** = amount x (63% ORGANIC hoặc 3% INSTRUCTOR_REFERRAL tùy {@link #revenueSource}), chốt
+     * cứng lúc PAID (BR-PAY-05, xem {@code PaymentService.applyOutcome}).
+     * (29/09/2026, sửa comment lỗi thời) — còn sót từ model chia 30/70 cũ, đã đổi sang 2 mức từ
+     * migration V122__revenue_share_referral.sql, comment cũ chưa cập nhật theo. */
     @Column(name = "platform_fee", nullable = false, precision = 12, scale = 2)
     private BigDecimal platformFee = BigDecimal.ZERO;
 
-    /** = amount x (63% hoặc 3% tùy {@link #revenueSource}), chốt cứng lúc PAID (BR-PAY-05). */
+    /** = amount x (37% ORGANIC hoặc 97% INSTRUCTOR_REFERRAL tùy {@link #revenueSource}), chốt
+     * cứng lúc PAID (BR-PAY-05). (29/09/2026, sửa comment lỗi thời) — bản cũ ghi ngược 2 tỷ lệ
+     * này với {@link #platformFee}, xem thực tế tại {@code PaymentService.applyOutcome}. */
     @Column(name = "instructor_earning", nullable = false, precision = 12, scale = 2)
     private BigDecimal instructorEarning = BigDecimal.ZERO;
 

@@ -4,11 +4,15 @@ import com.lms.auth.entity.User;
 import com.lms.catalog.entity.Category;
 import com.lms.catalog.entity.Course;
 import com.lms.catalog.repository.CourseRepository;
+import com.lms.catalog.repository.LessonRepository;
 import com.lms.common.enums.PaymentStatus;
 import com.lms.enrollment.entity.CourseReview;
 import com.lms.enrollment.entity.Enrollment;
 import com.lms.enrollment.repository.CourseReviewRepository;
 import com.lms.enrollment.repository.EnrollmentRepository;
+import com.lms.enrollment.repository.LessonProgressRepository;
+import com.lms.enrollment.repository.LessonWatchCheckpointRepository;
+import com.lms.material.repository.QuizAnswerRepository;
 import com.lms.payment.entity.Payment;
 import com.lms.payment.repository.PaymentRepository;
 import java.math.BigDecimal;
@@ -46,6 +50,10 @@ class DashboardServiceTest {
     @Mock private EnrollmentRepository enrollmentRepository;
     @Mock private CourseReviewRepository courseReviewRepository;
     @Mock private PaymentRepository paymentRepository;
+    @Mock private QuizAnswerRepository quizAnswerRepository;
+    @Mock private LessonRepository lessonRepository;
+    @Mock private LessonProgressRepository lessonProgressRepository;
+    @Mock private LessonWatchCheckpointRepository lessonWatchCheckpointRepository;
 
     @InjectMocks
     private DashboardService dashboardService;

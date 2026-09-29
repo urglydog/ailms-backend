@@ -18,6 +18,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -43,8 +44,9 @@ public class DashboardController {
         long totalCourses = courseRepository.count();
         long totalUsers = userRepository.count();
         long pendingCourses = courseRepository.countByStatus(CourseStatus.PENDING);
-        // TODO: Chờ module Payment (Giai đoạn 3/9) để tính doanh thu thật
-        long totalRevenue = 15400000;
+        // (29/09/2026, sửa lỗi) — trước đây gắn cứng "15400000" với TODO "chờ module Payment",
+        // module đã có thật từ lâu (đúng bug đã sửa ở /instructor trước đó, còn sót lại ở đây).
+        BigDecimal totalRevenue = paymentRepository.sumTotalRevenue();
 
         return ResponseEntity.ok(Map.of(
                 "totalCourses", totalCourses,
@@ -134,6 +136,15 @@ public class DashboardController {
         return ResponseEntity.ok(dashboardService.getRevenueList(principal.getName(), range));
     }
 
+    @GetMapping("/instructor/revenue/summary")
+    @PreAuthorize("hasRole('INSTRUCTOR')")
+    public ResponseEntity<Map<String, Object>> getRevenueSummary(
+            java.security.Principal principal,
+            @RequestParam LocalDate from,
+            @RequestParam LocalDate to) {
+        return ResponseEntity.ok(dashboardService.getRevenueSummary(principal.getName(), from, to));
+    }
+
     @GetMapping("/instructor/students")
     @PreAuthorize("hasRole('INSTRUCTOR')")
     public ResponseEntity<List<Map<String, Object>>> getStudents(
@@ -146,6 +157,19 @@ public class DashboardController {
     public ResponseEntity<List<Map<String, Object>>> getReviews(
             java.security.Principal principal, @RequestParam(required = false) Long courseId) {
         return ResponseEntity.ok(dashboardService.getReviews(principal.getName(), courseId));
+    }
+
+    @GetMapping("/instructor/hard-questions")
+    @PreAuthorize("hasRole('INSTRUCTOR')")
+    public ResponseEntity<List<Map<String, Object>>> getHardQuestions(java.security.Principal principal) {
+        return ResponseEntity.ok(dashboardService.getHardQuestions(principal.getName()));
+    }
+
+    @GetMapping("/instructor/retention/{lessonId}")
+    @PreAuthorize("hasRole('INSTRUCTOR')")
+    public ResponseEntity<List<Map<String, Object>>> getLessonRetention(
+            java.security.Principal principal, @PathVariable Long lessonId) {
+        return ResponseEntity.ok(dashboardService.getLessonRetention(principal.getName(), lessonId));
     }
 
     @GetMapping("/instructor/my-courses")
