@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -50,6 +51,7 @@ public class LessonProgressService {
     private final QuizRepository quizRepository;
     private final QuizAttemptRepository quizAttemptRepository;
     private final CertificateService certificateService;
+    private final ApplicationEventPublisher eventPublisher;
 
     /** A2 (UpComming_Plan.md) — ngưỡng "đạt" Quiz, tái dùng đúng quy ước đã có ở Gradebook
      * (thang điểm 0-10, xem InstructorGradebookController) — không bịa ngưỡng mới. */
@@ -87,6 +89,7 @@ public class LessonProgressService {
                 && progress.getWatchedSec() * 100L >= (long) lesson.getDurationSec() * completeThresholdPercent;
         if (reachedThreshold) {
             progress.setIsCompleted(true);
+            eventPublisher.publishEvent(new com.lms.enrollment.event.LessonCompletedEvent(this, user.getId(), java.time.Instant.now()));
         }
         lessonProgressRepository.save(progress);
 

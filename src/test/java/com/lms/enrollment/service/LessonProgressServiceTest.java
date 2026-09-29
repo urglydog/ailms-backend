@@ -48,6 +48,7 @@ class LessonProgressServiceTest {
     @Mock private QuizRepository quizRepository;
     @Mock private QuizAttemptRepository quizAttemptRepository;
     @Mock private CertificateService certificateService;
+    @Mock private org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     private LessonProgressService service;
 
@@ -59,7 +60,7 @@ class LessonProgressServiceTest {
     void setUp() {
         service = new LessonProgressService(
                 lessonRepository, userRepository, enrollmentSecurity, lessonProgressRepository, enrollmentRepository,
-                quizRepository, quizAttemptRepository, certificateService);
+                quizRepository, quizAttemptRepository, certificateService, eventPublisher);
         ReflectionTestUtils.setField(service, "completeThresholdPercent", 90);
 
         user = new User();
