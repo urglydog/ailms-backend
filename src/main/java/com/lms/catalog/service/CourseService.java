@@ -22,6 +22,7 @@ import com.lms.common.exception.BusinessRuleViolationException;
 import com.lms.common.exception.InvalidRequestException;
 import com.lms.common.exception.ResourceNotFoundException;
 import com.lms.common.storage.StorageService;
+import com.lms.common.util.CacheEvictionHelper;
 import com.lms.instructor.repository.InstructorVerificationRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
@@ -68,6 +69,7 @@ public class CourseService {
     private final CourseActivityLogService activityLogService;
     private final CourseEmbeddingService courseEmbeddingService;
     private final com.lms.wishlist.service.WishlistPriceDropService wishlistPriceDropService;
+    private final CacheEvictionHelper cacheEvictionHelper;
     private final Tika tika = new Tika();
 
     @Transactional
@@ -158,6 +160,12 @@ public class CourseService {
         if (oldPrice != null && oldPrice.compareTo(req.price()) > 0) {
             wishlistPriceDropService.enqueuePriceDrop(saved, oldPrice, req.price());
         }
+        
+        cacheEvictionHelper.evictCourseCacheAfterCommit(course.getSlug());
+        if (!java.util.Objects.equals(course.getSlug(), saved.getSlug())) {
+            cacheEvictionHelper.evictCourseCacheAfterCommit(saved.getSlug());
+        }
+        
         return mapToDetailRes(saved);
     }
 
@@ -185,7 +193,9 @@ public class CourseService {
         }
 
         course.setStatus(CourseStatus.PENDING);
-        return mapToDetailRes(courseRepository.save(course));
+        Course saved = courseRepository.save(course);
+        cacheEvictionHelper.evictCourseCacheAfterCommit(saved.getSlug());
+        return mapToDetailRes(saved);
     }
 
     /**
@@ -204,7 +214,9 @@ public class CourseService {
         }
         course.setPreviousStatus(course.getStatus());
         course.setStatus(CourseStatus.ARCHIVED);
-        return mapToDetailRes(courseRepository.save(course));
+        Course saved = courseRepository.save(course);
+        cacheEvictionHelper.evictCourseCacheAfterCommit(saved.getSlug());
+        return mapToDetailRes(saved);
     }
 
     /** "Kích hoạt lại" (19/09/2026, tính năng mới) — khôi phục đúng trạng thái TRƯỚC khi bị lưu
@@ -218,7 +230,9 @@ public class CourseService {
         }
         course.setStatus(course.getPreviousStatus() != null ? course.getPreviousStatus() : CourseStatus.DRAFT);
         course.setPreviousStatus(null);
-        return mapToDetailRes(courseRepository.save(course));
+        Course saved = courseRepository.save(course);
+        cacheEvictionHelper.evictCourseCacheAfterCommit(saved.getSlug());
+        return mapToDetailRes(saved);
     }
 
     @Transactional(readOnly = true)
@@ -242,7 +256,9 @@ public class CourseService {
             throw new BusinessRuleViolationException("Chỉ có thể duyệt khóa học đang ở trạng thái Chờ duyệt");
         }
         course.setStatus(CourseStatus.PUBLISHED);
-        return mapToDetailRes(courseRepository.save(course));
+        Course saved = courseRepository.save(course);
+        cacheEvictionHelper.evictCourseCacheAfterCommit(saved.getSlug());
+        return mapToDetailRes(saved);
     }
 
     @Transactional
@@ -254,7 +270,9 @@ public class CourseService {
         }
         course.setStatus(CourseStatus.REJECTED);
         course.setRejectReason(req.reason());
-        return mapToDetailRes(courseRepository.save(course));
+        Course saved = courseRepository.save(course);
+        cacheEvictionHelper.evictCourseCacheAfterCommit(saved.getSlug());
+        return mapToDetailRes(saved);
     }
 
     // ---- helpers ----

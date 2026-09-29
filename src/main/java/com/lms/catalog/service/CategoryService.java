@@ -8,6 +8,8 @@ import com.lms.catalog.util.SlugGenerator;
 import com.lms.common.exception.ConflictException;
 import com.lms.common.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,6 +27,7 @@ public class CategoryService {
     private final CategoryRepository categoryRepository;
     private final CourseRepository courseRepository;
 
+    @Cacheable(value = "categories", key = "'all'")
     @Transactional(readOnly = true)
     public List<Res> getAll() {
         return categoryRepository.findAll().stream()
@@ -32,6 +35,7 @@ public class CategoryService {
                 .collect(Collectors.toList());
     }
 
+    @CacheEvict(value = "categories", allEntries = true)
     @Transactional
     public Res create(CreateReq req) {
         Category category = new Category();
@@ -40,6 +44,7 @@ public class CategoryService {
         return mapToRes(categoryRepository.save(category));
     }
 
+    @CacheEvict(value = "categories", allEntries = true)
     @Transactional
     public Res update(Long id, UpdateReq req) {
         Category category = categoryRepository.findById(id)
@@ -48,6 +53,7 @@ public class CategoryService {
         return mapToRes(categoryRepository.save(category));
     }
 
+    @CacheEvict(value = "categories", allEntries = true)
     @Transactional
     public void delete(Long id) {
         Category category = categoryRepository.findById(id)

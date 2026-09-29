@@ -38,4 +38,7 @@ public class CourseReview extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "course_id", nullable = false)
     private Course course;
+
+    @Column(name = "moderation_reason", columnDefinition = "TEXT")
+    private String moderationReason;
 }

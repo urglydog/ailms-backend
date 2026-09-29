@@ -18,6 +18,13 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import com.lms.common.util.CacheEvictionHelper;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * Đánh giá khóa học (UC23) và Admin kiểm duyệt (UC44). Chỉ học viên đã sở hữu khóa mới được
@@ -26,12 +33,19 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class CourseReviewService {
 
     private final CourseReviewRepository courseReviewRepository;
     private final CourseRepository courseRepository;
     private final EnrollmentRepository enrollmentRepository;
     private final UserRepository userRepository;
+    private final StringRedisTemplate redisTemplate;
+    private final ObjectMapper objectMapper;
+    private final CacheEvictionHelper cacheEvictionHelper;
+
+    @Value("${lms.redis-keys.course-review-queue:lms:course-review:jobs}")
+    private String reviewQueueKey;
 
     @Transactional(readOnly = true)
     public Page<Res> listForCourse(Long courseId, Pageable pageable) {
@@ -63,7 +77,30 @@ public class CourseReviewService {
 
         recalcAvgRating(course);
 
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    pushAiReviewJob(saved.getId(), saved.getComment());
+                }
+            });
+        } else {
+            pushAiReviewJob(saved.getId(), saved.getComment());
+        }
+
         return mapToRes(saved);
+    }
+
+    private void pushAiReviewJob(Long reviewId, String text) {
+        try {
+            java.util.Map<String, Object> job = new java.util.HashMap<>();
+            job.put("reviewId", reviewId);
+            job.put("text", text);
+            redisTemplate.opsForList().leftPush(reviewQueueKey, objectMapper.writeValueAsString(job));
+            log.info("Da day job AI review moderation cho reviewId={}", reviewId);
+        } catch (Exception e) {
+            log.error("Loi day job review {} sang AI worker", reviewId, e);
+        }
     }
 
     @Transactional(readOnly = true)
@@ -79,6 +116,18 @@ public class CourseReviewService {
     @Transactional
     public Res unhide(Long id) {
         return setHidden(id, false);
+    }
+
+    @Transactional
+    public void hideByAi(Long id, String reason) {
+        CourseReview review = courseReviewRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("CourseReview", id));
+        review.setIsHidden(true);
+        review.setModerationReason(reason);
+        courseReviewRepository.save(review);
+        recalcAvgRating(review.getCourse());
+        cacheEvictionHelper.evictCourseCacheAfterCommit(review.getCourse().getSlug());
+        log.info("AI Worker da an review {} voi ly do: {}", id, reason);
     }
 
     private Res setHidden(Long id, boolean hidden) {

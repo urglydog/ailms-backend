@@ -5,6 +5,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.data.jpa.repository.config.EnableJpaAuditing;
 
 import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.cache.annotation.EnableCaching;
 
 /**
  * Điểm khởi động Core Web Service của AI-Powered LMS.
@@ -16,6 +17,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @SpringBootApplication
 @EnableJpaAuditing
 @EnableScheduling
+@EnableCaching
 public class LmsApplication {
 
     public static void main(String[] args) {

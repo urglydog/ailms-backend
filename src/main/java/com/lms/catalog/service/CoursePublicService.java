@@ -24,6 +24,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -45,6 +46,7 @@ public class CoursePublicService {
     private final CouponService couponService;
     private final CourseAccessService courseAccessService;
 
+    @Cacheable(value = "publicCourseSearch", condition = "#keyword == null and #pageable.pageNumber == 0")
     @Transactional(readOnly = true)
     public Page<SummaryRes> search(
             String keyword, String categorySlug, String level, String priceType, Double minRating,
@@ -127,6 +129,7 @@ public class CoursePublicService {
      *                       trang chi tiết), nhưng KHÔNG xem được khóa PRIVATE_INVITE trừ khi
      *                       email nằm trong danh sách mời (BR mới, 19/09/2026).
      */
+    @Cacheable(value = "courseDetails", key = "#slug")
     @Transactional(readOnly = true)
     public DetailRes getBySlug(String slug, String requesterEmail) {
         // Không phân biệt "không tồn tại" và "chưa PUBLISHED" — tránh lộ thông tin khóa

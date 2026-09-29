@@ -2,6 +2,7 @@ package com.lms.catalog.service;
 
 import com.lms.catalog.dto.LessonDto.*;
 import com.lms.catalog.entity.Chapter;
+import com.lms.catalog.entity.Course;
 import com.lms.catalog.entity.Lesson;
 import com.lms.catalog.entity.LessonDocument;
 import com.lms.catalog.repository.ChapterRepository;
@@ -11,6 +12,7 @@ import com.lms.common.exception.AccessDeniedDomainException;
 import com.lms.common.exception.BusinessRuleViolationException;
 import com.lms.common.exception.InvalidRequestException;
 import com.lms.common.exception.ResourceNotFoundException;
+import com.lms.common.util.CacheEvictionHelper;
 import com.lms.common.enums.CourseStatus;
 import com.lms.common.media.FfprobeService;
 import com.lms.common.media.YoutubeMetadataService;
@@ -50,6 +52,7 @@ public class LessonService {
     private final YoutubeMetadataService youtubeMetadataService;
     private final TranscriptExtractionService transcriptExtractionService;
     private final CourseEmbeddingService courseEmbeddingService;
+    private final CacheEvictionHelper cacheEvictionHelper;
 
     @Transactional
     public Res create(String instructorEmail, Long chapterId, CreateReq req) {
@@ -64,6 +67,7 @@ public class LessonService {
 
         Res res = mapToRes(lessonRepository.save(lesson));
         courseEmbeddingService.requestEmbedding(chapter.getCourse()); // UC49 nâng cấp — tên bài ảnh hưởng semantic search
+        cacheEvictionHelper.evictCourseCacheAfterCommit(chapter.getCourse().getSlug());
         return res;
     }
 
@@ -75,6 +79,7 @@ public class LessonService {
         lesson.setDescription(req.description());
         Res res = mapToRes(lessonRepository.save(lesson));
         courseEmbeddingService.requestEmbedding(lesson.getChapter().getCourse());
+        cacheEvictionHelper.evictCourseCacheAfterCommit(lesson.getChapter().getCourse().getSlug());
         return res;
     }
 
@@ -82,6 +87,7 @@ public class LessonService {
     public void delete(String instructorEmail, Long lessonId) {
         Lesson lesson = loadOwnedLesson(lessonId, instructorEmail);
         deleteCascade(lesson);
+        cacheEvictionHelper.evictCourseCacheAfterCommit(lesson.getChapter().getCourse().getSlug());
     }
 
     /**
@@ -117,6 +123,10 @@ public class LessonService {
             Lesson lesson = byId.get(req.orderedIds().get(i));
             lesson.setDisplayOrder(i);
             lessonRepository.save(lesson);
+        }
+        Course course = byId.values().stream().findFirst().map(lesson -> lesson.getChapter().getCourse()).orElse(null);
+        if (course != null) {
+            cacheEvictionHelper.evictCourseCacheAfterCommit(course.getSlug());
         }
     }
 
@@ -164,6 +174,7 @@ public class LessonService {
             lesson.setDurationSec(durationSec);
             lesson.setStatus("READY");
             Lesson saved = lessonRepository.save(lesson);
+            cacheEvictionHelper.evictCourseCacheAfterCommit(saved.getChapter().getCourse().getSlug());
             return mapToRes(saved);
         } catch (IOException e) {
             throw new InvalidRequestException("Không tải được video lên kho lưu trữ: " + e.getMessage());
@@ -195,6 +206,7 @@ public class LessonService {
         lesson.setDurationSec(durationSec);
         lesson.setStatus("READY");
         Lesson saved = lessonRepository.save(lesson);
+        cacheEvictionHelper.evictCourseCacheAfterCommit(saved.getChapter().getCourse().getSlug());
         return mapToRes(saved);
     }
 
@@ -244,7 +256,9 @@ public class LessonService {
         lesson.setYoutubeId(null);
         lesson.setDurationSec(0);
         lesson.setStatus("DRAFT");
-        return mapToRes(lessonRepository.save(lesson));
+        Lesson saved = lessonRepository.save(lesson);
+        cacheEvictionHelper.evictCourseCacheAfterCommit(saved.getChapter().getCourse().getSlug());
+        return mapToRes(saved);
     }
 
     /** Mỗi bài học chỉ 1 video tại một thời điểm — phải xoá video cũ trước khi đổi nguồn khác. */

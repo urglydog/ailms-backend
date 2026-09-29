@@ -11,6 +11,7 @@ import com.lms.common.exception.AccessDeniedDomainException;
 import com.lms.common.exception.BusinessRuleViolationException;
 import com.lms.common.exception.InvalidRequestException;
 import com.lms.common.exception.ResourceNotFoundException;
+import com.lms.common.util.CacheEvictionHelper;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -31,6 +32,7 @@ public class ChapterService {
     private final LessonRepository lessonRepository;
     private final LessonService lessonService;
     private final CourseEmbeddingService courseEmbeddingService;
+    private final CacheEvictionHelper cacheEvictionHelper;
 
     @Transactional
     public Res create(String instructorEmail, Long courseId, CreateReq req) {
@@ -43,6 +45,7 @@ public class ChapterService {
 
         Res res = mapToRes(chapterRepository.save(chapter));
         courseEmbeddingService.requestEmbedding(course); // UC49 nâng cấp — tên chương ảnh hưởng semantic search
+        cacheEvictionHelper.evictCourseCacheAfterCommit(course.getSlug());
         return res;
     }
 
@@ -53,6 +56,7 @@ public class ChapterService {
         chapter.setDescription(req.description());
         Res res = mapToRes(chapterRepository.save(chapter));
         courseEmbeddingService.requestEmbedding(chapter.getCourse());
+        cacheEvictionHelper.evictCourseCacheAfterCommit(chapter.getCourse().getSlug());
         return res;
     }
 
@@ -66,6 +70,7 @@ public class ChapterService {
         Chapter chapter = loadOwnedChapter(chapterId, instructorEmail);
         lessonRepository.findByChapterIdOrderByDisplayOrderAsc(chapterId).forEach(lessonService::deleteCascade);
         chapterRepository.delete(chapter);
+        cacheEvictionHelper.evictCourseCacheAfterCommit(chapter.getCourse().getSlug());
     }
 
     @Transactional
@@ -83,6 +88,10 @@ public class ChapterService {
             Chapter chapter = byId.get(req.orderedIds().get(i));
             chapter.setDisplayOrder(i);
             chapterRepository.save(chapter);
+        }
+        Course course = byId.values().stream().findFirst().map(Chapter::getCourse).orElse(null);
+        if (course != null) {
+            cacheEvictionHelper.evictCourseCacheAfterCommit(course.getSlug());
         }
     }
 
