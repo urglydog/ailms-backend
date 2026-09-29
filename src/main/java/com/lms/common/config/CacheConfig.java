@@ -30,7 +30,17 @@ public class CacheConfig implements CachingConfigurer {
         ObjectMapper mapper = new ObjectMapper();
         mapper.registerModule(new JavaTimeModule());
         mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-        mapper.activateDefaultTyping(LaissezFaireSubTypeValidator.instance, ObjectMapper.DefaultTyping.NON_FINAL, JsonTypeInfo.As.PROPERTY);
+        // Bug thật (29/09/2026): DefaultTyping.NON_FINAL bỏ qua gắn "@class" cho record Java (VD
+        // CoursePublicDto.DetailRes) khi nó là giá trị GỐC (root) được cache — record luôn final,
+        // NON_FINAL coi final ở root là "không cần" gắn type id. Nhưng lúc đọc lại,
+        // GenericJackson2JsonRedisSerializer chỉ biết deserialize về Object.class (Spring Cache
+        // không truyền type hint), nên thiếu "@class" ở root → luôn ném
+        // InvalidTypeIdException/MismatchedInputException, bị CacheErrorHandler nuốt lỗi và âm
+        // thầm coi là cache MISS — cache VẪN ghi (PUT) bình thường nên trông như "có hoạt động",
+        // chỉ là không BAO GIỜ đọc lại được, vô hiệu hóa hoàn toàn tác dụng giảm tải DB của cache
+        // (phát hiện khi verify lại toàn bộ cache courseDetails/publicProfile). EVERYTHING gắn
+        // type id cho mọi giá trị kể cả final/record ở root, khắc phục triệt để.
+        mapper.activateDefaultTyping(LaissezFaireSubTypeValidator.instance, ObjectMapper.DefaultTyping.EVERYTHING, JsonTypeInfo.As.PROPERTY);
 
         GenericJackson2JsonRedisSerializer serializer = new GenericJackson2JsonRedisSerializer(mapper);
 
@@ -42,6 +52,10 @@ public class CacheConfig implements CachingConfigurer {
         cacheConfigurations.put("categories", defaultCacheConfig.entryTtl(Duration.ofDays(1)));
         cacheConfigurations.put("courseDetails", defaultCacheConfig.entryTtl(Duration.ofHours(1)));
         cacheConfigurations.put("publicCourseSearch", defaultCacheConfig.entryTtl(Duration.ofMinutes(15)));
+        // Ghép dữ liệu từ 4 nguồn (user/enrollments/wishlist/certificates) — TTL ngắn thay vì
+        // evict thủ công ở từng service ghi (Enrollment/Wishlist/Certificate), chấp nhận trễ vài
+        // phút để tránh nhiều điểm phải nhớ evict đồng thời, dễ sót gây cache "ngầm" (29/09/2026).
+        cacheConfigurations.put("publicProfile", defaultCacheConfig.entryTtl(Duration.ofMinutes(10)));
 
         return RedisCacheManager.builder(redisConnectionFactory)
                 .cacheDefaults(defaultCacheConfig)

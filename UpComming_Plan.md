@@ -8,11 +8,13 @@ Trước mỗi tính năng đều đi kèm với **Bối cảnh & Nỗi đau (Pa
 
 ## SPRINT 1: NỀN MÓNG HẠ TẦNG & DÒNG TIỀN (INFRASTRUCTURE & MONETIZATION)
 
+### ~~1. Redis Cache cho dữ liệu tĩnh/bán tĩnh~~ [ĐÃ HOÀN THÀNH]
 * **Bối cảnh & Nỗi đau (Pain Point):** Khi lượng truy cập lớn (hàng nghìn học viên cùng vào xem bài giảng hoặc truy cập dashboard), việc query liên tục vào DB quan hệ sẽ làm nghẽn connection, tăng độ trễ và đẩy CPU database lên 100%. Các API đọc dữ liệu tĩnh/bán tĩnh đang tạo áp lực không cần thiết lên hệ thống.
 * **Technical Story:** Là một Hệ thống Backend, chúng tôi cần áp dụng bộ nhớ đệm Redis Cache cho các API đọc dữ liệu tĩnh/bán tĩnh (thông tin khóa học, mục lục bài giảng, hồ sơ công khai), để giảm tải 70-80% truy vấn trực tiếp vào Database chính và giữ thời gian phản hồi của API dưới 100ms ngay cả khi traffic tăng đột biến.
 * **Acceptance Criteria (AC):**
   - Áp dụng chiến lược Cache-Aside hoặc Write-Through phù hợp.
   - Cơ chế Cache Invalidation chính xác: Khi giảng viên cập nhật nội dung bài học, cache tương ứng phải được làm mới ngay lập tức.
+* **Đã làm (29/09/2026):** Cache-Aside cho `courseDetails`/`publicCourseSearch`/`categories`/`publicProfile` (Redis, `CacheConfig.java`); evict ngay sau commit khi giảng viên sửa khóa/chương/bài/review (`CacheEvictionHelper`, không evict thủ công cho `publicProfile` — TTL 10 phút, chấp nhận trễ vì ghép từ nhiều nguồn). Đã vá 1 lỗ hổng bảo mật (cache khóa "Riêng tư mời" từng lộ nội dung cho người không được mời) + 1 bug khiến cache `courseDetails` trước đó không bao giờ thực sự đọc được (luôn âm thầm miss, chỉ ghi) — xem chi tiết trong lịch sử commit `be`.
 
 
 
@@ -23,13 +25,14 @@ Trước mỗi tính năng đều đi kèm với **Bối cảnh & Nỗi đau (Pa
   - Áp mã thành công tại trang thanh toán và tự động tính lại số tiền trừ trực tiếp.
   - Quản lý giới hạn: Mỗi người chỉ được dùng 1 lần, hết hạn tự động vô hiệu hóa.
 
-### 4. Bán chéo & Gói khóa học (Bundles & Upsells)
+### ~~4. Bán chéo & Gói khóa học (Bundles & Upsells)~~ [ĐÃ HOÀN THÀNH]
 * **Bối cảnh & Nỗi đau (Pain Point):** Học viên có xu hướng chỉ mua 1 khóa học lẻ, khiến chỉ số Giá trị vòng đời khách hàng (LTV) thấp. Khó khăn trong việc gợi ý học viên theo đuổi trọn vẹn một lộ trình kỹ năng.
 * **User Story:** Là một học viên chuẩn bị thanh toán, tôi muốn nhìn thấy các gói combo khóa học liên quan với mức giá ưu đãi hơn mua lẻ, để tôi có thể tiết kiệm chi phí và sở hữu trọn vẹn lộ trình kỹ năng.
 * **Acceptance Criteria (AC):**
   - Module combo: Mua khóa A + khóa B được giảm thêm 20%.
   - Giỏ hàng tự động gợi ý các khóa học bổ trợ kèm nút "Thêm vào đơn hàng chỉ với +XX đồng".
   - **Refined AC (Pro-rated Pricing):** Xử lý trường hợp trùng lặp: Nếu học viên đã sở hữu Khóa A, khi bấm mua Combo (Khóa A + Khóa B), hệ thống tự động trừ tiền Khóa A đã thanh toán trước đó để ra giá cuối hợp lý.
+* **Đã làm (29/09/2026):** Giảng viên tạo/sửa gói combo (`CourseBundleController/Service`); trang chi tiết khóa hiện widget gợi ý gói (`BundleUpsellWidget`); giỏ hàng TỰ PHÁT HIỆN khi đã đủ khóa của 1 gói (`matchCartBundles.ts`, greedy chọn tập gói rời nhau tránh chồng lấn, tính pro-rated đúng công thức BE, xử lý cả case đã sở hữu sẵn 1 khóa), gợi ý mua thêm khi thiếu đúng 1 khóa; thanh toán gửi đúng `bundleIds`, giá chốt khớp giữa `/cart`, `/checkout/cart` và BE. User đã test thật trên production, xác nhận hoạt động đúng.
 
 ---
 
