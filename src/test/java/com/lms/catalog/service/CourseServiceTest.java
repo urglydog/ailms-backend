@@ -51,6 +51,7 @@ class CourseServiceTest {
     private static final String OWNER_EMAIL = "instructor@lms.local";
 
     @Mock private CourseRepository courseRepository;
+    @Mock private com.lms.common.util.CacheEvictionHelper cacheEvictionHelper;
     @Mock private CategoryRepository categoryRepository;
     @Mock private ChapterRepository chapterRepository;
     @Mock private LessonRepository lessonRepository;
