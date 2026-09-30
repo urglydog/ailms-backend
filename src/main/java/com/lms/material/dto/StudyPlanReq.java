@@ -11,6 +11,7 @@ import java.time.LocalDate;
 public class StudyPlanReq {
     @NotNull(message = "Ngày kết thúc không được để trống")
     @Future(message = "Ngày kết thúc phải ở tương lai")
+    @com.fasterxml.jackson.annotation.JsonFormat(pattern = "yyyy-MM-dd")
     private LocalDate targetDate;
 
     @NotNull(message = "Số giờ học mỗi tuần không được để trống")
