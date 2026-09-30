@@ -49,7 +49,7 @@ public class GlobalExceptionHandler {
                 .forEach(err -> fieldErrors.putIfAbsent(err.getField(), err.getDefaultMessage()));
 
         ProblemDetail problem = build(HttpStatus.BAD_REQUEST,
-                "Du lieu gui len khong hop le", "VALIDATION_FAILED", request);
+                "Du lieu gui len khong hop le: " + fieldErrors.toString(), "VALIDATION_FAILED", request);
         problem.setProperty("fieldErrors", fieldErrors);
         return problem;
     }
