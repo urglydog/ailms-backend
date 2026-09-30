@@ -67,12 +67,13 @@ Trước mỗi tính năng đều đi kèm với **Bối cảnh & Nỗi đau (Pa
   - Form đầu vào: Mục tiêu kết thúc + Khung giờ học.
   - AI sinh lịch biểu đồng bộ Calendar. Nếu trễ hạn, AI tự động bù trừ cho các ngày sau.
 
-### 9. Phân tích điểm yếu (Knowledge Gaps Analysis)
+### ~~9. Phân tích điểm yếu (Knowledge Gaps Analysis)~~ [ĐÃ HOÀN THÀNH]
 * **Bối cảnh & Nỗi đau (Pain Point):** Học viên làm sai quiz không biết hổng kiến thức ở đâu, tốn thời gian mò lại video.
 * **User Story:** Là học viên vừa thi xong, tôi muốn hệ thống chỉ ra điểm yếu và link thẳng tới đoạn video lý thuyết đó để ôn tập ngay.
 * **Acceptance Criteria (AC):**
   - Câu hỏi gắn Topic Tag. Nút "Ôn tập ngay" dẫn tới mốc thời gian (seconds) trong video.
   - **Refined AC (Rolling Window):** Phân tích điểm yếu phải dựa trên cửa sổ trượt thời gian (VD: kết quả 5 lần test gần nhất, hoặc trong 30 ngày qua), không cộng dồn các lỗi sai từ quá khứ xa xôi khi học viên đã tiến bộ.
+* **Đã làm (30/09/2026):** BE: Tạo migration thêm các cột `topic_tag`, `video_timestamp`, `reference_lesson_id` cho `quiz_questions`. Thuật toán nhóm lỗi theo Tag, tự động gạch bỏ lỗ hổng (triệt tiêu) nếu lần thi gần nhất đã đúng, tính tỷ lệ sai (Error Rate). FE: Bổ sung widget `KnowledgeGapsWidget` cao cấp (Premium UI với Color coding, Progress Bar, Fallback UX, Skeleton Loading) hiển thị trực tiếp trong tab Bảng điểm của học viên. Cập nhật `CourseMaterialsManager` cho giảng viên nhập tay tag/timestamp. Đã fix hoàn chỉnh các lỗi routing điều hướng cho kịch bản Final Exam.
 
 ### ~~10. Advanced Instructor Dashboard & Revenue Analytics~~ [ĐÃ HOÀN THÀNH]
 * **Bối cảnh & Nỗi đau (Pain Point):** Giảng viên như "ném đá vào hư không", không biết đoạn video nào nhàm chán, câu hỏi nào bị lỗi. Khó theo dõi dòng tiền thực nhận.
