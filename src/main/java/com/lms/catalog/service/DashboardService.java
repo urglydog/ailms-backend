@@ -92,6 +92,8 @@ public class DashboardService {
                     // Chia doanh thu 2 mức (20/09/2026) — để Giảng viên phân biệt giao dịch nào
                     // đến từ liên kết giới thiệu riêng (97%) và tự tìm thấy trên nền tảng (37%).
                     row.put("revenueSource", p.getRevenueSource());
+                    // UX (30/09/2026) — để FE tính tỷ lệ doanh thu qua Gói combo vs Bán lẻ.
+                    row.put("bundleId", p.getBundle() != null ? p.getBundle().getId() : null);
                     return row;
                 })
                 .toList();
@@ -161,15 +163,20 @@ public class DashboardService {
     public List<Map<String, Object>> getHardQuestions(String email) {
         return quizAnswerRepository.findHardQuestionsByInstructor(email).stream()
                 .map(row -> {
-                    long totalAnswers = (Long) row[4];
-                    long wrongCount = (Long) row[5];
+                    long totalAnswers = (Long) row[6];
+                    long wrongCount = (Long) row[7];
                     double wrongRatePercent = BigDecimal.valueOf(wrongCount * 100.0 / totalAnswers)
                             .setScale(1, RoundingMode.HALF_UP).doubleValue();
                     Map<String, Object> item = new java.util.HashMap<>();
                     item.put("questionId", row[0]);
                     item.put("content", row[1]);
-                    item.put("courseTitle", row[2]);
-                    item.put("lessonTitle", row[3]);
+                    item.put("courseId", row[2]);
+                    item.put("courseTitle", row[3]);
+                    item.put("lessonTitle", row[4]);
+                    // Sprint 3 mục 10, UX (30/09/2026) — FE deep-link thẳng tới trang Quản lý học
+                    // liệu với ?inspect={materialGenerationId} để giảng viên sửa câu hỏi ngay,
+                    // không phải tự đi tìm (xem CourseMaterialsManager.tsx).
+                    item.put("materialGenerationId", row[5]);
                     item.put("totalAnswers", totalAnswers);
                     item.put("wrongRatePercent", wrongRatePercent);
                     return item;
