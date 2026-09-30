@@ -77,6 +77,13 @@ public class QuizService {
         
         question.setContent(req.content());
         question.setIsMultipleChoice(req.isMultipleChoice() != null ? req.isMultipleChoice() : false);
+        if (req.topicTag() != null && !req.topicTag().isBlank()) {
+            question.setTopicTag(req.topicTag().trim().toLowerCase());
+        } else {
+            question.setTopicTag(null);
+        }
+        question.setVideoTimestamp(req.videoTimestamp());
+        question.setReferenceLessonId(req.referenceLessonId());
         quizQuestionRepository.save(question);
         
         List<QuizOption> existingOptions = quizOptionRepository.findByQuizQuestion_Id(questionId);
@@ -113,6 +120,13 @@ public class QuizService {
         question.setQuiz(quiz);
         question.setContent(req.content());
         question.setIsMultipleChoice(req.isMultipleChoice() != null ? req.isMultipleChoice() : false);
+        if (req.topicTag() != null && !req.topicTag().isBlank()) {
+            question.setTopicTag(req.topicTag().trim().toLowerCase());
+        } else {
+            question.setTopicTag(null);
+        }
+        question.setVideoTimestamp(req.videoTimestamp());
+        question.setReferenceLessonId(req.referenceLessonId());
         question.setDisplayOrder((int) maxOrder + 1);
         quizQuestionRepository.save(question);
 
@@ -351,6 +365,13 @@ public class QuizService {
         
         question.setContent(req.content());
         question.setIsMultipleChoice(req.isMultipleChoice() != null ? req.isMultipleChoice() : false);
+        if (req.topicTag() != null && !req.topicTag().isBlank()) {
+            question.setTopicTag(req.topicTag().trim().toLowerCase());
+        } else {
+            question.setTopicTag(null);
+        }
+        question.setVideoTimestamp(req.videoTimestamp());
+        question.setReferenceLessonId(req.referenceLessonId());
         quizQuestionRepository.save(question);
         
         List<QuizOption> existingOptions = quizOptionRepository.findByQuizQuestion_Id(questionId);
@@ -388,6 +409,13 @@ public class QuizService {
         question.setQuiz(quiz);
         question.setContent(req.content());
         question.setIsMultipleChoice(req.isMultipleChoice() != null ? req.isMultipleChoice() : false);
+        if (req.topicTag() != null && !req.topicTag().isBlank()) {
+            question.setTopicTag(req.topicTag().trim().toLowerCase());
+        } else {
+            question.setTopicTag(null);
+        }
+        question.setVideoTimestamp(req.videoTimestamp());
+        question.setReferenceLessonId(req.referenceLessonId());
         question.setDisplayOrder((int) maxOrder + 1);
         quizQuestionRepository.save(question);
 
@@ -618,6 +646,9 @@ public class QuizService {
             details.add(new QuizAttemptDto.AnswerDetailDto(
                     answer.getQuizQuestion().getId(),
                     answer.getQuizQuestion().getContent(),
+                    answer.getQuizQuestion().getTopicTag(),
+                    answer.getQuizQuestion().getVideoTimestamp(),
+                    answer.getQuizQuestion().getReferenceLessonId(),
                     selectedOptionIds != null ? selectedOptionIds : new ArrayList<>(),
                     allowReview ? correctOptionIds : null, // Ẩn đáp án đúng nếu allowReview = false
                     allowReview ? answer.getIsCorrect() : null, // Ẩn kết quả Đúng/Sai nếu allowReview = false
@@ -875,6 +906,9 @@ public class QuizService {
             details.add(new QuizAttemptDto.AnswerDetailDto(
                     answer.getQuizQuestion().getId(),
                     answer.getQuizQuestion().getContent(),
+                    answer.getQuizQuestion().getTopicTag(),
+                    answer.getQuizQuestion().getVideoTimestamp(),
+                    answer.getQuizQuestion().getReferenceLessonId(),
                     selectedIds,
                     allowReview ? correctOptionIds : null,
                     allowReview ? answer.getIsCorrect() : null,

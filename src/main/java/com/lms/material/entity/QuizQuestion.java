@@ -8,10 +8,10 @@ import lombok.Setter;
 /**
  * Mot cau hoi trac nghiem.
  *
- * <p><b>CO Y KHONG CO {@code explanation} va {@code timestampSec}</b> - da bo theo
+ * <p><b>CO Y KHONG CO {@code explanation}</b> - da bo theo
  * BR-QUIZ-01/BR-QUIZ-02. Hoc vien muon hieu sau thi chu dong hoi Socratic Tutor;
  * lam vay tiet kiem chi phi sinh giai thich va dung tinh than "hoc chu dong, goi mo"
- * cua de tai. <b>Dung them lai hai cot nay.</b>
+ * cua de tai. <b>Dung them lai cot explanation nay.</b> (Da them lai topic_tag va video_timestamp cho Knowledge Gaps).
  *
  * <p>Luon co <b>dung 4</b> {@link QuizOption} (BR-QUIZ-01).
  */
@@ -33,4 +33,13 @@ public class QuizQuestion extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "quiz_id", nullable = false)
     private Quiz quiz;
+
+    @Column(name = "topic_tag", length = 100)
+    private String topicTag;
+
+    @Column(name = "video_timestamp")
+    private Integer videoTimestamp;
+
+    @Column(name = "reference_lesson_id")
+    private Long referenceLessonId;
 }

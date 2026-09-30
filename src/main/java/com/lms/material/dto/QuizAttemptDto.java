@@ -39,6 +39,9 @@ public class QuizAttemptDto {
     public record AnswerDetailDto(
             Long questionId,
             String content,
+            String topicTag,
+            Integer videoTimestamp,
+            Long referenceLessonId,
             List<Long> selectedOptionIds,
             List<Long> correctOptionIds,
             Boolean isCorrect,
