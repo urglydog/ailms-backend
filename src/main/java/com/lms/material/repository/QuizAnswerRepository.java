@@ -26,9 +26,11 @@ public interface QuizAnswerRepository extends JpaRepository<QuizAnswer, Long> {
      * cỡ mẫu nhỏ) — nếu không, 1 câu hỏi mới toanh chỉ có đúng 1 học viên làm và trả lời sai sẽ
      * có tỷ lệ sai 100%, nhảy lên đầu bảng xếp hạng dù không đại diện gì cả.
      *
-     * <p>Trả từng dòng: [questionId, content, courseTitle, lessonTitle (có thể null — quiz cấp
-     * khóa không gắn 1 bài học cụ thể), totalAnswers, wrongCount]. */
-    @Query("SELECT qq.id, qq.content, mg.course.title, l.title, COUNT(qa), "
+     * <p>Trả từng dòng: [questionId, content, courseId, courseTitle, lessonTitle (có thể null —
+     * quiz cấp khóa không gắn 1 bài học cụ thể), materialGenerationId (để FE deep-link thẳng vào
+     * ô "inspect" có sẵn ở trang Quản lý học liệu — xem `CourseMaterialsManager.tsx`), totalAnswers,
+     * wrongCount]. */
+    @Query("SELECT qq.id, qq.content, mg.course.id, mg.course.title, l.title, mg.id, COUNT(qa), "
             + "SUM(CASE WHEN qa.isCorrect = false THEN 1L ELSE 0L END) "
             + "FROM QuizAnswer qa "
             + "JOIN qa.quizQuestion qq "
@@ -36,7 +38,7 @@ public interface QuizAnswerRepository extends JpaRepository<QuizAnswer, Long> {
             + "JOIN q.materialGeneration mg "
             + "LEFT JOIN mg.lesson l "
             + "WHERE mg.course.instructor.email = :instructorEmail "
-            + "GROUP BY qq.id, qq.content, mg.course.title, l.title "
+            + "GROUP BY qq.id, qq.content, mg.course.id, mg.course.title, l.title, mg.id "
             + "HAVING COUNT(qa) >= 5 AND (SUM(CASE WHEN qa.isCorrect = false THEN 1L ELSE 0L END) * 1.0 / COUNT(qa)) > 0.6 "
             + "ORDER BY (SUM(CASE WHEN qa.isCorrect = false THEN 1L ELSE 0L END) * 1.0 / COUNT(qa)) DESC")
     List<Object[]> findHardQuestionsByInstructor(@Param("instructorEmail") String instructorEmail);
