@@ -24,6 +24,9 @@ public class QuizDto {
     public record QuestionUpdateReq(
             String content,
             Boolean isMultipleChoice,
+            String topicTag,
+            Integer videoTimestamp,
+            Long referenceLessonId,
             java.util.List<OptionReq> options
     ) {}
 

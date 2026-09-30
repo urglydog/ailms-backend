@@ -41,4 +41,20 @@ public interface QuizAttemptRepository extends JpaRepository<QuizAttempt, Long> 
     @Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT a FROM QuizAttempt a WHERE a.id = :id")
     Optional<QuizAttempt> findByIdForUpdate(@Param("id") Long id);
+
+    @Query(value = """
+        WITH RankedSubmissions AS (
+            SELECT qa.*,
+                   ROW_NUMBER() OVER (PARTITION BY qa.quiz_id ORDER BY qa.submitted_at DESC) as rn
+            FROM quiz_attempts qa
+            JOIN quizzes q ON qa.quiz_id = q.id
+            JOIN material_generations mg ON q.material_generation_id = mg.id
+            WHERE qa.user_id = :userId 
+              AND mg.course_id = :courseId
+              AND qa.submitted_at >= (CURRENT_DATE - INTERVAL 30 DAY)
+              AND qa.status = 'COMPLETED'
+        )
+        SELECT * FROM RankedSubmissions rs WHERE rs.rn <= 5
+    """, nativeQuery = true)
+    List<QuizAttempt> findRecentTop5AttemptsPerQuiz(@Param("userId") Long userId, @Param("courseId") Long courseId);
 }

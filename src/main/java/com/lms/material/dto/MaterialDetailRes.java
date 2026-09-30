@@ -40,6 +40,9 @@ public record MaterialDetailRes(
             Long id,
             String content,
             Integer displayOrder,
+            String topicTag,
+            Integer videoTimestamp,
+            Long referenceLessonId,
             List<QuizOptionDto> options
     ) {}
 

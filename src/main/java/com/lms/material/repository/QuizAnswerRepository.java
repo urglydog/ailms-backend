@@ -17,6 +17,7 @@ import org.springframework.data.repository.query.Param;
 @Repository
 public interface QuizAnswerRepository extends JpaRepository<QuizAnswer, Long> {
     List<QuizAnswer> findByQuizAttempt_Id(Long attemptId);
+    List<QuizAnswer> findByQuizAttempt_IdIn(List<Long> attemptIds);
     void deleteByQuizAttempt_Quiz_Id(Long quizId);
 
     /** Sprint 3 mục 10 — Top câu hỏi có tỷ lệ sai > 60%, CHỈ trong các khóa của đúng
