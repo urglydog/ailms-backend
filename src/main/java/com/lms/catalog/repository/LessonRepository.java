@@ -37,4 +37,9 @@ public interface LessonRepository extends JpaRepository<Lesson, Long> {
      * bài đầu tiên (theo đúng thứ tự chương-bài) đã có giá trị này làm đại diện cho cả khóa.
      */
     Optional<Lesson> findFirstByChapter_CourseIdAndSourceLanguageIsNotNullOrderByChapter_DisplayOrderAscDisplayOrderAsc(Long courseId);
+
+    /** Reschedule Study Plan — tra cứu tên chương cho từng bài, dùng LEFT JOIN
+     *  để bài chưa gán chapter trả null thay vì bị loại khỏi kết quả. */
+    @Query("SELECT l.id, c.title FROM Lesson l LEFT JOIN l.chapter c WHERE l.id IN :ids")
+    List<Object[]> findChapterTitlesByLessonIds(@Param("ids") java.util.Collection<Long> ids);
 }

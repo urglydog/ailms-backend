@@ -87,3 +87,5 @@ Trước mỗi tính năng đều đi kèm với **Bối cảnh & Nỗi đau (Pa
 ---
 
 *Tài liệu này được định hướng cho giai đoạn chuyển đổi LMS sang phiên bản thương mại. Sprint 1 (Redis, CDN, Coupons, Bundles) sẽ được ưu tiên triển khai trước.*
+
+Tip bảo mật data: check request nào thường xuyên hoặc truy xuất lượng dữ liệu lớn=> AI cảnh báo admin
