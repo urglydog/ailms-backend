@@ -84,6 +84,8 @@ public class LessonProgressService {
                     return p;
                 });
 
+        boolean wasCompleted = Boolean.TRUE.equals(progress.getIsCompleted());
+
         progress.setWatchedSec(Math.max(progress.getWatchedSec(), req.watchedSec()));
         // Đọc vị trí CŨ trước khi bị ghi đè — cần để so sánh decile cũ/mới cho Retention Heatmap.
         recordWatchCheckpoints(lesson, user.getId(), progress.getLastPositionSec(), req.lastPositionSec());
@@ -91,10 +93,17 @@ public class LessonProgressService {
 
         boolean reachedThreshold = lesson.getDurationSec() > 0
                 && progress.getWatchedSec() * 100L >= (long) lesson.getDurationSec() * completeThresholdPercent;
-        if (reachedThreshold) {
+        
+        if (reachedThreshold && !wasCompleted) {
             progress.setIsCompleted(true);
             eventPublisher.publishEvent(new com.lms.enrollment.event.LessonCompletedEvent(this, user.getId(), java.time.Instant.now()));
         }
+        
+        // Ensure we still update the DB even if it was already completed (e.g. to update lastPositionSec)
+        if (reachedThreshold && wasCompleted) {
+            progress.setIsCompleted(true);
+        }
+        
         lessonProgressRepository.save(progress);
 
         Course course = lesson.getChapter().getCourse();
