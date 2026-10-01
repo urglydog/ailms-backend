@@ -67,9 +67,8 @@ public class StudentStudyPlanService {
             for (Lesson l : c.getLessons()) {
                 Optional<LessonProgress> lp = lessonProgressRepository.findByUser_IdAndLesson_Id(userId, l.getId());
                 if (lp.isEmpty() || !lp.get().getIsCompleted()) {
-                    // Validation 3: Fallback duration 600s
                     int duration = (l.getDurationSec() == null || l.getDurationSec() == 0) ? 600 : l.getDurationSec();
-                    uncompletedLessons.add(new LessonInfo(l.getId(), l.getTitle(), duration));
+                    uncompletedLessons.add(new LessonInfo(l.getId(), l.getTitle(), duration, c.getTitle()));
                     totalRemainingSec += duration;
                 }
             }
@@ -132,6 +131,7 @@ public class StudentStudyPlanService {
         private Long id;
         private String title;
         private Integer durationSec;
+        private String chapterTitle;
     }
 
     @Data
