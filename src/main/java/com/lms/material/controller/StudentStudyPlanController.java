@@ -47,4 +47,12 @@ public class StudentStudyPlanController {
             Principal principal) {
         return ResponseEntity.ok(studyPlanService.generatePlan(getUserId(principal), courseId, req));
     }
+
+    @DeleteMapping
+    public ResponseEntity<Void> deletePlan(
+            @PathVariable Long courseId,
+            Principal principal) {
+        studyPlanService.deletePlan(getUserId(principal), courseId);
+        return ResponseEntity.noContent().build();
+    }
 }

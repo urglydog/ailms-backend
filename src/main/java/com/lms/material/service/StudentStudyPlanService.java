@@ -124,6 +124,11 @@ public class StudentStudyPlanService {
         }
     }
 
+    @Transactional
+    public void deletePlan(Long userId, Long courseId) {
+        studyPlanRepository.deleteByUserIdAndCourseId(userId, courseId);
+    }
+
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
