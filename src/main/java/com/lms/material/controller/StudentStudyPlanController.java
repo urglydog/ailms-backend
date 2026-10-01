@@ -55,4 +55,22 @@ public class StudentStudyPlanController {
         studyPlanService.deletePlan(getUserId(principal), courseId);
         return ResponseEntity.noContent().build();
     }
+
+    @PutMapping("/reschedule")
+    public ResponseEntity<StudyPlanDto> reschedulePlan(
+            @PathVariable Long courseId,
+            @RequestBody(required = false) RescheduleRequest req,
+            Principal principal) {
+        
+        java.time.LocalDate targetDate = (req != null && req.getTargetDate() != null)
+                ? java.time.LocalDate.parse(req.getTargetDate())
+                : null;
+                
+        return ResponseEntity.ok(studyPlanService.reschedulePlan(getUserId(principal), courseId, targetDate));
+    }
+
+    @lombok.Data
+    public static class RescheduleRequest {
+        private String targetDate;
+    }
 }

@@ -2,7 +2,9 @@ package com.lms.enrollment.repository;
 
 import com.lms.enrollment.entity.LessonProgress;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.Optional;
+import java.util.Set;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -34,4 +36,13 @@ public interface LessonProgressRepository extends JpaRepository<LessonProgress, 
      * từng mở bài học này (1 dòng {@code lesson_progress}/học viên, xem UNIQUE constraint của
      * entity) — mẫu số cho % giữ chân ở từng decile. */
     long countByLesson_Id(Long lessonId);
+
+    /** Reschedule Study Plan — batch lookup: trả về tập lesson ID đã completed
+     *  trong 1 query duy nhất, tránh N+1 khi kiểm tra từng bài. */
+    @Query("SELECT lp.lesson.id FROM LessonProgress lp "
+            + "WHERE lp.user.id = :userId AND lp.isCompleted = true "
+            + "AND lp.lesson.id IN :lessonIds")
+    Set<Long> findCompletedLessonIdsByUserIdAndLessonIdIn(
+            @Param("userId") Long userId,
+            @Param("lessonIds") Collection<Long> lessonIds);
 }
