@@ -111,9 +111,17 @@ public class StreakService {
 
         boolean justFrozen = false;
         LocalDate lastActivity = streak.getLastActivityDate();
+        // BUG THẬT (03/10/2026) — nếu currentStreak ĐÃ về 0 từ trước (streak đã vỡ ở lần kiểm tra
+        // trước đó, nhưng lastActivityDate cũ vẫn còn giữ nguyên vì nhánh reset không cập nhật nó),
+        // daysMissed tính từ lastActivityDate cũ vẫn có thể TRÙNG 1 vào 1 ngày sau đó một cách
+        // ngẫu nhiên theo lịch, khiến freeze bị áp dụng "cứu" một streak ĐÃ CHẾT (currentStreak vẫn
+        // là 0 sau khi freeze vì nhánh freeze không đổi currentStreak) — tốn 1 lượt freeze free và
+        // hiện thông báo "đã đóng băng" vô nghĩa (chuỗi 0 ngày). Chỉ áp freeze khi THỰC SỰ có
+        // streak đang sống (>0) để bảo toàn.
+        boolean hasActiveStreakToProtect = streak.getCurrentStreak() != null && streak.getCurrentStreak() > 0;
         if (lastActivity != null && todayInUserZone.isAfter(lastActivity.plusDays(1))) {
             long daysMissed = ChronoUnit.DAYS.between(lastActivity, todayInUserZone) - 1;
-            if (daysMissed == 1 && streak.getFreezeUsedCount() < FREEZE_LIMIT_PER_MONTH) {
+            if (hasActiveStreakToProtect && daysMissed == 1 && streak.getFreezeUsedCount() < FREEZE_LIMIT_PER_MONTH) {
                 // Streak Freeze tự động: đúng 1 ngày bị lỡ và còn hạn mức tháng này → coi ngày
                 // đó như "đã đóng băng", đẩy lastActivityDate lên 1 ngày để lần học tiếp theo
                 // vẫn nối chuỗi liên tục, không reset currentStreak.
