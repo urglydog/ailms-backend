@@ -45,15 +45,18 @@ public interface CourseReviewRepository extends JpaRepository<CourseReview, Long
     @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"user", "course"})
     java.util.List<CourseReview> findByCourse_Instructor_EmailAndIsHiddenFalseOrderByCreatedAtDesc(String email);
 
+    /** BUG THẬT (03/10/2026) — trước đây lọc "status" qua so sánh String với isHidden (boolean),
+     * không biểu diễn được trạng thái thứ 3 PENDING_REPORT (hàng chờ Report của Giảng viên). Lọc
+     * trực tiếp trên cột {@code moderationStatus} — giá trị enum "VISIBLE"/"HIDDEN"/"PENDING_REPORT". */
     @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"course", "course.instructor", "user"})
     @Query(value = "SELECT r FROM CourseReview r " +
            "WHERE (:courseTitle IS NULL OR LOWER(r.course.title) LIKE LOWER(CONCAT('%', :courseTitle, '%'))) " +
            "AND (:instructorEmail IS NULL OR r.course.instructor.email = :instructorEmail) " +
-           "AND (:status IS NULL OR (:status = 'HIDDEN' AND r.isHidden = true) OR (:status = 'VISIBLE' AND r.isHidden = false))",
+           "AND (:status IS NULL OR CAST(r.moderationStatus AS string) = :status)",
            countQuery = "SELECT COUNT(r) FROM CourseReview r " +
            "WHERE (:courseTitle IS NULL OR LOWER(r.course.title) LIKE LOWER(CONCAT('%', :courseTitle, '%'))) " +
            "AND (:instructorEmail IS NULL OR r.course.instructor.email = :instructorEmail) " +
-           "AND (:status IS NULL OR (:status = 'HIDDEN' AND r.isHidden = true) OR (:status = 'VISIBLE' AND r.isHidden = false))")
+           "AND (:status IS NULL OR CAST(r.moderationStatus AS string) = :status)")
     Page<CourseReview> searchAdminReviews(@Param("courseTitle") String courseTitle,
                                           @Param("instructorEmail") String instructorEmail,
                                           @Param("status") String status,

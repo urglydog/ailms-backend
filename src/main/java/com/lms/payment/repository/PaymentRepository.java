@@ -37,6 +37,14 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
 
     long countByCoupon_IdAndUser_IdAndStatus(Long couponId, Long userId, PaymentStatus status);
 
+    /** BUG THẬT (03/10/2026) — dùng khi tái kiểm tra hạn mức coupon có LOCK (xem
+     * {@code CouponRepository.lockForUpdate}): phải đếm luôn cả PENDING (không chỉ PAID) vì
+     * mục đích là "giữ suất" ngay khi tạo đơn, tránh 2 đơn PENDING song song cùng vượt hạn mức
+     * trước khi cả 2 kịp PAID. */
+    long countByCoupon_IdAndStatusIn(Long couponId, List<PaymentStatus> statuses);
+
+    long countByCoupon_IdAndUser_IdAndStatusIn(Long couponId, Long userId, List<PaymentStatus> statuses);
+
     /** Dashboard Giảng viên (15/09/2026, sửa lỗi) — doanh thu THỰC NHẬN (đã trừ phí nền tảng
      * BR-PAY-05) từ đầu tháng tới nay, thay số "15400000" gắn cứng cũ (đang chờ module Payment
      * — module đã có thật). */

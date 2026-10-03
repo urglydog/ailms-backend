@@ -140,6 +140,7 @@ lms:
     notification-retention-days: 90          # BR-NOTIFY-01
     max-tutor-attachments-per-turn: 3        # UC30 mở rộng
     max-tutor-attachment-size-mb: 8          # UC30 mở rộng
+    review-min-progress-percent: 20          # UpComming_Plan.md Sprint 2 mục 6 — AC "học >= 20-30% mới được review"
 
   storage:
     b2-bucket-name: ${B2_BUCKET_NAME:}

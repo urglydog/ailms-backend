@@ -40,10 +40,7 @@ public class CourseBundleService {
         bundle.setTitle(req.title());
         bundle.setDescription(req.description());
         bundle.setDiscountPercent(req.discountPercent() != null ? req.discountPercent() : 0);
-        
-        if (bundle.getDiscountPercent() < 0 || bundle.getDiscountPercent() >= 100) {
-            throw new BusinessRuleViolationException("Discount percent must be between 0 and 99");
-        }
+        validateDiscountPercent(bundle.getDiscountPercent());
 
         List<Course> courses = validateAndLoadCourses(req.courseIds(), instructor.getId());
         bundle.setCourses(courses);
@@ -64,6 +61,9 @@ public class CourseBundleService {
         bundle.setTitle(req.title());
         bundle.setDescription(req.description());
         bundle.setDiscountPercent(req.discountPercent() != null ? req.discountPercent() : bundle.getDiscountPercent());
+        // BUG THẬT (03/10/2026): updateBundle thiếu validate discountPercent như createBundle —
+        // instructor/admin có thể PATCH discountPercent âm hoặc >=100, phá công thức tính giá.
+        validateDiscountPercent(bundle.getDiscountPercent());
         bundle.setIsActive(req.isActive() != null ? req.isActive() : bundle.getIsActive());
 
         if (req.courseIds() != null) {
@@ -72,6 +72,12 @@ public class CourseBundleService {
         }
 
         return mapToRes(bundleRepository.save(bundle));
+    }
+
+    private void validateDiscountPercent(Integer discountPercent) {
+        if (discountPercent == null || discountPercent < 0 || discountPercent >= 100) {
+            throw new BusinessRuleViolationException("Discount percent must be between 0 and 99");
+        }
     }
 
     private List<Course> validateAndLoadCourses(List<Long> courseIds, Long instructorId) {

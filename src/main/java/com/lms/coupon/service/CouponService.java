@@ -208,6 +208,38 @@ public class CouponService {
         return new PricingResult(originalPrice, finalPrice, best, enteredCodeValid);
     }
 
+    /** Các trạng thái Payment được tính là "đang giữ suất" coupon — PENDING cũng phải tính vì
+     * mục đích của hàm này là giữ suất ngay khi tạo đơn, không chờ tới lúc PAID. */
+    private static final List<PaymentStatus> RESERVING_STATUSES = List.of(PaymentStatus.PENDING, PaymentStatus.PAID);
+
+    /**
+     * BUG THẬT (03/10/2026) — chống race condition hạn mức coupon: {@link #resolveBestPrice}
+     * chỉ ĐỌC (không lock) nên 2 request tạo Payment đồng thời cùng coupon đều có thể thấy hạn
+     * mức còn trống rồi cùng được tạo PENDING, bypass "mỗi người chỉ dùng 1 lần". Phải gọi hàm
+     * này NGAY TRƯỚC KHI lưu {@code Payment} (trong CÙNG transaction với lúc lưu) — lock dòng
+     * Coupon khiến request thứ 2 phải đợi request thứ 1 commit xong (đã có PENDING) rồi mới
+     * được tái kiểm tra, lúc đó mới thấy đúng số suất đã bị chiếm.
+     */
+    @Transactional
+    public void reserveUsage(Coupon coupon, User user) {
+        Coupon locked = couponRepository.lockForUpdate(coupon.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Coupon", coupon.getId()));
+        if (locked.getMaxUsageCount() != null) {
+            long used = paymentRepository.countByCoupon_IdAndStatusIn(locked.getId(), RESERVING_STATUSES);
+            if (used >= locked.getMaxUsageCount()) {
+                throw new BusinessRuleViolationException(
+                        "Mã giảm giá \"" + locked.getCode() + "\" đã hết lượt sử dụng, vui lòng bỏ mã và thử lại.");
+            }
+        }
+        if (user != null && locked.getMaxUsagePerUser() != null) {
+            long usedByUser = paymentRepository.countByCoupon_IdAndUser_IdAndStatusIn(locked.getId(), user.getId(), RESERVING_STATUSES);
+            if (usedByUser >= locked.getMaxUsagePerUser()) {
+                throw new BusinessRuleViolationException(
+                        "Bạn đã dùng hết lượt cho mã giảm giá \"" + locked.getCode() + "\", vui lòng bỏ mã và thử lại.");
+            }
+        }
+    }
+
     private boolean isCouponUsable(Coupon coupon, Course course, User user, LocalDateTime now) {
         if (!Boolean.TRUE.equals(coupon.getIsActive())) return false;
         if (now.isBefore(coupon.getStartAt()) || now.isAfter(coupon.getEndAt())) return false;

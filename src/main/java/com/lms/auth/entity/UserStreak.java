@@ -33,6 +33,19 @@ public class UserStreak {
     @Column(name = "timezone", nullable = false, length = 64)
     private String timezone = "Asia/Ho_Chi_Minh";
 
+    /** Streak Freeze (03/10/2026) — số lần đã dùng trong tháng hiện tại ({@link #freezeResetMonth}). */
+    @Column(name = "freeze_used_count", nullable = false)
+    private Integer freezeUsedCount = 0;
+
+    /** Tháng mà {@link #freezeUsedCount} đang tính cho, dạng "yyyy-MM" theo {@link #timezone} của user. */
+    @Column(name = "freeze_reset_month", length = 7)
+    private String freezeResetMonth;
+
+    /** Streak reminder (03/10/2026) — chống {@code StreakReminderJob} gửi lặp nhiều lần/ngày
+     * khi cron chạy theo giờ. */
+    @Column(name = "last_reminder_sent_date")
+    private LocalDate lastReminderSentDate;
+
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 

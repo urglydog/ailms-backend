@@ -8,6 +8,7 @@ import com.lms.common.exception.BusinessRuleViolationException;
 import com.lms.common.exception.ConflictException;
 import com.lms.enrollment.dto.CourseReviewDto.*;
 import com.lms.enrollment.entity.CourseReview;
+import com.lms.enrollment.entity.Enrollment;
 import com.lms.enrollment.repository.CourseReviewRepository;
 import com.lms.enrollment.repository.EnrollmentRepository;
 import java.math.BigDecimal;
@@ -19,6 +20,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -65,11 +67,19 @@ class CourseReviewServiceTest {
             review.setId(100L);
             return review;
         });
+        // BR-REVIEW-02 (03/10/2026, mở rộng) — mặc định 20% cho các test không quan tâm riêng tới ngưỡng này.
+        ReflectionTestUtils.setField(courseReviewService, "minProgressPercentToReview", 20);
+    }
+
+    private Enrollment enrollmentWithProgress(int progressPct) {
+        Enrollment enrollment = new Enrollment();
+        enrollment.setProgressPct(BigDecimal.valueOf(progressPct));
+        return enrollment;
     }
 
     @Test
     void create_throwsWhenStudentNotEnrolled() {
-        when(enrollmentRepository.existsByUser_IdAndCourse_Id(1L, 10L)).thenReturn(false);
+        when(enrollmentRepository.findByUser_IdAndCourse_Id(1L, 10L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> courseReviewService.create(STUDENT_EMAIL, 10L, new CreateReq(5, "Hay")))
                 .isInstanceOf(BusinessRuleViolationException.class);
@@ -79,7 +89,7 @@ class CourseReviewServiceTest {
 
     @Test
     void create_throwsWhenAlreadyReviewed() {
-        when(enrollmentRepository.existsByUser_IdAndCourse_Id(1L, 10L)).thenReturn(true);
+        when(enrollmentRepository.findByUser_IdAndCourse_Id(1L, 10L)).thenReturn(Optional.of(enrollmentWithProgress(50)));
         when(courseReviewRepository.existsByUser_IdAndCourse_Id(1L, 10L)).thenReturn(true);
 
         assertThatThrownBy(() -> courseReviewService.create(STUDENT_EMAIL, 10L, new CreateReq(5, "Hay")))
@@ -89,8 +99,20 @@ class CourseReviewServiceTest {
     }
 
     @Test
+    void create_throwsWhenProgressBelowMinimum() {
+        // BR-REVIEW-02 (03/10/2026, mở rộng) — AC Sprint 2 mục 6: chỉ học viên đã học >= 20%
+        // (ngưỡng cấu hình) mới được review; dưới ngưỡng phải bị chặn dù đã enroll.
+        when(enrollmentRepository.findByUser_IdAndCourse_Id(1L, 10L)).thenReturn(Optional.of(enrollmentWithProgress(5)));
+
+        assertThatThrownBy(() -> courseReviewService.create(STUDENT_EMAIL, 10L, new CreateReq(5, "Hay")))
+                .isInstanceOf(BusinessRuleViolationException.class);
+
+        verify(courseReviewRepository, never()).save(any());
+    }
+
+    @Test
     void create_succeedsAndRecalculatesAvgRating() {
-        when(enrollmentRepository.existsByUser_IdAndCourse_Id(1L, 10L)).thenReturn(true);
+        when(enrollmentRepository.findByUser_IdAndCourse_Id(1L, 10L)).thenReturn(Optional.of(enrollmentWithProgress(50)));
         when(courseReviewRepository.existsByUser_IdAndCourse_Id(1L, 10L)).thenReturn(false);
         when(courseReviewRepository.findAverageRatingByCourseId(10L)).thenReturn(4.5);
 

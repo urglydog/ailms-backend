@@ -125,6 +125,7 @@ public class DashboardService {
                 .filter(r -> courseId == null || r.getCourse().getId().equals(courseId))
                 .map(r -> {
                     Map<String, Object> row = new java.util.HashMap<>();
+                    row.put("id", r.getId());
                     row.put("studentName", r.getUser().getFullName());
                     row.put("courseId", r.getCourse().getId());
                     row.put("courseTitle", r.getCourse().getTitle());

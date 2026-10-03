@@ -85,6 +85,7 @@ public class LessonProgressService {
                 });
 
         boolean wasCompleted = Boolean.TRUE.equals(progress.getIsCompleted());
+        long oldWatchedSec = progress.getWatchedSec();
 
         progress.setWatchedSec(Math.max(progress.getWatchedSec(), req.watchedSec()));
         // Đọc vị trí CŨ trước khi bị ghi đè — cần để so sánh decile cũ/mới cho Retention Heatmap.
@@ -98,10 +99,22 @@ public class LessonProgressService {
             progress.setIsCompleted(true);
             eventPublisher.publishEvent(new com.lms.enrollment.event.LessonCompletedEvent(this, user.getId(), java.time.Instant.now()));
         }
-        
+
         // Ensure we still update the DB even if it was already completed (e.g. to update lastPositionSec)
         if (reachedThreshold && wasCompleted) {
             progress.setIsCompleted(true);
+        }
+
+        // BUG THẬT (03/10/2026) — AC Streak (UpComming_Plan.md Sprint 2 mục 5) định nghĩa "ngày
+        // hoàn thành" là "xem tối thiểu 10 phút video HOẶC hoàn thành 1 quiz" — KHÔNG phải
+        // "lesson đạt ngưỡng % hoàn thành" như code cũ. Với bài giảng dài, học viên xem 10+ phút
+        // vẫn chưa đạt completeThresholdPercent nên streak không bao giờ được ghi nhận. Bắn
+        // riêng khi vừa vượt mốc 10 phút, độc lập với việc lesson đã "hoàn thành" hay chưa —
+        // recordActivity() đã tự idempotent theo ngày (unique constraint UserLearningDay) nên
+        // bắn trùng với nhánh completed ở trên không gây lỗi.
+        boolean justReachedTenMinWatch = oldWatchedSec < 600 && progress.getWatchedSec() >= 600;
+        if (justReachedTenMinWatch) {
+            eventPublisher.publishEvent(new com.lms.enrollment.event.LessonCompletedEvent(this, user.getId(), java.time.Instant.now()));
         }
         
         lessonProgressRepository.save(progress);
