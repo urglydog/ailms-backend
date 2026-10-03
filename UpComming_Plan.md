@@ -33,6 +33,7 @@ Trước mỗi tính năng đều đi kèm với **Bối cảnh & Nỗi đau (Pa
   - Giỏ hàng tự động gợi ý các khóa học bổ trợ kèm nút "Thêm vào đơn hàng chỉ với +XX đồng".
   - **Refined AC (Pro-rated Pricing):** Xử lý trường hợp trùng lặp: Nếu học viên đã sở hữu Khóa A, khi bấm mua Combo (Khóa A + Khóa B), hệ thống tự động trừ tiền Khóa A đã thanh toán trước đó để ra giá cuối hợp lý.
 * **Đã làm (29/09/2026):** Giảng viên tạo/sửa gói combo (`CourseBundleController/Service`); trang chi tiết khóa hiện widget gợi ý gói (`BundleUpsellWidget`); giỏ hàng TỰ PHÁT HIỆN khi đã đủ khóa của 1 gói (`matchCartBundles.ts`, greedy chọn tập gói rời nhau tránh chồng lấn, tính pro-rated đúng công thức BE, xử lý cả case đã sở hữu sẵn 1 khóa), gợi ý mua thêm khi thiếu đúng 1 khóa; thanh toán gửi đúng `bundleIds`, giá chốt khớp giữa `/cart`, `/checkout/cart` và BE. User đã test thật trên production, xác nhận hoạt động đúng.
+* **Vá thêm (03/10/2026, rà soát độ hoàn thiện):** `CourseBundleService.updateBundle` thiếu validate `discountPercent` (0-99) như `createBundle` — Admin/Giảng viên PATCH được giá trị âm/≥100 phá công thức tính giá; đã thêm lại validate dùng chung. Coupon: hạn mức "1 lượt/người" chỉ đếm payment PAID nên 2 request tạo đơn đồng thời cùng mã có thể cùng vượt hạn mức trước khi kịp PAID (race condition) — đã thêm `CouponService.reserveUsage` lock dòng Coupon (pessimistic write) + đếm cả PENDING ngay lúc tạo Payment để chặn từ gốc; bỏ luôn 1 lần gọi `resolveBestPrice` trùng lặp không cần thiết trong `createBatchPayment`. UI Admin coupon trước đó hiện "Đang bật" dù mã đã hết hạn (gây hiểu lầm vận hành) — đã thêm trạng thái "Hết hạn" riêng dựa trên `endAt`.
 
 ---
 
@@ -46,6 +47,7 @@ Trước mỗi tính năng đều đi kèm với **Bối cảnh & Nỗi đau (Pa
   - Hiển thị biểu tượng ngọn lửa/số ngày streak rõ ràng trên UI.
   - Cơ chế "đóng băng streak" (Streak Freeze) để tránh mất chuỗi khi có việc đột xuất.
   - **Refined AC (Timezone):** Hệ thống phải tính ngày Streak dựa trên Múi giờ Local của trình duyệt thiết bị người học, không fix cứng theo giờ UTC của Server để tránh mất streak oan uổng.
+* **Vá thêm (03/10/2026, rà soát độ hoàn thiện — trước đó đánh dấu ĐÃ HOÀN THÀNH nhưng thiếu 2/4 AC):** (1) Định nghĩa "ngày hoàn thành" trước đây lại dùng ngưỡng % hoàn thành bài học (BR-PROGRESS-01) thay vì "xem ≥10 phút HOẶC làm 1 quiz" như AC — bài giảng dài khiến học viên xem 10+ phút vẫn không được tính streak; đã bắn thêm event streak riêng ngay khi `watchedSec` vượt mốc 600s, độc lập với % hoàn thành lesson (`LessonProgressService`). (2) "Streak Freeze" HOÀN TOÀN chưa có code (0 dòng liên quan) — đã thêm cơ chế tự động, giới hạn 2 lần/tháng: lỡ đúng 1 ngày thì tự "đóng băng" giữ nguyên streak (migration V140, `StreakService.getStreak`), có hiển thị số lần còn lại + toast khi được áp dụng (FE `Header.tsx`). (3) Thông báo nhắc giữ streak cũng chưa có — đã thêm `StreakReminderJob` (cron theo giờ, tự tính giờ local theo `timezone` từng user, qua `NotificationService` có sẵn).
 
 ### ~~6. Đánh giá & Review nâng cao (AI Sentiment Filter)~~ [ĐÃ HOÀN THÀNH]
 * **Bối cảnh & Nỗi đau (Pain Point):** Khóa học bị spam đánh giá rác, bot cạnh tranh không lành mạnh hoặc những bình luận mang tính xúc phạm làm sai lệch chất lượng thực tế.
@@ -54,18 +56,21 @@ Trước mỗi tính năng đều đi kèm với **Bối cảnh & Nỗi đau (Pa
   - Chỉ cho phép tài khoản đã học tối thiểu 20-30% khóa học mới được viết review.
   - AI Sentiment phân tích nội dung review và tự động giữ lại (ẩn đi) nếu có dấu hiệu thù địch/spam.
   - **Refined AC:** Giảng viên có quyền "Report" một review, review đó bị ẩn tạm thời và chờ Admin duyệt tay.
+* **Vá thêm (03/10/2026, rà soát độ hoàn thiện — trước đó đánh dấu ĐÃ HOÀN THÀNH nhưng thiếu 2/3 AC):** (1) Điều kiện "học ≥20-30% mới được review" chưa hề được enforce (chỉ check đã enroll + chưa review) — đã thêm check `Enrollment.progressPct` so với ngưỡng cấu hình `lms.rules.review-min-progress-percent=20`. (2) Flow "Report" của Giảng viên hoàn toàn chưa có — đã thêm: ẩn ngay + trạng thái `PENDING_REPORT` riêng (migration V141, enum `ReviewModerationStatus`) vào hàng chờ Admin duyệt (nút Report ở trang "Hiệu suất > Đánh giá", filter + nút duyệt riêng ở `ReviewManager.tsx` Admin). (3) Lỗi đẩy job kiểm duyệt AI sang Redis trước đây chỉ log rồi nuốt luôn (fail-open im lặng, review mất vĩnh viễn cơ hội được AI duyệt) — đã thêm retry ngắn (tối đa 3 lần) cho lỗi thoáng qua.
 
 ---
 
 ## SPRINT 3: TỐI ƯU HÓA BẰNG AI & BÁO CÁO (ADVANCED AI & ANALYTICS)
 
 
-### 8. AI Personalized Study Plan (Lộ trình học cá nhân hóa)
+### ~~8. AI Personalized Study Plan (Lộ trình học cá nhân hóa)~~ [ĐÃ HOÀN THÀNH]
 * **Bối cảnh & Nỗi đau (Pain Point):** Khóa học có dung lượng lớn, học viên dễ bị choáng ngợp, không biết phân bổ thời gian học sao cho kịp thi.
 * **User Story:** Là học viên bận rộn, tôi muốn nhập ngày mục tiêu để AI lên lịch học chi tiết từng ngày.
 * **Acceptance Criteria (AC):**
   - Form đầu vào: Mục tiêu kết thúc + Khung giờ học.
   - AI sinh lịch biểu đồng bộ Calendar. Nếu trễ hạn, AI tự động bù trừ cho các ngày sau.
+* **Đã làm:** Form nhập ngày mục tiêu + giờ/tuần (`StudentStudyPlanController/Service`), AI sinh lịch qua ai-worker (Gemini structured output), validate tính khả thi (tổng thời lượng còn lại vs cam kết) trước khi gọi AI, thuật toán "reschedule" tự bù lịch khi trễ hạn (bin-packing theo chương, không gọi lại AI — 0 chi phí). **Mở rộng ngoài đặc tả gốc:** nút "Xuất Calendar (.ics)" tải lịch học về app Calendar ngoài (Google/Outlook/Apple).
+* **Vá thêm (03/10/2026, rà soát độ hoàn thiện):** File `.ics` xuất ra thiếu `UID`/`DTSTAMP` (bắt buộc theo RFC 5545) — export lại sau khi reschedule tạo ra bộ event TRÙNG LẶP thay vì cập nhật; đã thêm UID ổn định theo courseId+ngày + escape ký tự đặc biệt trong tiêu đề bài học (dấu phẩy/chấm phẩy phá cấu trúc ICS) + sửa cách cộng ngày tránh lệch do timezone trình duyệt. Timezone "hôm nay" trước đây KHÔNG nhất quán giữa 3 nơi (BE `generatePlan` dùng giờ server mặc định, BE `reschedulePlan` dùng `Asia/Ho_Chi_Minh` hardcode, ai-worker dùng giờ máy chủ không timezone) — đã thống nhất cả 3 về `Asia/Ho_Chi_Minh`. `hoursPerWeek` chỉ cap 168 ở FE (`<input max>`), gọi API trực tiếp vẫn vượt được — đã thêm `@Max(168)` phía BE. ai-worker có model Pydantic validate response nhưng KHÔNG được dùng (dead code) — JSON đúng cú pháp nhưng sai schema vẫn lọt qua, chỉ vỡ rất xa về sau; đã bật validate, trả lỗi 502 rõ nghĩa. API `GET .../study-plan` trả 204 nhưng FE lại bắt lỗi theo 404 (chạy đúng là nhờ trùng hợp) — đã đổi BE trả đúng 404 khớp hợp đồng FE.
 
 ### ~~9. Phân tích điểm yếu (Knowledge Gaps Analysis)~~ [ĐÃ HOÀN THÀNH]
 * **Bối cảnh & Nỗi đau (Pain Point):** Học viên làm sai quiz không biết hổng kiến thức ở đâu, tốn thời gian mò lại video.
