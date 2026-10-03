@@ -41,4 +41,9 @@ public class CourseReview extends BaseEntity {
 
     @Column(name = "moderation_reason", columnDefinition = "TEXT")
     private String moderationReason;
+
+    /** 03/10/2026, mở rộng — xem {@link ReviewModerationStatus}. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "moderation_status", nullable = false, length = 20)
+    private ReviewModerationStatus moderationStatus = ReviewModerationStatus.VISIBLE;
 }

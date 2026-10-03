@@ -26,6 +26,10 @@ public class CourseReviewDto {
             String comment,
             Boolean isHidden,
             String moderationReason,
-            LocalDateTime createdAt
+            LocalDateTime createdAt,
+            String moderationStatus
     ) {}
+
+    /** Giảng viên report 1 review (03/10/2026, mở rộng). */
+    public record ReportReq(String reason) {}
 }

@@ -18,6 +18,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 @Service
@@ -28,6 +29,12 @@ public class StreakService {
     private final UserStreakRepository userStreakRepository;
     private final UserLearningDayRepository userLearningDayRepository;
     private final UserRepository userRepository;
+
+    /** Streak Freeze (UpComming_Plan.md Sprint 2 mục 5, 03/10/2026) — số lần đóng băng tự động
+     * tối đa mỗi tháng. Mỗi lần chỉ cứu được ĐÚNG 1 ngày bị lỡ (không cứu được khoảng trống
+     * nhiều ngày liên tiếp trong 1 lần) — giống quy ước phổ biến của các app học ngoại ngữ. */
+    private static final int FREEZE_LIMIT_PER_MONTH = 2;
+    private static final DateTimeFormatter MONTH_KEY_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM");
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void recordActivity(Long userId, Instant completedAt) {
@@ -95,17 +102,38 @@ public class StreakService {
         LocalDate todayInUserZone = LocalDate.ofInstant(Instant.now(), zone);
 
         boolean changed = false;
-        if (streak.getLastActivityDate() != null && todayInUserZone.isAfter(streak.getLastActivityDate().plusDays(1))) {
-            streak.setCurrentStreak(0);
+        String currentMonthKey = todayInUserZone.format(MONTH_KEY_FORMAT);
+        if (!currentMonthKey.equals(streak.getFreezeResetMonth())) {
+            streak.setFreezeResetMonth(currentMonthKey);
+            streak.setFreezeUsedCount(0);
             changed = true;
         }
-        
+
+        boolean justFrozen = false;
+        LocalDate lastActivity = streak.getLastActivityDate();
+        if (lastActivity != null && todayInUserZone.isAfter(lastActivity.plusDays(1))) {
+            long daysMissed = ChronoUnit.DAYS.between(lastActivity, todayInUserZone) - 1;
+            if (daysMissed == 1 && streak.getFreezeUsedCount() < FREEZE_LIMIT_PER_MONTH) {
+                // Streak Freeze tự động: đúng 1 ngày bị lỡ và còn hạn mức tháng này → coi ngày
+                // đó như "đã đóng băng", đẩy lastActivityDate lên 1 ngày để lần học tiếp theo
+                // vẫn nối chuỗi liên tục, không reset currentStreak.
+                streak.setFreezeUsedCount(streak.getFreezeUsedCount() + 1);
+                streak.setLastActivityDate(lastActivity.plusDays(1));
+                justFrozen = true;
+                log.info("Streak freeze tu dong ap dung cho user {} (con {} lan/thang)", userId,
+                        FREEZE_LIMIT_PER_MONTH - streak.getFreezeUsedCount());
+            } else {
+                streak.setCurrentStreak(0);
+            }
+            changed = true;
+        }
+
         if (changed) {
             userStreakRepository.save(streak);
         }
 
         boolean hasStudiedToday = streak.getLastActivityDate() != null && streak.getLastActivityDate().isEqual(todayInUserZone);
-        
+
         LocalDate startDate = todayInUserZone.minusDays(6);
         List<LocalDate> learningDays = userLearningDayRepository
                 .findByUser_IdAndActivityDateBetweenOrderByActivityDateDesc(userId, startDate, todayInUserZone)
@@ -115,7 +143,8 @@ public class StreakService {
 
         List<String> formattedLearningDays = learningDays.stream().map(d -> d.format(DateTimeFormatter.ISO_LOCAL_DATE)).toList();
 
-        return new StreakResponse(streak.getCurrentStreak(), streak.getLongestStreak(), hasStudiedToday, formattedLearningDays);
+        int freezesRemaining = FREEZE_LIMIT_PER_MONTH - streak.getFreezeUsedCount();
+        return new StreakResponse(streak.getCurrentStreak(), streak.getLongestStreak(), hasStudiedToday, formattedLearningDays, freezesRemaining, justFrozen);
     }
 
     private UserStreak createInitialStreak(Long userId) {

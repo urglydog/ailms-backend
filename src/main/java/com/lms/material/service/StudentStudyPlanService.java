@@ -60,8 +60,13 @@ public class StudentStudyPlanService {
 
     @Transactional
     public StudyPlanDto generatePlan(Long userId, Long courseId, StudyPlanReq req) {
+        // BUG THẬT (03/10/2026) — trước đây dùng LocalDate.now() (JVM default zone) ở đây
+        // nhưng reschedulePlan() lại dùng VN_ZONE tường minh — 2 khái niệm "hôm nay" khác nhau
+        // trong CÙNG 1 service. Thống nhất về VN_ZONE (ai-worker cũng đã đổi theo, xem study_plan.py).
+        LocalDate today = LocalDate.now(VN_ZONE);
+
         // Validation 1: Target date must be > now + 1
-        if (!req.getTargetDate().isAfter(LocalDate.now().plusDays(1))) {
+        if (!req.getTargetDate().isAfter(today.plusDays(1))) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Ngày kết thúc phải cách hôm nay ít nhất 2 ngày");
         }
 
@@ -86,7 +91,7 @@ public class StudentStudyPlanService {
         }
 
         // Validation 4: Infeasible
-        long weeks = ChronoUnit.WEEKS.between(LocalDate.now(), req.getTargetDate());
+        long weeks = ChronoUnit.WEEKS.between(today, req.getTargetDate());
         if (weeks == 0) weeks = 1; // At least 1 week for calculation if < 7 days
         long maxCommittedSec = weeks * req.getHoursPerWeek() * 3600L;
         if (totalRemainingSec > maxCommittedSec) {

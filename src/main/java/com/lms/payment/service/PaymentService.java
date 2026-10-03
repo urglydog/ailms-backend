@@ -102,6 +102,11 @@ public class PaymentService {
         // để BR-PAY-05 (30/70) tính đúng trên giá THỰC THU.
         CouponService.PricingResult pricing = couponService.resolveBestPrice(course, user, req.couponCode());
         BigDecimal amount = pricing.finalPrice();
+        if (pricing.appliedCoupon() != null) {
+            // BUG THẬT (03/10/2026): phải tái kiểm tra hạn mức CÓ LOCK ngay trước khi lưu
+            // Payment, không chỉ dựa vào resolveBestPrice (chỉ đọc, không chống race).
+            couponService.reserveUsage(pricing.appliedCoupon(), user);
+        }
 
         Payment payment = new Payment();
         // Giới hạn txnRef 8 kí tự để test dễ nhìn hơn, thực tế nên dùng UUID đầy đủ hoặc logic format hóa đơn
@@ -195,6 +200,7 @@ public class PaymentService {
             BigDecimal originalPrice;
             BigDecimal finalPrice;
             BigDecimal discountAmount;
+            Coupon coupon; // null nếu là bundle hoặc không áp mã
         }
 
         java.util.List<CheckoutItem> checkoutItems = new ArrayList<>();
@@ -267,13 +273,19 @@ public class PaymentService {
 
             // Coupon CHỈ áp dụng cho khóa lẻ
             CouponService.PricingResult pricing = couponService.resolveBestPrice(course, user, req.couponCode());
-            
+            if (pricing.appliedCoupon() != null) {
+                // BUG THẬT (03/10/2026): tái kiểm tra hạn mức CÓ LOCK ngay khi quyết định áp
+                // dụng coupon, tránh race condition giống createPayment (xem reserveUsage).
+                couponService.reserveUsage(pricing.appliedCoupon(), user);
+            }
+
             CheckoutItem item = new CheckoutItem();
             item.course = course;
             item.bundle = null;
             item.originalPrice = pricing.originalPrice();
             item.finalPrice = pricing.finalPrice();
             item.discountAmount = pricing.originalPrice().subtract(pricing.finalPrice());
+            item.coupon = pricing.appliedCoupon();
             checkoutItems.add(item);
             
             processedCourseIds.add(courseId);
@@ -295,14 +307,14 @@ public class PaymentService {
             payment.setDiscountAmount(item.discountAmount);
             payment.setBundle(item.bundle);
             
-            // Nếu là khóa lẻ thì mới cho áp coupon (nếu logic pricing có trả về coupon)
-            if (item.bundle == null) {
-                CouponService.PricingResult pricing = couponService.resolveBestPrice(item.course, user, req.couponCode());
-                if (pricing.appliedCoupon() != null) {
-                    payment.setCoupon(pricing.appliedCoupon());
-                }
+            // Nếu là khóa lẻ thì mới cho áp coupon — dùng lại coupon đã resolveBestPrice +
+            // reserveUsage ở bước tạo CheckoutItem phía trên, KHÔNG gọi lại resolveBestPrice
+            // (BUG THẬT 03/10/2026: gọi lại ở đây sẽ đọc lại hạn mức mà KHÔNG có lock, mất hết
+            // tác dụng của reserveUsage phía trên).
+            if (item.coupon != null) {
+                payment.setCoupon(item.coupon);
             }
-            
+
             payment.setPaymentMethod(req.paymentMethod());
             payment.setStatus(PaymentStatus.PENDING);
             payment.setUser(user);

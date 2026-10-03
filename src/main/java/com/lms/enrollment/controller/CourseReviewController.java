@@ -64,4 +64,14 @@ public class CourseReviewController {
     public ResponseEntity<Res> unhide(@PathVariable Long id) {
         return ResponseEntity.ok(courseReviewService.unhide(id));
     }
+
+    /** Refined AC (03/10/2026) — Giảng viên report review vi phạm trên khóa CỦA CHÍNH MÌNH;
+     * ẩn ngay + vào hàng chờ Admin duyệt (status=PENDING_REPORT, xem {@code listAll}). */
+    @PostMapping("/api/v1/reviews/{id}/report")
+    @PreAuthorize("hasRole('INSTRUCTOR')")
+    public ResponseEntity<Res> report(
+            Principal principal, @PathVariable Long id, @RequestBody(required = false) ReportReq req) {
+        String reason = req != null ? req.reason() : null;
+        return ResponseEntity.ok(courseReviewService.reportByInstructor(id, principal.getName(), reason));
+    }
 }

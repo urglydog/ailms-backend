@@ -4,11 +4,14 @@ import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
 import com.lms.catalog.entity.Course;
 import com.lms.catalog.repository.CourseRepository;
+import com.lms.common.exception.AccessDeniedDomainException;
 import com.lms.common.exception.BusinessRuleViolationException;
 import com.lms.common.exception.ConflictException;
 import com.lms.common.exception.ResourceNotFoundException;
 import com.lms.enrollment.dto.CourseReviewDto.*;
 import com.lms.enrollment.entity.CourseReview;
+import com.lms.enrollment.entity.Enrollment;
+import com.lms.enrollment.entity.ReviewModerationStatus;
 import com.lms.enrollment.repository.CourseReviewRepository;
 import com.lms.enrollment.repository.EnrollmentRepository;
 import java.math.BigDecimal;
@@ -47,6 +50,11 @@ public class CourseReviewService {
     @Value("${lms.redis-keys.course-review-queue:lms:course-review:jobs}")
     private String reviewQueueKey;
 
+    /** BUG THẬT (03/10/2026) — AC "chỉ tài khoản đã học >=20-30% khóa học mới được review" chưa
+     * được code dù mục này đã bị đánh dấu ĐÃ HOÀN THÀNH (chỉ check đã enroll + chưa review). */
+    @Value("${lms.rules.review-min-progress-percent}")
+    private int minProgressPercentToReview;
+
     @Transactional(readOnly = true)
     public Page<Res> listForCourse(Long courseId, Pageable pageable) {
         return courseReviewRepository.findByCourse_IdAndIsHiddenFalse(courseId, pageable).map(this::mapToRes);
@@ -59,12 +67,16 @@ public class CourseReviewService {
         Course course = courseRepository.findById(courseId)
                 .orElseThrow(() -> new ResourceNotFoundException("Course", courseId));
 
-        if (!enrollmentRepository.existsByUser_IdAndCourse_Id(student.getId(), courseId)) {
-            throw new BusinessRuleViolationException(
-                    "Bạn cần sở hữu khóa học này trước khi đánh giá (BR-ENROLL-01)");
-        }
+        Enrollment enrollment = enrollmentRepository.findByUser_IdAndCourse_Id(student.getId(), courseId)
+                .orElseThrow(() -> new BusinessRuleViolationException(
+                        "Bạn cần sở hữu khóa học này trước khi đánh giá (BR-ENROLL-01)"));
         if (courseReviewRepository.existsByUser_IdAndCourse_Id(student.getId(), courseId)) {
             throw new ConflictException("Bạn đã đánh giá khóa học này rồi");
+        }
+        if (enrollment.getProgressPct().compareTo(BigDecimal.valueOf(minProgressPercentToReview)) < 0) {
+            throw new BusinessRuleViolationException(
+                    "Bạn cần học ít nhất " + minProgressPercentToReview + "% khóa học trước khi đánh giá (hiện tại: "
+                            + enrollment.getProgressPct().setScale(0, RoundingMode.HALF_UP) + "%)");
         }
 
         CourseReview review = new CourseReview();
@@ -73,6 +85,7 @@ public class CourseReviewService {
         review.setRating(req.rating());
         review.setComment(req.comment());
         review.setIsHidden(false);
+        review.setModerationStatus(ReviewModerationStatus.VISIBLE);
         CourseReview saved = courseReviewRepository.save(review);
 
         recalcAvgRating(course);
@@ -91,15 +104,42 @@ public class CourseReviewService {
         return mapToRes(saved);
     }
 
+    /** BUG THẬT (03/10/2026) — trước đây lỗi push Redis chỉ log rồi NUỐT LUÔN, review mất mãi
+     * cơ hội được AI kiểm duyệt (fail-open âm thầm, không retry). Thêm retry ngắn (bù lỗi mạng/
+     * Redis chập chờn tức thời) — KHÔNG phải dead-letter queue đầy đủ, nhưng xử lý được phần lớn
+     * lỗi thoáng qua thay vì mất job ngay lần đầu. */
+    private static final int PUSH_AI_JOB_MAX_ATTEMPTS = 3;
+
     private void pushAiReviewJob(Long reviewId, String text) {
+        java.util.Map<String, Object> job = new java.util.HashMap<>();
+        job.put("reviewId", reviewId);
+        job.put("text", text);
+        String payload;
         try {
-            java.util.Map<String, Object> job = new java.util.HashMap<>();
-            job.put("reviewId", reviewId);
-            job.put("text", text);
-            redisTemplate.opsForList().leftPush(reviewQueueKey, objectMapper.writeValueAsString(job));
-            log.info("Da day job AI review moderation cho reviewId={}", reviewId);
+            payload = objectMapper.writeValueAsString(job);
         } catch (Exception e) {
-            log.error("Loi day job review {} sang AI worker", reviewId, e);
+            log.error("Loi serialize job review {} sang AI worker, KHONG retry (loi serialize khong tu het)", reviewId, e);
+            return;
+        }
+
+        for (int attempt = 1; attempt <= PUSH_AI_JOB_MAX_ATTEMPTS; attempt++) {
+            try {
+                redisTemplate.opsForList().leftPush(reviewQueueKey, payload);
+                log.info("Da day job AI review moderation cho reviewId={} (lan thu {})", reviewId, attempt);
+                return;
+            } catch (Exception e) {
+                if (attempt == PUSH_AI_JOB_MAX_ATTEMPTS) {
+                    log.error("Loi day job review {} sang AI worker sau {} lan thu — review se KHONG duoc AI kiem duyet, can xu ly thu cong", reviewId, attempt, e);
+                } else {
+                    log.warn("Loi day job review {} sang AI worker (lan {}/{}), dang retry", reviewId, attempt, PUSH_AI_JOB_MAX_ATTEMPTS, e);
+                    try {
+                        Thread.sleep(200L * attempt);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        return;
+                    }
+                }
+            }
         }
     }
 
@@ -127,10 +167,36 @@ public class CourseReviewService {
                 .orElseThrow(() -> new ResourceNotFoundException("CourseReview", id));
         review.setIsHidden(true);
         review.setModerationReason(reason);
+        review.setModerationStatus(ReviewModerationStatus.HIDDEN);
         courseReviewRepository.save(review);
         recalcAvgRating(review.getCourse());
         cacheEvictionHelper.evictCourseCacheAfterCommit(review.getCourse().getSlug());
         log.info("AI Worker da an review {} voi ly do: {}", id, reason);
+    }
+
+    /**
+     * Refined AC (03/10/2026) — Giảng viên Report 1 review của khóa CỦA CHÍNH MÌNH: ẩn ngay
+     * (giống tinh thần "ẩn thủ công"), chuyển {@code moderationStatus=PENDING_REPORT} để vào
+     * hàng chờ Admin duyệt riêng (xem {@code listAll(status="PENDING_REPORT")}) — KHÁC với ẩn
+     * do AI/Admin (status=HIDDEN, không cần duyệt lại).
+     */
+    @Transactional
+    public Res reportByInstructor(Long id, String instructorEmail, String reason) {
+        CourseReview review = courseReviewRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("CourseReview", id));
+        if (!review.getCourse().getInstructor().getEmail().equals(instructorEmail)) {
+            throw new AccessDeniedDomainException("Bạn chỉ được report review trên khóa học của chính mình");
+        }
+        if (review.getModerationStatus() == ReviewModerationStatus.PENDING_REPORT) {
+            throw new ConflictException("Review này đã được report và đang chờ Admin duyệt");
+        }
+        review.setIsHidden(true);
+        review.setModerationStatus(ReviewModerationStatus.PENDING_REPORT);
+        review.setModerationReason("Giảng viên report: " + (reason == null || reason.isBlank() ? "(không nêu lý do)" : reason.trim()));
+        CourseReview saved = courseReviewRepository.save(review);
+        recalcAvgRating(review.getCourse());
+        cacheEvictionHelper.evictCourseCacheAfterCommit(review.getCourse().getSlug());
+        return mapToRes(saved);
     }
 
     private Res setHidden(Long id, boolean hidden) {
@@ -139,8 +205,10 @@ public class CourseReviewService {
         review.setIsHidden(hidden);
         if (hidden) {
             review.setModerationReason("Ẩn thủ công bởi Admin");
+            review.setModerationStatus(ReviewModerationStatus.HIDDEN);
         } else {
             review.setModerationReason(null);
+            review.setModerationStatus(ReviewModerationStatus.VISIBLE);
         }
         CourseReview saved = courseReviewRepository.save(review);
         recalcAvgRating(review.getCourse());
@@ -166,7 +234,8 @@ public class CourseReviewService {
                 review.getComment(),
                 review.getIsHidden(),
                 review.getModerationReason(),
-                review.getCreatedAt()
+                review.getCreatedAt(),
+                review.getModerationStatus().name()
         );
     }
 }

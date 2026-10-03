@@ -33,9 +33,13 @@ public class StudentStudyPlanController {
     public ResponseEntity<StudyPlanDto> getPlan(
             @PathVariable Long courseId,
             Principal principal) {
+        // BUG THẬT (03/10/2026) — trước đây trả 204 No Content khi chưa có plan, nhưng FE
+        // (CourseStudyPlanTab.tsx) lại bắt lỗi theo `err.status === 404` để coi là "chưa có
+        // plan" — 2 bên không khớp hợp đồng API (chạy được là NHỜ 204 vẫn resolve thành công
+        // với body rỗng, không phải vì FE xử lý đúng case 204). Đổi BE trả đúng 404 để khớp FE.
         StudyPlanDto plan = studyPlanService.getPlan(getUserId(principal), courseId);
         if (plan == null) {
-            return ResponseEntity.noContent().build();
+            throw new ResourceNotFoundException("StudyPlan", courseId);
         }
         return ResponseEntity.ok(plan);
     }
