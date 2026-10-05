@@ -1,6 +1,6 @@
 # Báo cáo tuần — Demo tính năng mới cho Giáo viên
 
-**Tuần:** 29/09/2026 – 03/10/2026
+**Tuần:** 29/09/2026 – 05/10/2026
 **Repo liên quan:** `be` (Spring Boot), `fe` (Next.js), `ai-worker` (FastAPI/Celery)
 
 > File này tóm tắt các chức năng MỚI đã hoàn thành trong tuần, dùng để demo trực tiếp cho giáo viên mỗi Chủ nhật. Mỗi mục gồm: **Mô tả** (giải quyết vấn đề gì) và **Cách test** (bước demo cụ thể). Cập nhật lại nội dung này mỗi tuần — xoá mục tuần cũ hoặc dời sang file lưu trữ nếu cần giữ lịch sử.
@@ -89,6 +89,19 @@
 1. Giảng viên → "Hiệu suất" → **Doanh thu** → chọn khoảng ngày → xem đúng 3 số: Gross / Phí nền tảng / Thực nhận, khớp với các giao dịch PAID trong khoảng đó.
 2. Vào **"Câu hỏi khó"** → xem danh sách câu quiz tỷ lệ sai > 60% trên các khóa của mình.
 3. Vào **"Retention"** → chọn 1 bài giảng → xem biểu đồ % học viên còn xem tại mỗi 10% thời lượng video, phát hiện đoạn rớt nhiều.
+
+---
+
+## 8. Hợp nhất Hồ sơ & Thành tích + Dọn gọn Menu Quản trị
+
+**Mô tả:** Trước đây icon avatar của học viên có 3 điểm đến rời rạc và trùng lặp: "Hồ sơ cá nhân" (sửa thông tin), "Xem hồ sơ công khai" và "Chứng chỉ của tôi" — chứng chỉ và streak không hiện ở đâu mang tính "thành tựu" cả. Giờ hồ sơ công khai (`/u/{id}`) là nơi duy nhất trưng chứng chỉ + streak của chính mình, menu avatar rút gọn còn "Hồ sơ & thành tích" (công khai) và "Cài đặt tài khoản" (riêng tư, trước gọi nhầm là "Hồ sơ cá nhân"). Menu Quản trị (Admin) từ 13 tab phẳng cũng được gom theo nhóm cha-con có thể thu/mở (Nội dung khóa học, AI & Tự động hoá, Tài chính, Hệ thống) — không đổi route nào nên link cũ không vỡ.
+
+**Cách test:**
+1. Đăng nhập học viên → bấm icon avatar → chỉ còn 2 mục liên quan hồ sơ: "Hồ sơ & thành tích" và "Cài đặt tài khoản" (không còn mục "Chứng chỉ của tôi" riêng).
+2. Bấm "Hồ sơ & thành tích" → vào `/u/{id}` → thấy khối Streak (🔥 số ngày, kỷ lục, lần đóng băng còn lại) cạnh nút "Cài đặt tài khoản" ở cột phải, và tab "Chứng chỉ" vẫn hiện đầy đủ như trước.
+3. Bấm vào 1 card chứng chỉ trong tab đó (đang tự xem hồ sơ mình) → vào đúng trang chi tiết có nút Tải PDF/Thêm LinkedIn (`/certificates/{code}`), không còn nhảy ra trang `/verify/` công khai nữa.
+4. Vào 1 hồ sơ công khai của NGƯỜI KHÁC (`/u/{id-khac}`) → không thấy khối Streak (đúng ý đồ — streak là riêng tư), card chứng chỉ của họ bấm vào vẫn ra trang `/verify/{code}` công khai như cũ.
+5. Đăng nhập Admin → sidebar trái giờ có nhóm tiêu đề (Nội dung khóa học/AI & Tự động hoá/Tài chính/Hệ thống) có thể bấm để thu gọn/mở, nhóm chứa trang đang xem luôn tự mở; trạng thái thu gọn được nhớ lại khi load lại trang.
 
 ---
 
