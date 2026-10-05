@@ -13,8 +13,10 @@ public class RankingDto {
     ) {}
 
     /** Hạng + XP của người đang đăng nhập — dùng để tự biết vị trí của mình khi không nằm
-     * trong Top N hiển thị ở trang chủ. */
+     * trong Top N hiển thị ở trang chủ. {@code ranked=false} khi chưa có XP nào (chưa làm gì
+     * để tính điểm) — "hạng" không có ý nghĩa trong trường hợp đó, FE không nên hiện số hạng. */
     public record MeRes(
+            boolean ranked,
             int rank,
             long totalXp
     ) {}
