@@ -23,7 +23,7 @@ public class RankingService {
     private final UserRepository userRepository;
 
     public List<LeaderboardEntry> getLeaderboard(int limit) {
-        List<User> topUsers = userRepository.findByOrderByTotalXpDesc(PageRequest.of(0, limit));
+        List<User> topUsers = userRepository.findByTotalXpGreaterThanOrderByTotalXpDesc(0L, PageRequest.of(0, limit));
         List<LeaderboardEntry> result = new java.util.ArrayList<>(topUsers.size());
         int rank = 1;
         for (User u : topUsers) {
@@ -35,7 +35,10 @@ public class RankingService {
     public MeRes getMyRanking(String email) {
         User user = userRepository.findByEmail(email).orElseThrow(() -> new IllegalArgumentException("User not found"));
         long myXp = user.getTotalXp() == null ? 0L : user.getTotalXp();
+        if (myXp <= 0) {
+            return new MeRes(false, 0, 0);
+        }
         int rank = (int) userRepository.countByTotalXpGreaterThan(myXp) + 1;
-        return new MeRes(rank, myXp);
+        return new MeRes(true, rank, myXp);
     }
 }

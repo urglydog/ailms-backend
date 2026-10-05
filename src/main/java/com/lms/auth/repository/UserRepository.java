@@ -32,8 +32,11 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query("UPDATE User u SET u.totalXp = u.totalXp + :amount WHERE u.id = :userId")
     int addXp(@Param("userId") Long userId, @Param("amount") long amount);
 
-    /** Top N học viên theo XP, dùng cho leaderboard trang chủ. */
-    java.util.List<User> findByOrderByTotalXpDesc(Pageable pageable);
+    /** Top N học viên theo XP, dùng cho leaderboard trang chủ — CHỈ người đã có XP (>0), không
+     * liệt kê user chưa làm gì chỉ vì bảng còn ít dữ liệu (bug thật 05/10/2026: ban đầu dùng
+     * {@code findByOrderByTotalXpDesc} không lọc, mọi user total_xp=0 vẫn bị xếp "hạng 1-5" một
+     * cách vô nghĩa theo thứ tự ngẫu nhiên của DB). */
+    java.util.List<User> findByTotalXpGreaterThanOrderByTotalXpDesc(long totalXp, Pageable pageable);
 
     /** Hạng của 1 user = số người có nhiều XP hơn + 1 — không cần tải cả bảng. */
     long countByTotalXpGreaterThan(Long totalXp);
