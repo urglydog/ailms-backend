@@ -29,6 +29,7 @@ public class StreakService {
     private final UserStreakRepository userStreakRepository;
     private final UserLearningDayRepository userLearningDayRepository;
     private final UserRepository userRepository;
+    private final XpService xpService;
 
     /** Streak Freeze (UpComming_Plan.md Sprint 2 mục 5, 03/10/2026) — số lần đóng băng tự động
      * tối đa mỗi tháng. Mỗi lần chỉ cứu được ĐÚNG 1 ngày bị lỡ (không cứu được khoảng trống
@@ -57,6 +58,10 @@ public class StreakService {
             log.info("Learning day already recorded for user {} on date {}", userId, todayInUserZone);
             return;
         }
+
+        // Ranking cộng đồng — learning day vừa insert thành công (unique constraint ở trên đã
+        // tự chặn trùng trong ngày), nên "mỗi ngày giữ streak" chỉ cộng XP đúng 1 lần.
+        xpService.award(userId, XpService.STREAK_DAY_XP, "STREAK_DAY:" + todayInUserZone);
 
         // Calculate new streak
         LocalDate lastActivity = streak.getLastActivityDate();

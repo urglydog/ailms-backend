@@ -2,6 +2,7 @@ package com.lms.material.service;
 
 import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
+import com.lms.auth.service.XpService;
 import com.lms.catalog.entity.Course;
 import com.lms.catalog.repository.CourseRepository;
 import com.lms.common.exception.AccessDeniedDomainException;
@@ -43,7 +44,12 @@ public class QuizService {
     private final ProctoringRecordingRepository proctoringRecordingRepository;
     private final StorageService storageService;
     private final org.springframework.context.ApplicationEventPublisher eventPublisher;
+    private final XpService xpService;
     private final Tika tika = new Tika();
+
+    /** Cùng ngưỡng "đạt" đã dùng ở Gradebook/LessonProgressService.recalculateEnrollmentProgress
+     * (thang điểm 0-10) — không bịa ngưỡng mới riêng cho XP. */
+    private static final BigDecimal QUIZ_PASS_SCORE = new BigDecimal("5.00");
 
     @Transactional
     public void updateQuizSettings(String instructorEmail, Long quizId, com.lms.material.dto.QuizDto.QuizSettingsReq req) {
@@ -659,10 +665,26 @@ public class QuizService {
         attempt.setCorrectCount(correctCount);
         BigDecimal score = BigDecimal.valueOf((double) correctCount / attempt.getTotalQuestions() * 10.0);
         attempt.setScore(score);
+
+        // Ranking cộng đồng — chỉ cộng XP lần ĐẦU TIÊN pass 1 quiz chính thức (BR-QUIZ-01 cho
+        // làm lại không giới hạn, không được cộng XP mỗi lần pass lại cùng 1 quiz). Phải đọc
+        // lịch sử TRƯỚC khi lưu attempt hiện tại (status vẫn còn "IN_PROGRESS" trong DB lúc này).
+        boolean isOfficialQuiz = Boolean.TRUE.equals(attempt.getQuiz().getIsOfficial());
+        boolean passedThisAttempt = score.compareTo(QUIZ_PASS_SCORE) >= 0;
+        boolean alreadyPassedBefore = isOfficialQuiz && passedThisAttempt
+                && quizAttemptRepository.findByUser_EmailAndQuiz_Id(studentEmail, attempt.getQuiz().getId()).stream()
+                        .anyMatch(a -> !a.getId().equals(attempt.getId()) && "COMPLETED".equals(a.getStatus())
+                                && a.getScore() != null && a.getScore().compareTo(QUIZ_PASS_SCORE) >= 0);
+
         attempt.setStatus("COMPLETED");
         attempt.setSubmittedAt(LocalDateTime.now());
         quizAttemptRepository.save(attempt);
         eventPublisher.publishEvent(new com.lms.enrollment.event.LessonCompletedEvent(this, attempt.getUser().getId(), java.time.Instant.now()));
+
+        if (isOfficialQuiz && passedThisAttempt && !alreadyPassedBefore) {
+            xpService.award(attempt.getUser().getId(), XpService.OFFICIAL_QUIZ_PASSED_XP,
+                    "QUIZ_PASSED:" + attempt.getQuiz().getId());
+        }
 
         // A2 (UpComming_Plan.md) — Quiz chính thức giờ chiếm 30% công thức % tiến độ khóa học,
         // nên nộp bài xong phải tính lại ngay, không chỉ lúc xem video mới tính (LessonProgressService).

@@ -2,6 +2,7 @@ package com.lms.enrollment.service;
 
 import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
+import com.lms.auth.service.XpService;
 import com.lms.catalog.entity.Chapter;
 import com.lms.catalog.entity.Course;
 import com.lms.catalog.entity.Lesson;
@@ -51,6 +52,7 @@ class LessonProgressServiceTest {
     @Mock private QuizAttemptRepository quizAttemptRepository;
     @Mock private CertificateService certificateService;
     @Mock private org.springframework.context.ApplicationEventPublisher eventPublisher;
+    @Mock private XpService xpService;
 
     private LessonProgressService service;
 
@@ -63,7 +65,7 @@ class LessonProgressServiceTest {
         service = new LessonProgressService(
                 lessonRepository, userRepository, enrollmentSecurity, lessonProgressRepository,
                 lessonWatchCheckpointRepository, enrollmentRepository,
-                quizRepository, quizAttemptRepository, certificateService, eventPublisher);
+                quizRepository, quizAttemptRepository, certificateService, eventPublisher, xpService);
         ReflectionTestUtils.setField(service, "completeThresholdPercent", 90);
 
         user = new User();

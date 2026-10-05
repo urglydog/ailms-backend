@@ -2,6 +2,7 @@ package com.lms.enrollment.service;
 
 import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
+import com.lms.auth.service.XpService;
 import com.lms.catalog.entity.Course;
 import com.lms.catalog.entity.Lesson;
 import com.lms.catalog.repository.LessonRepository;
@@ -54,6 +55,7 @@ public class LessonProgressService {
     private final QuizAttemptRepository quizAttemptRepository;
     private final CertificateService certificateService;
     private final ApplicationEventPublisher eventPublisher;
+    private final XpService xpService;
 
     /** A2 (UpComming_Plan.md) — ngưỡng "đạt" Quiz, tái dùng đúng quy ước đã có ở Gradebook
      * (thang điểm 0-10, xem InstructorGradebookController) — không bịa ngưỡng mới. */
@@ -98,6 +100,9 @@ public class LessonProgressService {
         if (reachedThreshold && !wasCompleted) {
             progress.setIsCompleted(true);
             eventPublisher.publishEvent(new com.lms.enrollment.event.LessonCompletedEvent(this, user.getId(), java.time.Instant.now()));
+            // Ranking cộng đồng — "lần đầu" ở đây tự nhiên idempotent vì isCompleted là cờ một
+            // chiều (xem docblock đầu file), không cần tự kiểm tra lại.
+            xpService.award(user.getId(), XpService.LESSON_COMPLETED_XP, "LESSON_COMPLETED:" + lessonId);
         }
 
         // Ensure we still update the DB even if it was already completed (e.g. to update lastPositionSec)
@@ -239,6 +244,9 @@ public class LessonProgressService {
             // trị này). Trước đây chỉ sinh 1 mã UUID trên Enrollment, không có bản ghi Certificate
             // riêng — xem lịch sử V127 (đã bị thay thế hoàn toàn bởi bảng certificates ở V129).
             certificateService.issueIfEligible(enrollment);
+            // Ranking cộng đồng — "lần đầu hoàn thành khóa" idempotent tự nhiên nhờ guard
+            // `completedAt == null` ngay phía trên, giống hệt điều kiện cấp Certificate.
+            xpService.award(user.getId(), XpService.COURSE_COMPLETED_XP, "COURSE_COMPLETED:" + course.getId());
             return;
         }
         enrollmentRepository.save(enrollment);

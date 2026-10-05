@@ -34,6 +34,8 @@ class StreakServiceTest {
     private UserLearningDayRepository userLearningDayRepository;
     @Mock
     private UserRepository userRepository;
+    @Mock
+    private XpService xpService;
 
     @InjectMocks
     private StreakService streakService;

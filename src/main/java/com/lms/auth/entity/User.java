@@ -87,4 +87,10 @@ public class User extends BaseEntity {
 
     @Column(name = "wishlist_public", nullable = false)
     private Boolean wishlistPublic = true;
+
+    /** Ranking cộng đồng theo XP (UpComming_Plan.md) — cộng dồn qua {@code XpService.award},
+     * KHÔNG đọc/ghi trực tiếp field này ở nơi khác để tránh race condition (XpService dùng
+     * UPDATE ... SET total_xp = total_xp + :amount atomic, không load-modify-save). */
+    @Column(name = "total_xp", nullable = false)
+    private Long totalXp = 0L;
 }

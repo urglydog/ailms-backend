@@ -107,7 +107,11 @@ public class SecurityConfig {
             "/api/v1/certificates/verify/**",
             // (26/09/2026, tính năng mới) — banner "Bảo trì hệ thống" (severity HIGH) phải hiện
             // được cho CẢ khách vãng lai chưa đăng nhập, không chỉ user đã đăng nhập.
-            "/api/v1/system-announcements/banner"
+            "/api/v1/system-announcements/banner",
+            // Ranking cộng đồng (05/10/2026) — banner trang chủ hiện Top N cho CẢ khách vãng
+            // lai (giống cách trang chủ hiện courses nổi bật không cần đăng nhập). "/me" KHÔNG
+            // nằm trong danh sách này — vẫn bắt buộc JWT như bình thường.
+            "/api/v1/ranking/leaderboard"
     };
 
     /**
