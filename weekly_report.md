@@ -105,6 +105,19 @@
 
 ---
 
+## 9. Ranking cộng đồng theo XP (banner trang chủ)
+
+**Mô tả:** Mỗi hành động học tập (hoàn thành 1 bài học, pass 1 quiz chính thức lần đầu, hoàn thành 100% 1 khóa, giữ streak thêm 1 ngày) cộng XP vào tài khoản (10/20/100/5 XP tương ứng). Trang chủ hiện 1 banner Top 5 học viên nhiều XP nhất kèm vị trí của chính người đang xem nếu không nằm trong Top 5 — CỐ TÌNH không đặt trong hồ sơ cá nhân để tránh dồn quá nhiều chức năng vào đó, và để "đập vào mắt" tạo động lực cạnh tranh hơn là phải chủ động vào xem.
+
+**Cách test:**
+1. Vào trang chủ (khi đã đăng nhập hoặc cả khi chưa) → thấy banner "🏆 Bảng xếp hạng cộng đồng" ngay dưới header, có hiệu ứng trượt vào nhẹ lúc trang vừa tải.
+2. Học xong 1 bài học mới (lần đầu, đạt ngưỡng % hoàn thành) → vào lại trang chủ → XP của mình trong banner tăng thêm 10.
+3. Làm 1 quiz chính thức và đạt điểm ≥ 5/10 LẦN ĐẦU cho quiz đó → +20 XP; làm lại quiz đó thêm nhiều lần (được phép theo BR-QUIZ-01) → KHÔNG cộng thêm XP lần 2.
+4. Hoàn thành 100% 1 khóa học (tất cả bài học + quiz chính thức nếu có) → +100 XP, cùng lúc với lúc chứng chỉ được cấp.
+5. Học thêm 1 ngày mới giữ streak → +5 XP, đúng lúc widget streak ở Header/hồ sơ công khai tăng số ngày.
+
+---
+
 ## Các vá lỗi/hoàn thiện đáng chú ý trong tuần (không phải feature mới nhưng ảnh hưởng chất lượng demo)
 
 - Chặn được lỗi "lách luật" coupon khi mở 2 tab thanh toán cùng lúc với cùng 1 mã giới hạn 1 lượt/người.
