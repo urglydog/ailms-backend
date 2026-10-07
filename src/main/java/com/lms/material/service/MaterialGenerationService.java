@@ -437,6 +437,13 @@ public class MaterialGenerationService {
     }
 
     public MaterialGenerationRes toDto(MaterialGeneration generation) {
+        String quizType = null;
+        if (generation.getMaterialType() == com.lms.common.enums.MaterialType.QUIZ) {
+            quizType = quizRepository.findByMaterialGeneration_IdAndIsDeletedFalse(generation.getId())
+                    .map(quiz -> quiz.getQuizType() != null ? quiz.getQuizType().name() : "OFFICIAL_EXAM")
+                    .orElse(null);
+        }
+
         return MaterialGenerationRes.builder()
                 .id(generation.getId())
                 .materialType(generation.getMaterialType())
@@ -447,6 +454,7 @@ public class MaterialGenerationService {
                 .celeryTaskId(generation.getCeleryTaskId())
                 .createdAt(generation.getCreatedAt())
                 .updatedAt(generation.getUpdatedAt())
+                .quizType(quizType)
                 .build();
     }
 
