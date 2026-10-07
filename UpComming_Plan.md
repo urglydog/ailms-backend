@@ -33,6 +33,31 @@ Trước mỗi tính năng đều đi kèm với **Bối cảnh & Nỗi đau (Pa
 
 **Lưu ý rủi ro deadline:** nếu tới tuần 9-10 mà Giai đoạn 2-4 (port core + AI) chưa xong, cắt Giai đoạn 5 (offline flashcard) khỏi scope báo cáo trước — không cắt phần AI (giá trị cốt lõi khoá luận).
 
+### Mobile — Khảo sát chi tiết màn hình còn thiếu (07/10/2026, đối chiếu từng route với `fe`)
+
+**Đã port xong, chạy được (verify qua web `expo start --web`, chưa test thiết bị thật):** đăng nhập (email/password + Google OAuth), đăng ký, quên mật khẩu, danh sách/chi tiết khoá học, khoá học của tôi, lesson player, làm bài thi (exam, chỉ OFFICIAL_EXAM không giám sát camera), lịch sử làm bài, gradebook, chứng chỉ, wishlist, thông báo, hồ sơ, checkout PayOS (1 khoá), Học liệu AI (Flashcard/Mindmap/Quiz).
+
+**Bug đang biết, cần sửa trước khi coi Học liệu AI là xong:**
+1. **Nhầm luồng Quiz** — Học liệu AI loại QUIZ có 2 kiểu `LECTURE_QUIZ` (ôn tập thường, không giới hạn lượt/không tính giờ) và `OFFICIAL_EXAM` (thi thật, có giờ/giám sát) — BE phân biệt rõ qua `quizType`, nhưng mobile đang nối CẢ HAI vào chung màn `exam/[quizId]` (màn thi chính thức). Cần: đọc `quizType` từ `materialsApi.getDetail`, nếu `LECTURE_QUIZ` thì render quiz ngay tại chỗ (không timer/không proctoring, port rút gọn từ `fe/components/materials/QuizViewer.tsx`), chỉ `OFFICIAL_EXAM` mới điều hướng sang `/exam/{quizId}`.
+2. **Mindmap hiện quá nhỏ** — thiếu áp 3 patch CSS mà bản web làm trên SVG (`width/height=100%`, bỏ `max-width` mermaid tự thêm, `preserveAspectRatio="xMidYMid meet"`) + chưa bật pinch-zoom cho WebView (`minimumZoomScale`/`maximumZoomScale`) vì mobile không có chuột cuộn như web.
+3. Thêm nút "←" quay lại thủ công ở các màn `Stack.Screen` (phòng trường hợp vào thẳng URL không qua điều hướng trong app — ưu tiên thấp, không phải bug chặn release).
+
+**Chưa port — liệt kê theo mức ưu tiên đề xuất (CẦN CONFIRM thứ tự trước khi làm tiếp):**
+
+| # | Tính năng | Vì sao quan trọng | Phụ thuộc BE |
+|---|---|---|---|
+| 1 | Hoàn thiện bug Quiz (LECTURE_QUIZ) ở trên | Đang có tính năng làm SAI, ưu tiên trên cả tính năng mới | `/api/v1/quizzes/**` (đã có) |
+| 2 | AI Tutor chat (trong lesson player) | Giá trị cốt lõi khoá luận, đã có trong plan gốc Tuần 5-7 | `tutor.ts`: `/api/v1/courses/{id}/tutor/ask`, `/sessions` |
+| 3 | AI Study Plan | Cùng nhóm AI differentiator, cũng Tuần 5-7 gốc | `/api/v1/student/courses/{id}/study-plan` (+generate/reschedule) |
+| 4 | Giỏ hàng + checkout nhiều khoá (`cart`, `checkout/cart`) | Mở rộng ngoài đặc tả gốc trên web — mobile hiện chỉ mua được 1 khoá/lần | `cart.ts`, `payments.ts` (`createBatch` — BE đã có sẵn) |
+| 5 | Lịch sử thanh toán (`payments`) | Học viên không xem lại được đã mua gì qua mobile | `payments.ts`: `GET /payments/mine` (đã dùng 1 phần cho checkout, cần màn list riêng) |
+| 6 | Tài nguyên khoá học (`CourseResourcesTab`) | Tải file đính kèm bài giảng | `/api/v1/student/courses/{id}/resources` |
+| 7 | Live session | Học trực tiếp — chưa rõ mobile có cần ngay không (camera/stream phức tạp) | `live.ts`: `/api/v1/live-sessions/**` |
+| 8 | Ranking/leaderboard, banner thông báo hệ thống | Tính năng phụ, không chặn luồng học | `ranking.ts`, `systemAnnouncements.ts` |
+| 9 | Q&A/nhắn tin khoá học | Cần khảo sát thêm — `communication.ts` lẫn cả endpoint GV, phải tách đúng phần học viên trước khi port | TBD |
+
+**Quy ước xác nhận:** không tự ý chọn thứ tự làm tiếp nữa (đã có 2 lần đặt sai phạm vi trong buổi — nối "Học liệu AI" vào trang chưa mua, và nối LECTURE_QUIZ vào màn thi chính thức) — luôn hỏi ưu tiên trước khi bắt đầu mục mới trong bảng trên.
+
 **Acceptance Criteria:**
 - App chạy được qua Expo Go trên cả Android và iPhone thật, gọi đúng API `be` hiện có (không đổi BE).
 - Học viên hoàn thành được 1 luồng đầy đủ: đăng nhập → xem khoá học → học bài → làm quiz/flashcard → (từ tuần 7) làm bài thi có giám sát camera.
