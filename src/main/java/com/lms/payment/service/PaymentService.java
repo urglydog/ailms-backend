@@ -136,12 +136,12 @@ public class PaymentService {
                     .quantity(1)
                     .build();
             String checkoutUrl = buildPayOsCheckoutUrl(orderCode, amount, "Thanh toan don " + orderCode, List.of(item));
-            return new PaymentDto.PaymentUrlRes(checkoutUrl);
+            return new PaymentDto.PaymentUrlRes(checkoutUrl, payment.getTxnRef());
         }
 
         if ("VNPAY".equalsIgnoreCase(req.paymentMethod())) {
             String orderInfo = "Thanh toan khoa hoc " + course.getId();
-            return new PaymentDto.PaymentUrlRes(buildVnpayUrl(txnRef, amount, orderInfo));
+            return new PaymentDto.PaymentUrlRes(buildVnpayUrl(txnRef, amount, orderInfo), txnRef);
         }
 
         // Không thể tới đây nữa — đã validate paymentMethod ngay đầu hàm (trước đây MOMO/ZALOPAY
@@ -339,7 +339,7 @@ public class PaymentService {
                 enrollmentService.createFromPayment(p);
             }
             // Trả về một URL giả để FE xử lý success
-            return new PaymentDto.PaymentUrlRes("/payments/callback?status=success&orderCode=" + orderGroupRef);
+            return new PaymentDto.PaymentUrlRes("/payments/callback?status=success&orderCode=" + orderGroupRef, orderGroupRef);
         }
 
         if ("PAYOS".equalsIgnoreCase(req.paymentMethod())) {
@@ -353,14 +353,14 @@ public class PaymentService {
                         .build());
             }
             String checkoutUrl = buildPayOsCheckoutUrl(orderCode, totalAmount, "Thanh toan don " + orderCode, items);
-            return new PaymentDto.PaymentUrlRes(checkoutUrl);
+            return new PaymentDto.PaymentUrlRes(checkoutUrl, orderGroupRef);
         }
 
         if ("VNPAY".equalsIgnoreCase(req.paymentMethod())) {
             String orderInfo = checkoutItems.size() == 1
                     ? "Thanh toan khoa hoc " + checkoutItems.get(0).course.getId()
                     : "Thanh toan " + checkoutItems.size() + " khoa hoc";
-            return new PaymentDto.PaymentUrlRes(buildVnpayUrl(orderGroupRef, totalAmount, orderInfo));
+            return new PaymentDto.PaymentUrlRes(buildVnpayUrl(orderGroupRef, totalAmount, orderInfo), orderGroupRef);
         }
 
         throw new IllegalStateException("Unreachable: paymentMethod đã được validate ở đầu hàm");

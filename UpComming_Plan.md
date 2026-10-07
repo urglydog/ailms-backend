@@ -10,28 +10,38 @@ Trước mỗi tính năng đều đi kèm với **Bối cảnh & Nỗi đau (Pa
 
 ## BACKLOG / TASK MỚI
 
-### Epic: Roadmap Mobile/Responsive + Offline Learning (định hướng — chưa code)
+### Epic: Mobile Native App (React Native/Expo) — BẮT BUỘC cho khoá luận, deadline cuối 12/2026
 
-**Bối cảnh & Nỗi đau:** Plan ban đầu của dự án là hoàn thiện web trước rồi mới chuyển sang di động, để hiện thực tính năng xem học liệu offline (vd: học viên ôn Flashcard trên máy bay không có mạng). Giờ web đã đủ trưởng thành để bắt đầu nghĩ tới bước chuyển này, nhưng CHƯA quyết định hướng kỹ thuật (PWA hay app native riêng) — quyết định này ảnh hưởng toàn bộ cách thiết kế offline-sync sau này nên cần chốt sớm.
+**Bối cảnh & Nỗi đau:** Dự án là khoá luận tốt nghiệp, báo cáo dự kiến cuối tháng 12/2026 — app native là yêu cầu bắt buộc của đề tài, không phải quyết định theo nhu cầu người dùng. PWA Giai đoạn 1 (manifest + service worker no-op, đã deploy trên `fe`) bị bỏ ngang — test thật trên Safari iPhone cho thấy không tạo ra khác biệt đáng kể so với mở web thường (chỉ là icon màn hình chính), nên quyết định đi thẳng lên native thay vì tiếp tục đầu tư responsive/offline-first trên web.
 
-**User Story:** Là học viên, tôi muốn ôn lại Flashcard đã lưu ngay cả khi không có mạng (vd đang trên máy bay), và trải nghiệm web trên điện thoại phải mượt như app thật.
+**User Story:** Là học viên, tôi dùng 1 app native thật trên điện thoại để học (khoá học, flashcard/quiz, AI Tutor, lộ trình AI, thi cử có giám sát camera) — mượt và đúng chuẩn mobile, không bị giới hạn của trình duyệt (vd Safari iOS không hỗ trợ `getDisplayMedia`, hạn chế quyền camera...).
 
-**Đề xuất hướng kỹ thuật (cần confirm trước khi bắt đầu Sprint nào thuộc mục này — thay đổi kiến trúc lớn theo mục 1 CLAUDE.md):**
-1. **Giai đoạn 1 — PWA hoá web hiện có:** thêm Service Worker + Web App Manifest, cho phép "Add to Home Screen" trên iOS/Android; đây là bước rẻ nhất vì tái dùng 100% code Next.js hiện tại, không cần stack mới.
-2. **Giai đoạn 2 — Offline cache cho Flashcard:** dùng IndexedDB lưu bộ Flashcard học viên đã mở gần đây (không cache toàn bộ học liệu — chỉ cache thứ học viên chủ động "Lưu để học offline"), đồng bộ lại kết quả ôn tập (spaced repetition) khi có mạng trở lại. Phân loại rõ API nào BẮT BUỘC online (quiz có chấm điểm, AI chat/Gia sư AI, bất kỳ hành động ảnh hưởng điểm/XP) vs API được phép cache cho offline (nội dung Flashcard, tài nguyên tĩnh).
-3. **Giai đoạn 3 — Quyết định PWA tiếp tục hay tách app native:** nếu nhu cầu người dùng đẩy cao hơn PWA đáp ứng được (vd cần push notification mạnh hơn, hiệu năng camera/mic cho tính năng ghi âm luyện nói...), mới cân nhắc React Native/Expo riêng — tái dùng toàn bộ BE API hiện có, không viết lại backend.
+**Quyết định kỹ thuật đã chốt:**
+- Stack: **React Native (Expo)**. Repo riêng: GitHub `urglydog/ailms-mobile`, clone về local `/var/lms/mobile` — không gộp monorepo với `fe`.
+- Scope vai trò: **chỉ Học viên**. Giảng viên/Admin tiếp tục dùng web Next.js hiện tại, không port qua app.
+- Test bằng **Expo Go + tunnel** (quét QR) là luồng chính suốt dự án — free, không cần Mac, không cần Apple Developer account. EAS Build (cần Apple Developer $99/năm cho iOS) là tuỳ chọn, chỉ cần nếu muốn file cài đặt độc lập hoặc submit store — không bắt buộc cho demo khoá luận.
+- **Metro bundler (dev server) chạy trên máy cá nhân, KHÔNG chạy trên server Hetzner** — server đang căng RAM (free ~1.1GB, swap dùng 1.8GB lúc kiểm tra 06/10/2026), tránh ảnh hưởng `be`/`ai-worker` production.
+- Offline Flashcard (từng định làm ở PWA Giai đoạn 2) dời sang sau khi có app native, dùng `expo-sqlite` thay IndexedDB.
 
-**Lưu ý kỹ thuật xuyên suốt cả 3 giai đoạn (đã có tiền lệ lỗi thật — xem mục 3 CLAUDE.md):** mọi Web API mới (storage quota, camera/mic...) và mọi heuristic dựa vào kích thước/hành vi cửa sổ trình duyệt đều phải tự hỏi "chạy đúng trên Safari iOS/iPadOS và Android Chrome không" TRƯỚC khi code, có feature-detect + fallback graceful, không giả định API luôn sẵn có.
+**Giai đoạn (06/10 → cuối 12/2026, ~12 tuần):**
+1. **Tuần 1 — Nền tảng:** ✅ đã xong (06/10/2026) — Expo Router project khởi tạo tại `/var/lms/mobile`, push lên `urglydog/ailms-mobile`; `src/lib/api/client.ts` port từ `fe/lib/api/client.ts` (cùng pattern auto-refresh JWT 401/403, đổi `localStorage` → `expo-secure-store`); cài `expo-secure-store`/`expo-auth-session`/`expo-camera`; permission camera/mic đã khai báo trong `app.json` cho proctoring sau này.
+2. **Tuần 2-4 — Port luồng học tập lõi:** danh sách khoá học, chi tiết khoá học, enrollment/checkout (VNPay — kiểm tra lại flow redirect khi tới bước này), lesson player, Flashcard/Quiz UI, hồ sơ cá nhân cơ bản.
+3. **Tuần 5-7 — Tính năng AI khác biệt hoá:** Socratic AI Tutor, AI Study Plan, bài thi + Proctoring dùng `expo-camera` (giải quyết luôn gốc rễ bug Safari iOS đứng hình/không ghi hình được, không cần vá tiếp bên web).
+4. **Tuần 8-9 — Tính năng đặc thù native:** push notification (`expo-notifications`), file access tài nguyên tĩnh (`expo-document-picker`/`expo-file-system`), permission camera/mic đúng chuẩn OS.
+5. **Tuần 10-11 — Offline Flashcard:** `expo-sqlite`, đồng bộ spaced repetition khi có mạng lại; phân loại API bắt buộc online (quiz có điểm, AI chat, hành động ảnh hưởng XP) vs được cache offline.
+6. **Tuần 12 — Polish & chuẩn bị bảo vệ:** test thiết bị thật (Android + iOS, nhiều hãng/kích thước), đo hiệu năng cơ bản lấy số liệu cho báo cáo, 1 vòng polish UI/UX tối thiểu.
 
-**Acceptance Criteria (của riêng việc LÊN KẾ HOẠCH — chưa phải code):**
-- Đã chốt được hướng Giai đoạn 1 (PWA) có triển khai ngay hay chưa, và mốc thời gian dự kiến.
-- Đã liệt kê được danh sách API nào bắt buộc online / được phép cache offline (ít nhất cho tính năng Flashcard) trước khi bắt tay viết Service Worker.
+**Lưu ý rủi ro deadline:** nếu tới tuần 9-10 mà Giai đoạn 2-4 (port core + AI) chưa xong, cắt Giai đoạn 5 (offline flashcard) khỏi scope báo cáo trước — không cắt phần AI (giá trị cốt lõi khoá luận).
+
+**Acceptance Criteria:**
+- App chạy được qua Expo Go trên cả Android và iPhone thật, gọi đúng API `be` hiện có (không đổi BE).
+- Học viên hoàn thành được 1 luồng đầy đủ: đăng nhập → xem khoá học → học bài → làm quiz/flashcard → (từ tuần 7) làm bài thi có giám sát camera.
 
 ---
 
 ## TASK CÒN DANG DỞ / CẦN THEO DÕI TIẾP
 
-*(hiện không có — các vá lỗi độ hoàn thiện ngày 03/10/2026 cho Streak/Review AI/Coupon/Bundle/Study Plan đã đóng toàn bộ AC còn thiếu)*
+- **Nộp bài thi bị đứng hình trên Safari iOS** (`fe/app/(student)/exam/[quizId]/page.tsx`) — học viên phải tự bấm Dynamic Island tắt ghi hình rồi back lại mới nộp được bài, không tự động như desktop. Đã thử vá 1 lần (06/10/2026, dừng camera ngay trước khi đợi recorder.stop()) nhưng gây regression mất luôn phát hiện khuôn mặt — đã revert về bản cũ (commit `8bc7bab` trên `fe`). **Quyết định: KHÔNG vá tiếp trên web** — sẽ tự hết khi học viên chuyển sang làm bài thi trên app native (dùng `expo-camera` thật, không qua giới hạn WebKit `getUserMedia`/`MediaRecorder`), xem epic Mobile Native App ở trên, Tuần 5-7.
 
 ---
 

@@ -50,7 +50,11 @@ public class PaymentDto {
     ) {}
 
     public record PaymentUrlRes(
-            String paymentUrl
+            String paymentUrl,
+            /** Mobile (không có trang web nào để landing sau khi thanh toán) poll {@code GET
+             * /api/v1/payments/mine} rồi lọc theo {@code txnRef} này để biết khi nào thanh toán
+             * xong — xem `mobile/src/lib/auth/payosCheckout.ts`. Web không dùng field này. */
+            String txnRef
     ) {}
 
     public record Res(
