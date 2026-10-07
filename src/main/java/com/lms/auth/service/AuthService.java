@@ -420,7 +420,14 @@ public class AuthService {
 
         URI appReturnUri = URI.create(appReturnUrl);
         String scheme = appReturnUri.getScheme();
-        if (scheme == null || !ALLOWED_MOBILE_RETURN_SCHEMES.contains(scheme.toLowerCase())) {
+        boolean isAllowedAppScheme = scheme != null && ALLOWED_MOBILE_RETURN_SCHEMES.contains(scheme.toLowerCase());
+        // http(s)://localhost | 127.0.0.1 — CHỈ để test nhanh bằng `expo start --web` lúc dev,
+        // không dùng lúc demo/production (Expo Go thật luôn trả về scheme exp://). Giới hạn
+        // đúng host loopback nên không thể lợi dụng làm open-redirect ra domain ngoài.
+        boolean isLocalWebDev = scheme != null && (scheme.equalsIgnoreCase("http") || scheme.equalsIgnoreCase("https"))
+                && appReturnUri.getHost() != null
+                && (appReturnUri.getHost().equalsIgnoreCase("localhost") || appReturnUri.getHost().equals("127.0.0.1"));
+        if (!isAllowedAppScheme && !isLocalWebDev) {
             throw new BusinessRuleViolationException("Redirect scheme không hợp lệ.");
         }
 
