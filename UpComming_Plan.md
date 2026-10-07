@@ -33,6 +33,19 @@ Trước mỗi tính năng đều đi kèm với **Bối cảnh & Nỗi đau (Pa
 
 **Lưu ý rủi ro deadline:** nếu tới tuần 9-10 mà Giai đoạn 2-4 (port core + AI) chưa xong, cắt Giai đoạn 5 (offline flashcard) khỏi scope báo cáo trước — không cắt phần AI (giá trị cốt lõi khoá luận).
 
+### Mobile — Rà soát sâu lần 2 (07/10/2026, đối chiếu TOÀN BỘ component web, không chỉ file API)
+
+**Bài học:** lần khảo sát đầu (bên dưới) chỉ đọc file `lib/api/*.ts`, bỏ sót các màn web gộp NHIỀU nguồn dữ liệu trong 1 trang (vd Materials Workspace thật ra có 3 nguồn: cá nhân + official + tài nguyên tĩnh, không phải 1). Từ giờ: port bất kỳ màn nào PHẢI đọc hết component/hook web thật trước khi code mobile, không suy luận từ tên file — xem [[feedback_mobile_port_survey_first]] trong memory.
+
+**Lỗ hổng thật tìm thấy (rà lại 14 màn "đã xong"):**
+1. **Học liệu AI vẫn thiếu 1 nguồn thứ 3** — tài nguyên tĩnh khoá học (`courseResourcesApi.getCourseResources` → `GET /api/v1/instructor/resources/courses/{courseId}`, PDF/slide/link GV upload) chưa gọi trên mobile. Ngoài ra `LessonAssignmentsList` (danh sách học liệu GV gán riêng cho bài học) không có màn mobile nào.
+2. **Lesson player mobile chỉ có video + điều hướng chương** — web có 7 tab chính (Tổng quan/Lộ trình AI/Hỏi đáp/Học liệu/Bảng điểm/Tài nguyên/Đánh giá) + sidebar AI Gia sư, mobile CHƯA CÓ các tab: AI Tutor chat, AI Study Plan, Hỏi đáp (Q&A), Đánh giá, Bảng điểm (dạng tab), Tài nguyên (dạng tab). Cũng thiếu toàn bộ tính năng lồng tiếng/đổi ngôn ngữ, transcript, giới hạn 1 phiên xem đồng thời (heartbeat 409), nút nhắn tin giảng viên.
+3. **Màn chi tiết khoá học thiếu banner Live session + widget gợi ý mua Bundle.**
+4. **Gradebook thiếu `KnowledgeGapsWidget`** (AI phân tích điểm yếu theo chủ đề).
+5. **Hồ sơ/sửa hồ sơ thiếu:** toggle riêng tư (ẩn/hiện khoá học, wishlist công khai), link hồ sơ công khai, danh sách phiên đăng nhập + "đăng xuất thiết bị khác", đổi mật khẩu (tài khoản email/password).
+
+**Việc này làm Giai đoạn 2-4 (port core) lớn hơn nhiều so với ước tính ban đầu** — AI Tutor/Study Plan (vốn đã có trong mục ưu tiên #2/#3 bên dưới) giờ xác nhận là bắt buộc để lesson player "đủ dùng", không phải tính năng phụ thêm sau.
+
 ### Mobile — Khảo sát chi tiết màn hình còn thiếu (07/10/2026, đối chiếu từng route với `fe`)
 
 **Đã port xong, chạy được (verify qua web `expo start --web`, chưa test thiết bị thật):** đăng nhập (email/password + Google OAuth), đăng ký, quên mật khẩu, danh sách/chi tiết khoá học, khoá học của tôi, lesson player, làm bài thi (exam, chỉ OFFICIAL_EXAM không giám sát camera), lịch sử làm bài, gradebook, chứng chỉ, wishlist, thông báo, hồ sơ, checkout PayOS (1 khoá), Học liệu AI (Flashcard/Mindmap/Quiz).
@@ -46,15 +59,18 @@ Trước mỗi tính năng đều đi kèm với **Bối cảnh & Nỗi đau (Pa
 
 | # | Tính năng | Vì sao quan trọng | Phụ thuộc BE |
 |---|---|---|---|
-| 1 | Hoàn thiện bug Quiz (LECTURE_QUIZ) ở trên | Đang có tính năng làm SAI, ưu tiên trên cả tính năng mới | `/api/v1/quizzes/**` (đã có) |
-| 2 | AI Tutor chat (trong lesson player) | Giá trị cốt lõi khoá luận, đã có trong plan gốc Tuần 5-7 | `tutor.ts`: `/api/v1/courses/{id}/tutor/ask`, `/sessions` |
-| 3 | AI Study Plan | Cùng nhóm AI differentiator, cũng Tuần 5-7 gốc | `/api/v1/student/courses/{id}/study-plan` (+generate/reschedule) |
-| 4 | Giỏ hàng + checkout nhiều khoá (`cart`, `checkout/cart`) | Mở rộng ngoài đặc tả gốc trên web — mobile hiện chỉ mua được 1 khoá/lần | `cart.ts`, `payments.ts` (`createBatch` — BE đã có sẵn) |
-| 5 | Lịch sử thanh toán (`payments`) | Học viên không xem lại được đã mua gì qua mobile | `payments.ts`: `GET /payments/mine` (đã dùng 1 phần cho checkout, cần màn list riêng) |
-| 6 | Tài nguyên khoá học (`CourseResourcesTab`) | Tải file đính kèm bài giảng | `/api/v1/student/courses/{id}/resources` |
-| 7 | Live session | Học trực tiếp — chưa rõ mobile có cần ngay không (camera/stream phức tạp) | `live.ts`: `/api/v1/live-sessions/**` |
-| 8 | Ranking/leaderboard, banner thông báo hệ thống | Tính năng phụ, không chặn luồng học | `ranking.ts`, `systemAnnouncements.ts` |
-| 9 | Q&A/nhắn tin khoá học | Cần khảo sát thêm — `communication.ts` lẫn cả endpoint GV, phải tách đúng phần học viên trước khi port | TBD |
+| 1 | Hoàn thiện bug Quiz (LECTURE_QUIZ) ở trên | Đang có tính năng làm SAI, ưu tiên trên cả tính năng mới | `/api/v1/quizzes/**` (đã có) — ✅ xong 07/10 |
+| 1b | ✅ Học liệu AI: thêm tài nguyên tĩnh khoá học (07/10/2026, dùng `GET /api/v1/student/courses/{id}/resources`, không phải path `instructor` bản web dùng — endpoint student tự check ghi danh, chặt hơn) | Phát hiện ở rà soát lần 2 — Materials Workspace vẫn thiếu nguồn thứ 3 | Xong |
+| 2 | Lesson player: thêm cấu trúc tab (Tổng quan/Hỏi đáp/Đánh giá/Bảng điểm/Tài nguyên) + AI Tutor chat + AI Study Plan + `LessonAssignmentsList` (bài tập nộp — dời từ 1b sang đây vì theo `lessonId`, không phải `courseId`) | Phát hiện ở rà soát lần 2 — lesson player mobile hiện chỉ có video, thiếu gần hết nội dung trang web gốc, không phải chỉ thiếu 2 tab AI như tưởng ban đầu | `tutor.ts`, `/api/v1/student/courses/{id}/study-plan`, `communication.ts` (`GET /api/v1/lessons/{id}/assignments`, `POST /api/v1/assignments/{id}/submissions` — cần thêm `expo-document-picker`, chưa có trong mobile), gradebook/reviews (đã có API) |
+| 3 | Course detail: banner Live session + Bundle upsell widget | Phát hiện ở rà soát lần 2 | `live.ts`, `bundles`-related (cần khảo sát thêm) |
+| 4 | Gradebook: `KnowledgeGapsWidget` (AI phân tích điểm yếu) | Phát hiện ở rà soát lần 2 — gradebook mobile thiếu phần AI | `/api/v1/student/courses/{id}/knowledge-gaps` |
+| 5 | Hồ sơ: toggle riêng tư, hồ sơ công khai, danh sách phiên đăng nhập + đăng xuất thiết bị khác, đổi mật khẩu | Phát hiện ở rà soát lần 2 — tài khoản email/password trên mobile không đổi được mật khẩu | `/api/v1/users/me/sessions`, `/api/v1/users/me/logout-all`, privacy toggle endpoints (cần khảo sát thêm) |
+| 6 | Giỏ hàng + checkout nhiều khoá (`cart`, `checkout/cart`) | Mở rộng ngoài đặc tả gốc trên web — mobile hiện chỉ mua được 1 khoá/lần | `cart.ts`, `payments.ts` (`createBatch` — BE đã có sẵn) |
+| 7 | Lịch sử thanh toán (`payments`) | Học viên không xem lại được đã mua gì qua mobile | `payments.ts`: `GET /payments/mine` (đã dùng 1 phần cho checkout, cần màn list riêng) |
+| 8 | Live session (màn riêng, không chỉ banner) | Học trực tiếp — chưa rõ mobile có cần ngay không (camera/stream phức tạp) | `live.ts`: `/api/v1/live-sessions/**` |
+| 9 | Ranking/leaderboard, banner thông báo hệ thống | Tính năng phụ, không chặn luồng học | `ranking.ts`, `systemAnnouncements.ts` |
+| 10 | Dubbing/đổi ngôn ngữ bài giảng + transcript trong lesson player | Phát hiện ở rà soát lần 2 — tính năng lớn, cần khảo sát riêng trước khi ước lượng | `dubbing`-related API (cần khảo sát thêm) |
+| 11 | Giới hạn 1 phiên xem đồng thời (heartbeat, chặn mở 2 thiết bị cùng lúc) | Phát hiện ở rà soát lần 2 — business rule đang bị bỏ qua hoàn toàn trên mobile (không phải ẩn, mà là KHÔNG áp dụng) | `lessonPlayerApi.sendHeartbeat` tương đương (cần khảo sát thêm) |
 
 **Quy ước xác nhận:** không tự ý chọn thứ tự làm tiếp nữa (đã có 2 lần đặt sai phạm vi trong buổi — nối "Học liệu AI" vào trang chưa mua, và nối LECTURE_QUIZ vào màn thi chính thức) — luôn hỏi ưu tiên trước khi bắt đầu mục mới trong bảng trên.
 
