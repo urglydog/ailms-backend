@@ -40,11 +40,18 @@ public class PaymentController {
     }
 
     /**
-     * Endpoint IPN giả lập để test.
-     * Trong thực tế, VNPAY sẽ gọi endpoint này dưới dạng GET với param đầy đủ,
-     * hoặc Momo gọi dưới dạng POST.
+     * Endpoint IPN giả lập để test — CHỈ Admin gọi được.
+     *
+     * <p>BUG BẢO MẬT THẬT (07/10/2026, phát hiện khi làm luồng checkout mobile): endpoint này
+     * trước đây KHÔNG có {@code @PreAuthorize} và KHÔNG verify chữ ký gì cả — ai biết
+     * {@code txnRef} của 1 giao dịch (vd đoán được format 8 ký tự, hoặc rò rỉ qua log/URL) đều
+     * tự đánh dấu PAID được, ghi danh khóa học miễn phí bất hợp pháp. Không có
+     * {@code SPRING_PROFILES_ACTIVE} riêng cho production trong dự án này (server đang chạy
+     * public vẫn mang profile "dev") nên {@code @Profile("dev")} không chặn được — phải chặn
+     * bằng quyền ADMIN thật sự.
      */
     @PostMapping("/ipn-mock")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<java.util.Map<String, String>> mockIpn(
             @RequestParam String txnRef,
             @RequestParam String gatewayTxnNo,
