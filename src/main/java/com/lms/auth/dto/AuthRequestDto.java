@@ -74,4 +74,10 @@ public class AuthRequestDto {
             @NotBlank(message = "Google ID Token không được để trống")
             String idToken
     ) {}
+
+    /** Luồng mobile: app đổi mã dùng-1-lần (từ bước redirect `/oauth/google/mobile-callback`) lấy JWT thật. */
+    public record GoogleMobileExchangeReq(
+            @NotBlank(message = "Mã xác thực không được để trống")
+            String code
+    ) {}
 }

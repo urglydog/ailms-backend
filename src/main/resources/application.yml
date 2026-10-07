@@ -94,6 +94,11 @@ management:
 google:
   oauth:
     client-id: ${GOOGLE_OAUTH_CLIENT_ID:}
+    # Chỉ dùng cho luồng mobile (Authorization Code, BE đổi code lấy id_token) — web vẫn dùng
+    # GSI credential trực tiếp ở /oauth/google/callback, không cần secret.
+    client-secret: ${GOOGLE_OAUTH_CLIENT_SECRET:}
+    # Phải khớp 100% với "Authorized redirect URIs" đã đăng ký trên Google Cloud Console.
+    mobile-redirect-uri: ${GOOGLE_OAUTH_MOBILE_REDIRECT_URI:https://46.224.175.90.nip.io/api/v1/auth/oauth/google/mobile-callback}
 
 # ── Cấu hình riêng của ứng dụng ─────────────────────────────────
 lms:

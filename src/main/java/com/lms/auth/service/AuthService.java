@@ -24,12 +24,18 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
+import java.net.URI;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.time.Duration;
 import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 
 @Slf4j
 @Service
@@ -47,10 +53,17 @@ public class AuthService {
     private final HttpServletRequest request;
     private final ObjectMapper objectMapper;
 
+    @Value("${google.oauth.mobile-redirect-uri}")
+    private String googleMobileRedirectUri;
+
+    /** Scheme app mobile hợp lệ để redirect về sau khi đăng nhập Google — chặn open-redirect, xem app.json "scheme". */
+    private static final Set<String> ALLOWED_MOBILE_RETURN_SCHEMES = Set.of("exp", "mobile");
+
     private static final String LOGIN_FAIL_PREFIX = "login_fail:";
     private static final String REFRESH_TOKEN_PREFIX = "refresh_token:";
     private static final String USER_TOKENS_PREFIX = "user_refresh_tokens:";
     private static final String PENDING_USER_PREFIX = "pending_user:";
+    private static final String GOOGLE_MOBILE_CODE_PREFIX = "oauth:google:mobile_code:";
     /** Task 10: Hash {email} -> {refreshToken: JSON{deviceName,ip,lastActiveAt}} — chỉ phục vụ hiển thị danh sách thiết bị, tách biệt khỏi cơ chế xác thực refresh token. */
     private static final String USER_SESSIONS_PREFIX = "user_sessions:";
 
@@ -383,6 +396,65 @@ public class AuthService {
                 new CustomUserDetails(user), null, new CustomUserDetails(user).getAuthorities());
 
         return generateTokens(authentication);
+    }
+
+    /**
+     * Luồng mobile (Expo Go không mở được custom URL scheme nên không thể nhận id_token trực
+     * tiếp như web) — BE đứng giữa nhận redirect từ Google (`code` qua HTTPS), tự đổi lấy
+     * id_token bằng client secret (app không bao giờ cầm secret), rồi tái dùng {@link #loginWithGoogle}
+     * y hệt luồng web. Thay vì nhét thẳng JWT vào URL redirect (lộ qua lịch sử trình duyệt/log),
+     * sinh 1 mã dùng-1-lần ngắn hạn để app đổi lấy JWT thật ở bước sau ({@link #exchangeGoogleMobileCode}).
+     *
+     * @param code authorization code Google trả về
+     * @param state do app sinh ra lúc mở trình duyệt — ở đây chỉ chứa URL redirect về app (urlencoded),
+     *              KHÔNG phải CSRF token thật vì bước này chưa có session nào để đối chiếu; vẫn an toàn vì
+     *              scheme bị chặn whitelist nên không thể lợi dụng làm open-redirect ra ngoài app.
+     * @return URL đầy đủ để 302 redirect về app (kèm mã dùng-1-lần), vd {@code exp://.../--/google-auth-return?code=...}
+     */
+    @Transactional
+    public String handleGoogleMobileCallback(String code, String state) throws GeneralSecurityException, IOException {
+        String appReturnUrl = state != null ? URLDecoder.decode(state, StandardCharsets.UTF_8) : null;
+        if (appReturnUrl == null || appReturnUrl.isBlank()) {
+            throw new BusinessRuleViolationException("Thiếu thông tin redirect về app (state).");
+        }
+
+        URI appReturnUri = URI.create(appReturnUrl);
+        String scheme = appReturnUri.getScheme();
+        if (scheme == null || !ALLOWED_MOBILE_RETURN_SCHEMES.contains(scheme.toLowerCase())) {
+            throw new BusinessRuleViolationException("Redirect scheme không hợp lệ.");
+        }
+
+        String idToken = googleOAuthProvider.exchangeCodeForIdToken(code, googleMobileRedirectUri);
+        TokenRes tokens = loginWithGoogle(idToken);
+
+        String exchangeCode = UUID.randomUUID().toString();
+        try {
+            redisTemplate.opsForValue().set(
+                    GOOGLE_MOBILE_CODE_PREFIX + exchangeCode,
+                    objectMapper.writeValueAsString(tokens),
+                    Duration.ofMinutes(2));
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            throw new RuntimeException(e);
+        }
+
+        String separator = appReturnUrl.contains("?") ? "&" : "?";
+        return appReturnUrl + separator + "code=" + exchangeCode;
+    }
+
+    /** Đổi mã dùng-1-lần (sinh ở {@link #handleGoogleMobileCallback}) lấy JWT thật — xoá ngay sau khi đọc. */
+    public TokenRes exchangeGoogleMobileCode(String code) {
+        String key = GOOGLE_MOBILE_CODE_PREFIX + code;
+        String json = redisTemplate.opsForValue().get(key);
+        if (json == null) {
+            throw new BusinessRuleViolationException("Mã xác thực đã hết hạn hoặc không hợp lệ.");
+        }
+        redisTemplate.delete(key);
+
+        try {
+            return objectMapper.readValue(json, TokenRes.class);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     /**
