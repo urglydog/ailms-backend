@@ -153,6 +153,12 @@ services:
       VNPAY_HASH_SECRET: ${VNPAY_HASH_SECRET:-}
       # Google OAuth
       GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
+      # Chỉ dùng cho luồng mobile (BE tự đổi authorization code lấy id_token) — web vẫn
+      # verify id_token có sẵn từ GSI, không cần secret.
+      GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
+      # KHÔNG map GOOGLE_OAUTH_MOBILE_REDIRECT_URI ở đây — nếu set (kể cả rỗng) thì Spring coi
+      # biến môi trường "đã có giá trị" và bỏ qua default trong application.yml, dù giá trị đó
+      # là chuỗi rỗng. Chỉ set biến này ở be/.env khi thật sự cần đổi domain khác default.
       # Token nội bộ để AI Worker gọi callback về đây
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-dev-internal-token}
       # Giai đoạn 11 — LiveKit Cloud (F11.1)
