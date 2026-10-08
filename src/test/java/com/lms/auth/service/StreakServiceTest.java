@@ -7,6 +7,7 @@ import com.lms.auth.entity.UserStreak;
 import com.lms.auth.repository.UserLearningDayRepository;
 import com.lms.auth.repository.UserRepository;
 import com.lms.auth.repository.UserStreakRepository;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -36,6 +37,8 @@ class StreakServiceTest {
     private UserRepository userRepository;
     @Mock
     private XpService xpService;
+    @Mock
+    private EntityManager entityManager;
 
     @InjectMocks
     private StreakService streakService;

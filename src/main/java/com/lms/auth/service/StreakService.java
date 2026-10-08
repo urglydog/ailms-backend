@@ -7,9 +7,11 @@ import com.lms.auth.entity.UserStreak;
 import com.lms.auth.repository.UserLearningDayRepository;
 import com.lms.auth.repository.UserRepository;
 import com.lms.auth.repository.UserStreakRepository;
+import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,6 +32,11 @@ public class StreakService {
     private final UserLearningDayRepository userLearningDayRepository;
     private final UserRepository userRepository;
     private final XpService xpService;
+    private final EntityManager entityManager;
+
+    /** Số lần retry tối đa khi gặp optimistic-lock conflict ở {@link #getStreak} (bug thật
+     * 08/10/2026 — xem ghi chú tại nơi dùng). */
+    private static final int OPTIMISTIC_LOCK_MAX_RETRIES = 3;
 
     /** Streak Freeze (UpComming_Plan.md Sprint 2 mục 5, 03/10/2026) — số lần đóng băng tự động
      * tối đa mỗi tháng. Mỗi lần chỉ cứu được ĐÚNG 1 ngày bị lỡ (không cứu được khoảng trống
@@ -86,8 +93,32 @@ public class StreakService {
 
     @Transactional
     public StreakResponse getStreak(Long userId, String clientTimezone) {
+        // Bug thật (08/10/2026): method này tên là "get" nhưng âm thầm ghi (đổi timezone,
+        // reset freeze theo tháng, xử lý streak hết hạn) — khi 2 transaction cùng lúc ghi
+        // chung 1 row user_streaks (vd. recordActivity() chạy REQUIRES_NEW ngay sau khi hoàn
+        // thành bài học, gần như đồng thời với FE gọi lại /streak/me), request đến sau bị
+        // Hibernate từ chối vì version đã đổi (ObjectOptimisticLockingFailureException), trả
+        // 500 cho user dù không có gì sai thật sự. Retry tối đa OPTIMISTIC_LOCK_MAX_RETRIES
+        // lần: entityManager.clear() để bỏ instance cũ trong persistence context (nếu không
+        // clear, findById() bên dưới trả lại đúng instance cũ đã lỗi thay vì đọc lại DB) rồi
+        // tính toán lại từ dữ liệu mới nhất.
+        for (int attempt = 1; ; attempt++) {
+            try {
+                return computeStreak(userId, clientTimezone);
+            } catch (OptimisticLockingFailureException e) {
+                if (attempt >= OPTIMISTIC_LOCK_MAX_RETRIES) {
+                    throw e;
+                }
+                log.warn("Optimistic lock conflict o UserStreak cua user {}, retry lan {}/{}",
+                        userId, attempt, OPTIMISTIC_LOCK_MAX_RETRIES);
+                entityManager.clear();
+            }
+        }
+    }
+
+    private StreakResponse computeStreak(Long userId, String clientTimezone) {
         UserStreak streak = userStreakRepository.findById(userId).orElseGet(() -> createInitialStreak(userId));
-        
+
         if (clientTimezone != null && !clientTimezone.isEmpty() && !clientTimezone.equals(streak.getTimezone())) {
             try {
                 ZoneId.of(clientTimezone);

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.jsontype.impl.LaissezFaireSubTypeValidator;
+import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import java.time.Duration;
 import java.util.HashMap;
@@ -15,6 +16,7 @@ import org.springframework.cache.interceptor.CacheErrorHandler;
 import org.springframework.cache.interceptor.SimpleCacheErrorHandler;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
@@ -41,6 +43,16 @@ public class CacheConfig implements CachingConfigurer {
         // (phát hiện khi verify lại toàn bộ cache courseDetails/publicProfile). EVERYTHING gắn
         // type id cho mọi giá trị kể cả final/record ở root, khắc phục triệt để.
         mapper.activateDefaultTyping(LaissezFaireSubTypeValidator.instance, ObjectMapper.DefaultTyping.EVERYTHING, JsonTypeInfo.As.PROPERTY);
+
+        // Bug thật (08/10/2026): PageImpl không có constructor mặc định/@JsonCreator (và
+        // Pageable/PageRequest lồng bên trong cũng vậy, constructor private) — Jackson GHI
+        // (PUT) vào Redis bình thường nhưng đọc lại (GET) luôn ném MismatchedInputException,
+        // bị CacheErrorHandler bên dưới nuốt lỗi và fallback DB, khiến cache "publicCourseSearch"
+        // (CoursePublicService.search, trả Page<SummaryRes>) mất tác dụng hoàn toàn dù trông như
+        // vẫn "hoạt động". Đăng ký deserializer tự viết, chỉ áp dụng riêng cho PageImpl.
+        SimpleModule pageModule = new SimpleModule();
+        pageModule.addDeserializer(PageImpl.class, new PageImplRedisDeserializer());
+        mapper.registerModule(pageModule);
 
         GenericJackson2JsonRedisSerializer serializer = new GenericJackson2JsonRedisSerializer(mapper);
 
