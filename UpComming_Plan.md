@@ -50,10 +50,10 @@ Trước mỗi tính năng đều đi kèm với **Bối cảnh & Nỗi đau (Pa
 
 **Đã port xong, chạy được (verify qua web `expo start --web`, chưa test thiết bị thật):** đăng nhập (email/password + Google OAuth), đăng ký, quên mật khẩu, danh sách/chi tiết khoá học, khoá học của tôi, lesson player, làm bài thi (exam, chỉ OFFICIAL_EXAM không giám sát camera), lịch sử làm bài, gradebook, chứng chỉ, wishlist, thông báo, hồ sơ, checkout PayOS (1 khoá), Học liệu AI (Flashcard/Mindmap/Quiz).
 
-**Bug đang biết, cần sửa trước khi coi Học liệu AI là xong:**
-1. **Nhầm luồng Quiz** — Học liệu AI loại QUIZ có 2 kiểu `LECTURE_QUIZ` (ôn tập thường, không giới hạn lượt/không tính giờ) và `OFFICIAL_EXAM` (thi thật, có giờ/giám sát) — BE phân biệt rõ qua `quizType`, nhưng mobile đang nối CẢ HAI vào chung màn `exam/[quizId]` (màn thi chính thức). Cần: đọc `quizType` từ `materialsApi.getDetail`, nếu `LECTURE_QUIZ` thì render quiz ngay tại chỗ (không timer/không proctoring, port rút gọn từ `fe/components/materials/QuizViewer.tsx`), chỉ `OFFICIAL_EXAM` mới điều hướng sang `/exam/{quizId}`.
-2. **Mindmap hiện quá nhỏ** — thiếu áp 3 patch CSS mà bản web làm trên SVG (`width/height=100%`, bỏ `max-width` mermaid tự thêm, `preserveAspectRatio="xMidYMid meet"`) + chưa bật pinch-zoom cho WebView (`minimumZoomScale`/`maximumZoomScale`) vì mobile không có chuột cuộn như web.
-3. Thêm nút "←" quay lại thủ công ở các màn `Stack.Screen` (phòng trường hợp vào thẳng URL không qua điều hướng trong app — ưu tiên thấp, không phải bug chặn release).
+**Bug đã biết — rà lại 08/10/2026, cả 3 đã xong:**
+1. ✅ **Nhầm luồng Quiz** — đã fix xong 07/10 (code `material/[id].tsx` đã phân nhánh đúng theo `quizType`, xác nhận lại đúng khi rà soát 08/10).
+2. ✅ **Mindmap hiện quá nhỏ** — đã fix xong (`mermaidHtml.ts` đã áp đủ 3 patch CSS + `min-width: 700px` cho phép cuộn ngang, xác nhận lại đúng khi rà soát 08/10).
+3. ✅ **Thiếu nút "←" quay lại thủ công** — chỉ còn thiếu ở `exam/[quizId]/index.tsx`, đã thêm cho màn chặn "yêu cầu giám sát" (an toàn, chưa vào bài thi); CỐ Ý không thêm cho màn đang làm bài có tính giờ, tránh bấm nhầm mất lượt làm bài (repo `mobile` commit `aba3ed5`).
 
 **Chưa port — liệt kê theo mức ưu tiên đề xuất (CẦN CONFIRM thứ tự trước khi làm tiếp):**
 
@@ -61,16 +61,16 @@ Trước mỗi tính năng đều đi kèm với **Bối cảnh & Nỗi đau (Pa
 |---|---|---|---|
 | 1 | Hoàn thiện bug Quiz (LECTURE_QUIZ) ở trên | Đang có tính năng làm SAI, ưu tiên trên cả tính năng mới | `/api/v1/quizzes/**` (đã có) — ✅ xong 07/10 |
 | 1b | ✅ Học liệu AI: thêm tài nguyên tĩnh khoá học (07/10/2026, dùng `GET /api/v1/student/courses/{id}/resources`, không phải path `instructor` bản web dùng — endpoint student tự check ghi danh, chặt hơn) | Phát hiện ở rà soát lần 2 — Materials Workspace vẫn thiếu nguồn thứ 3 | Xong |
-| 2 | Lesson player: thêm cấu trúc tab (Tổng quan/Hỏi đáp/Đánh giá/Bảng điểm/Tài nguyên) + AI Tutor chat + AI Study Plan + `LessonAssignmentsList` (bài tập nộp — dời từ 1b sang đây vì theo `lessonId`, không phải `courseId`) | Phát hiện ở rà soát lần 2 — lesson player mobile hiện chỉ có video, thiếu gần hết nội dung trang web gốc, không phải chỉ thiếu 2 tab AI như tưởng ban đầu | `tutor.ts`, `/api/v1/student/courses/{id}/study-plan`, `communication.ts` (`GET /api/v1/lessons/{id}/assignments`, `POST /api/v1/assignments/{id}/submissions` — cần thêm `expo-document-picker`, chưa có trong mobile), gradebook/reviews (đã có API) |
-| 3 | Course detail: banner Live session + Bundle upsell widget | Phát hiện ở rà soát lần 2 | `live.ts`, `bundles`-related (cần khảo sát thêm) |
-| 4 | Gradebook: `KnowledgeGapsWidget` (AI phân tích điểm yếu) | Phát hiện ở rà soát lần 2 — gradebook mobile thiếu phần AI | `/api/v1/student/courses/{id}/knowledge-gaps` |
-| 5 | Hồ sơ: toggle riêng tư, hồ sơ công khai, danh sách phiên đăng nhập + đăng xuất thiết bị khác, đổi mật khẩu | Phát hiện ở rà soát lần 2 — tài khoản email/password trên mobile không đổi được mật khẩu | `/api/v1/users/me/sessions`, `/api/v1/users/me/logout-all`, privacy toggle endpoints (cần khảo sát thêm) |
-| 6 | Giỏ hàng + checkout nhiều khoá (`cart`, `checkout/cart`) | Mở rộng ngoài đặc tả gốc trên web — mobile hiện chỉ mua được 1 khoá/lần | `cart.ts`, `payments.ts` (`createBatch` — BE đã có sẵn) |
-| 7 | Lịch sử thanh toán (`payments`) | Học viên không xem lại được đã mua gì qua mobile | `payments.ts`: `GET /payments/mine` (đã dùng 1 phần cho checkout, cần màn list riêng) |
+| 2 | ✅ Lesson player: thêm cấu trúc tab (Tổng quan/Lộ trình AI/Hỏi đáp/AI Gia sư/Bài tập/Bảng điểm/Tài nguyên/Đánh giá) (08/10/2026, gộp tab "AI Gia sư" vào chung 1 hàng tab dưới video thay vì 2 tầng tab như web — hợp lý hơn cho màn hình hẹp; Hỏi đáp dùng STOMP qua WebSocket thuần tại `/ws/websocket`, không SockJS; bỏ dubbing/transcript/giới hạn phiên xem đồng thời, dời sang mục 10/11) | Phát hiện ở rà soát lần 2 — lesson player mobile hiện chỉ có video, thiếu gần hết nội dung trang web gốc, không phải chỉ thiếu 2 tab AI như tưởng ban đầu | Xong — repo `mobile` commit `18fdf48` |
+| 3 | ✅ Course detail: banner Live session + Bundle upsell widget (08/10/2026, cả 2 chỉ hiển thị thông tin, không điều hướng/hành động — mobile chưa có màn xem live (mục 8) hay giỏ hàng (mục 6)) | Phát hiện ở rà soát lần 2 | Xong — repo `mobile` commit `2d1d742` |
+| 4 | ✅ Gradebook: `KnowledgeGapsWidget` (AI phân tích điểm yếu) (08/10/2026, tái dùng UI cho mobile) | Phát hiện ở rà soát lần 2 — gradebook mobile thiếu phần AI | Xong — repo `mobile` |
+| 5 | ✅ Hồ sơ: toggle riêng tư, hồ sơ công khai, danh sách phiên đăng nhập + đăng xuất thiết bị khác, đổi mật khẩu (08/10/2026, bỏ phân trang danh sách phiên và `CertificatePreview`/sắp xếp chứng chỉ trong hồ sơ công khai — mobile chưa có màn chi tiết/xác thực chứng chỉ riêng) | Phát hiện ở rà soát lần 2 — tài khoản email/password trên mobile không đổi được mật khẩu | Xong — repo `mobile` commit `366f9c5` |
+| 6 | ✅ Giỏ hàng + checkout nhiều khoá (`cart`, `checkout/cart`) (08/10/2026) | Mở rộng ngoài đặc tả gốc trên web — mobile hiện chỉ mua được 1 khoá/lần | Xong — repo `mobile` |
+| 7 | ✅ Lịch sử thanh toán (`payments`) (08/10/2026, xem trực tiếp từ màn Hồ sơ) | Học viên không xem lại được đã mua gì qua mobile | Xong — repo `mobile` |
 | 8 | Live session (màn riêng, không chỉ banner) | Học trực tiếp — chưa rõ mobile có cần ngay không (camera/stream phức tạp) | `live.ts`: `/api/v1/live-sessions/**` |
-| 9 | Ranking/leaderboard, banner thông báo hệ thống | Tính năng phụ, không chặn luồng học | `ranking.ts`, `systemAnnouncements.ts` |
-| 10 | Dubbing/đổi ngôn ngữ bài giảng + transcript trong lesson player | Phát hiện ở rà soát lần 2 — tính năng lớn, cần khảo sát riêng trước khi ước lượng | `dubbing`-related API (cần khảo sát thêm) |
-| 11 | Giới hạn 1 phiên xem đồng thời (heartbeat, chặn mở 2 thiết bị cùng lúc) | Phát hiện ở rà soát lần 2 — business rule đang bị bỏ qua hoàn toàn trên mobile (không phải ẩn, mà là KHÔNG áp dụng) | `lessonPlayerApi.sendHeartbeat` tương đương (cần khảo sát thêm) |
+| 9 | ✅ Ranking/leaderboard, banner thông báo hệ thống (08/10/2026) | Tính năng phụ, không chặn luồng học | Xong — repo `mobile` |
+| 10 | ✅ Dubbing/đổi ngôn ngữ bài giảng + transcript trong lesson player (08/10/2026) | Phát hiện ở rà soát lần 2 — tính năng cốt lõi làm nên khác biệt của nền tảng | Xong — repo `mobile` |
+| 11 | ✅ Giới hạn 1 phiên xem đồng thời (heartbeat, chặn mở 2 thiết bị cùng lúc) (08/10/2026) | Phát hiện ở rà soát lần 2 — business rule đang bị bỏ qua hoàn toàn trên mobile (không phải ẩn, mà là KHÔNG áp dụng) | Xong — repo `mobile` |
 
 **Quy ước xác nhận:** không tự ý chọn thứ tự làm tiếp nữa (đã có 2 lần đặt sai phạm vi trong buổi — nối "Học liệu AI" vào trang chưa mua, và nối LECTURE_QUIZ vào màn thi chính thức) — luôn hỏi ưu tiên trước khi bắt đầu mục mới trong bảng trên.
 
