@@ -7,6 +7,7 @@ import com.lms.catalog.entity.Course;
 import com.lms.catalog.entity.Lesson;
 import com.lms.catalog.repository.LessonRepository;
 import com.lms.common.exception.AccessDeniedDomainException;
+import com.lms.common.service.NotificationService;
 import com.lms.community.dto.ChatMessageDto;
 import com.lms.community.dto.LessonQaDto.QuestionRes;
 import com.lms.community.dto.LessonQaDto.ThreadRes;
@@ -46,6 +47,7 @@ class LessonChatServiceTest {
     @Mock private LessonRepository lessonRepository;
     @Mock private UserRepository userRepository;
     @Mock private SimpMessagingTemplate messagingTemplate;
+    @Mock private NotificationService notificationService;
 
     @InjectMocks
     private LessonChatService lessonChatService;
@@ -154,6 +156,12 @@ class LessonChatServiceTest {
 
         verify(chatRepository).save(any(LessonChat.class));
         verify(messagingTemplate).convertAndSend(eq("/topic/lesson/100/chat"), any(Object.class));
+        verify(notificationService).notify(
+                eq(1L),
+                eq("QNA_REPLY"),
+                eq("Giảng viên đã trả lời câu hỏi của bạn"),
+                eq("Cảm ơn em đã hỏi"),
+                eq("/learn/100?tab=qna"));
     }
 
     // ── getChatHistory / saveMessage (20/09/2026, sửa lỗi id/isInstructor) ─────────────
