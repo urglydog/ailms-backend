@@ -6,6 +6,7 @@ import com.lms.catalog.entity.Lesson;
 import com.lms.catalog.repository.LessonRepository;
 import com.lms.common.exception.AccessDeniedDomainException;
 import com.lms.common.exception.ResourceNotFoundException;
+import com.lms.common.service.NotificationService;
 import com.lms.community.dto.ChatMessageDto;
 import com.lms.community.dto.LessonQaDto.AnswerRes;
 import com.lms.community.dto.LessonQaDto.QuestionRes;
@@ -29,6 +30,7 @@ public class LessonChatService {
     private final LessonRepository lessonRepository;
     private final UserRepository userRepository;
     private final SimpMessagingTemplate messagingTemplate;
+    private final NotificationService notificationService;
 
     @Transactional(readOnly = true)
     public List<ChatMessageDto> getChatHistory(Long lessonId) {
@@ -127,6 +129,12 @@ public class LessonChatService {
                 reply.getId(), instructor.getId().toString(), instructor.getFullName(), instructor.getAvatarUrl(),
                 content, reply.getCreatedAt().toString(), question.getId(), true);
         messagingTemplate.convertAndSend("/topic/lesson/" + question.getLesson().getId() + "/chat", broadcast);
+
+        String linkUrl = "/learn/" + question.getLesson().getId() + "?tab=qna";
+        notificationService.notify(question.getUser().getId(), "QNA_REPLY",
+                "Giảng viên đã trả lời câu hỏi của bạn",
+                content,
+                linkUrl);
     }
 
     private LessonChat loadOwnedQuestion(String email, String questionId) {
