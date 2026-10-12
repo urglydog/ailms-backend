@@ -72,6 +72,12 @@ sau này đổi quyết định.
 
 **Quy ước xác nhận:** không tự ý chọn thứ tự làm tiếp nữa (đã có 2 lần đặt sai phạm vi trong buổi — nối "Học liệu AI" vào trang chưa mua, và nối LECTURE_QUIZ vào màn thi chính thức) — luôn hỏi ưu tiên trước khi bắt đầu mục mới trong bảng trên.
 
+**Đã xong (12/10/2026, repo `mobile` commit `1273ea0`):** port trang Cộng đồng/bảng xếp hạng đầy
+đủ (top 30, streak cá nhân, hạng của bạn, bấm 1 hạng → hồ sơ công khai mở sẵn tab Chứng chỉ) —
+song song với tính năng tương đương bên web (`fe` commit `b1a6551`/`ef1ae0a`). Không port animation
+stagger CSS vì mobile chưa dùng `react-native-reanimated` ở đâu khác. Fix "ẩn chatbot AI lúc thi"
+bên web KHÔNG áp dụng cho mobile — mobile chưa có chatbot AI Discovery nào để sửa.
+
 **Acceptance Criteria:**
 - App chạy được qua Expo Go trên cả Android và iPhone thật, gọi đúng API `be` hiện có (không đổi BE).
 - Học viên hoàn thành được 1 luồng đầy đủ: đăng nhập → xem khoá học → học bài → làm quiz/flashcard → (từ tuần 7) làm bài thi có giám sát camera.
