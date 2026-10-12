@@ -184,11 +184,16 @@ public class InternalMaterialService {
                 Quiz quiz = new Quiz();
                 quiz.setMaterialGeneration(generation);
                 quiz.setQuestionCount(req.quizzes().size());
-                if (generation.getScopeType() == ScopeType.CUSTOM_LESSONS) {
-                    quiz.setQuizType(com.lms.common.enums.QuizType.LECTURE_QUIZ);
-                } else {
-                    quiz.setQuizType(com.lms.common.enums.QuizType.OFFICIAL_EXAM);
-                }
+                // BUG THẬT (12/10/2026, user báo cáo) — trước đây CHỈ scope CUSTOM_LESSONS mới
+                // được gán LECTURE_QUIZ, còn lại (KHÓA HỌC/CHƯƠNG — trường hợp phổ biến nhất) mặc
+                // định OFFICIAL_EXAM, khiến quiz TỰ SINH của chính học viên hiện nhầm nhãn "Bài thi
+                // chính thức · có tính giờ" và bấm vào bị BE từ chối ("Bai thi nay khong phai la
+                // bai thi chinh thuc", QuizService.startAttempt kiểm tra `isOfficial`, field này
+                // luôn `false` ở đây vì flow này KHÔNG liên quan `InstructorMaterialController`).
+                // Toàn bộ nhánh `finish()` này chỉ phục vụ sinh học liệu CÁ NHÂN (tự học/ôn tập)
+                // — không có `scopeType` nào ở đây là "thi chính thức" cả, nên luôn là LECTURE_QUIZ
+                // bất kể scope.
+                quiz.setQuizType(com.lms.common.enums.QuizType.LECTURE_QUIZ);
                 quiz = quizRepository.save(quiz);
 
                 int order = 1;
