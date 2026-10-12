@@ -20,8 +20,12 @@ public record MaterialDetailRes(
         String mermaidCode, // Only populated for MINDMAP
         List<FlashcardDto> flashcards, // Only populated for FLASHCARD
         List<QuizQuestionDto> quizQuestions, // Only populated for QUIZ
-        Long quizId // ID entity Quiz thật (khác `id` = MaterialGeneration) — Only populated for QUIZ,
+        Long quizId, // ID entity Quiz thật (khác `id` = MaterialGeneration) — Only populated for QUIZ,
                     // cần cho các endpoint /api/v1/quizzes/{quizId}/... (export-pdf...)
+        Boolean isOfficial // Đã tính sẵn trong service (mindmap/deck/quiz.getIsOfficial()) nhưng
+                            // trước đây KHÔNG đưa vào response — FE cần field này để quyết định có
+                            // cho chỉnh sửa (QuizPersonalEditor) hay không, KHÔNG được tự suy luận
+                            // phía client (12/10/2026, mobile port QuizPersonalEditor).
 ) {
     @Builder
     public record FlashcardDto(

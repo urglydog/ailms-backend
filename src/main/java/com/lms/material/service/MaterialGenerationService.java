@@ -327,6 +327,7 @@ public class MaterialGenerationService {
                 .flashcards(flashcards)
                 .quizQuestions(quizQuestions)
                 .quizId(quizId)
+                .isOfficial(isOfficial)
                 .build();
     }
 
