@@ -221,8 +221,18 @@ public class AuthService {
         Authentication authentication = new UsernamePasswordAuthenticationToken(
                 new CustomUserDetails(user), null, new CustomUserDetails(user).getAuthorities());
 
-        // Xóa token cũ, sinh cặp token mới (Rotation)
+        // BUG THẬT (12/10/2026, user báo cáo — "Xem thêm 531 thiết bị") — Xóa token cũ, sinh cặp
+        // token mới (Rotation) trước đây CHỈ xoá key `refresh_token:{token}` (value-lookup), KHÔNG
+        // xoá token cũ khỏi Set `user_refresh_tokens:{email}` hay Hash `user_sessions:{email}` —
+        // mỗi lần FE tự động refresh token ngầm (không phải đăng nhập mới) đều CỘNG THÊM 1 bản ghi
+        // "thiết bị" vào danh sách mà không bao giờ dọn bản ghi cũ. Vì `generateTokens()` gọi
+        // `.expire()` lại TTL 7 ngày mỗi lần, Set/Hash gần như KHÔNG BAO GIỜ tự hết hạn khi tài
+        // khoản còn hoạt động — số "thiết bị" phình vô hạn theo số lần refresh, không phản ánh số
+        // thiết bị thật. Giờ dọn cả 2 nơi trước khi sinh token mới, token cũ KHÔNG còn hiện trong
+        // danh sách thiết bị nữa sau khi rotate.
         redisTemplate.delete(REFRESH_TOKEN_PREFIX + req.refreshToken());
+        redisTemplate.opsForSet().remove(USER_TOKENS_PREFIX + email, req.refreshToken());
+        redisTemplate.opsForHash().delete(USER_SESSIONS_PREFIX + email, req.refreshToken());
         return generateTokens(authentication);
     }
 
