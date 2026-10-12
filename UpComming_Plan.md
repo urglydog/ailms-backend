@@ -92,8 +92,9 @@ bên web KHÔNG áp dụng cho mobile — mobile chưa có chatbot AI Discovery 
   còn làm tốt hơn — có SM-2 local thật cho offline, `src/lib/db/flashcardDb.ts`, trong khi web chỉ
   hiện gợi ý UI, tính thật ở BE), **Hỏi đáp** (`QnaTab.tsx` dùng STOMP WebSocket thật, không phải
   stub), **Tài nguyên** (`ResourcesTab.tsx`), **Bảng điểm + KnowledgeGapsWidget** — parity đầy đủ.
-- ⚠️ **Gradebook — gap cosmetic nhỏ:** thiếu phân trang lịch sử quiz + badge "quiz đã bị xoá" so
-  với web (`CourseGradebookTab.tsx`). Không chặn luồng, ưu tiên thấp.
+- ✅ **Gradebook — đã dọn xong gap cosmetic** (12/10/2026, repo `mobile` commit `01d4855`): thêm
+  phân trang 10 quiz/trang + badge "đã được giảng viên lưu trữ" cho quiz `isDeleted=true`, khớp
+  đầy đủ `CourseGradebookTab.tsx` bên web. Không còn gap nào trong domain này.
 - ✅ **Quiz cá nhân — đã port soạn/sửa câu hỏi** (12/10/2026, repo `mobile` commit `5dfcc52`):
   `components/material/QuizPersonalEditor.tsx` (thêm/sửa/xoá câu hỏi, dùng `Modal` built-in RN).
   `material/[id].tsx` thêm tab "Làm bài"/"Soạn câu hỏi", CHỈ hiện khi `!material.isOfficial`.
