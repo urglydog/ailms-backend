@@ -57,7 +57,18 @@ Trước mỗi tính năng đều đi kèm với **Bối cảnh & Nỗi đau (Pa
 
 | # | Tính năng | Vì sao quan trọng | Phụ thuộc BE |
 |---|---|---|---|
-| 8 | Live session (màn riêng, không chỉ banner) | Học trực tiếp — chưa rõ mobile có cần ngay không (camera/stream phức tạp) | `live.ts`: `/api/v1/live-sessions/**` |
+| 8 | Live session (màn riêng, không chỉ banner) — **HOÃN** (12/10/2026, xem lý do bên dưới) | Học trực tiếp | `live.ts`: `/api/v1/live-sessions/**` |
+
+**Mục 8 — Live session mobile, lý do hoãn (12/10/2026):** Web dùng LiveKit (WebRTC) thật
+(`@livekit/components-react`, video track camera/screen-share, chat + phụ đề dịch qua data
+channel của LiveKit, không qua STOMP) — port đúng kỹ thuật sang mobile cần
+`@livekit/react-native` + `@livekit/react-native-webrtc`, **bắt buộc build EAS dev client, KHÔNG
+chạy được bằng Expo Go thuần** (gói native WebRTC không có trong Expo Go). Vì luồng test chính
+của dự án là Expo Go + tunnel (xem Epic Mobile Native App ở trên), quyết định hoãn việc này lại,
+không đổi sang EAS dev client cho riêng tính năng này. BE không cần đổi gì (`GET
+/api/v1/live-sessions/{id}/view` đã có sẵn, trả `{status, viewerToken, serverUrl}`); mobile đã có
+sẵn `liveView.ts` (stub) và `LiveBanner.tsx` (cố tình chưa có `onPress`) chờ đúng việc này nếu
+sau này đổi quyết định.
 
 **Quy ước xác nhận:** không tự ý chọn thứ tự làm tiếp nữa (đã có 2 lần đặt sai phạm vi trong buổi — nối "Học liệu AI" vào trang chưa mua, và nối LECTURE_QUIZ vào màn thi chính thức) — luôn hỏi ưu tiên trước khi bắt đầu mục mới trong bảng trên.
 
