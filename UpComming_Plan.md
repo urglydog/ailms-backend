@@ -37,14 +37,7 @@ Trước mỗi tính năng đều đi kèm với **Bối cảnh & Nỗi đau (Pa
 
 **Bài học:** lần khảo sát đầu (bên dưới) chỉ đọc file `lib/api/*.ts`, bỏ sót các màn web gộp NHIỀU nguồn dữ liệu trong 1 trang (vd Materials Workspace thật ra có 3 nguồn: cá nhân + official + tài nguyên tĩnh, không phải 1). Từ giờ: port bất kỳ màn nào PHẢI đọc hết component/hook web thật trước khi code mobile, không suy luận từ tên file — xem [[feedback_mobile_port_survey_first]] trong memory.
 
-**Lỗ hổng thật tìm thấy (rà lại 14 màn "đã xong"):**
-1. **Học liệu AI vẫn thiếu 1 nguồn thứ 3** — tài nguyên tĩnh khoá học (`courseResourcesApi.getCourseResources` → `GET /api/v1/instructor/resources/courses/{courseId}`, PDF/slide/link GV upload) chưa gọi trên mobile. Ngoài ra `LessonAssignmentsList` (danh sách học liệu GV gán riêng cho bài học) không có màn mobile nào.
-2. **Lesson player mobile chỉ có video + điều hướng chương** — web có 7 tab chính (Tổng quan/Lộ trình AI/Hỏi đáp/Học liệu/Bảng điểm/Tài nguyên/Đánh giá) + sidebar AI Gia sư, mobile CHƯA CÓ các tab: AI Tutor chat, AI Study Plan, Hỏi đáp (Q&A), Đánh giá, Bảng điểm (dạng tab), Tài nguyên (dạng tab). Cũng thiếu toàn bộ tính năng lồng tiếng/đổi ngôn ngữ, transcript, giới hạn 1 phiên xem đồng thời (heartbeat 409), nút nhắn tin giảng viên.
-3. **Màn chi tiết khoá học thiếu banner Live session + widget gợi ý mua Bundle.**
-4. **Gradebook thiếu `KnowledgeGapsWidget`** (AI phân tích điểm yếu theo chủ đề).
-5. **Hồ sơ/sửa hồ sơ thiếu:** toggle riêng tư (ẩn/hiện khoá học, wishlist công khai), link hồ sơ công khai, danh sách phiên đăng nhập + "đăng xuất thiết bị khác", đổi mật khẩu (tài khoản email/password).
-
-**Việc này làm Giai đoạn 2-4 (port core) lớn hơn nhiều so với ước tính ban đầu** — AI Tutor/Study Plan (vốn đã có trong mục ưu tiên #2/#3 bên dưới) giờ xác nhận là bắt buộc để lesson player "đủ dùng", không phải tính năng phụ thêm sau.
+**Lỗ hổng thật tìm thấy (rà lại 14 màn "đã xong") — TẤT CẢ đã fix xong, xem bảng "Chưa port" ở dưới (mục 8 là mục còn lại duy nhất):** Học liệu AI thiếu tài nguyên tĩnh, lesson player thiếu cấu trúc tab, course detail thiếu banner Live/Bundle, gradebook thiếu KnowledgeGapsWidget, hồ sơ thiếu toggle riêng tư/đổi mật khẩu — chi tiết triển khai xem lịch sử commit repo `mobile`.
 
 ### Mobile — Khảo sát chi tiết màn hình còn thiếu (07/10/2026, đối chiếu từng route với `fe`)
 
@@ -57,20 +50,14 @@ Trước mỗi tính năng đều đi kèm với **Bối cảnh & Nỗi đau (Pa
 
 **Chưa port — liệt kê theo mức ưu tiên đề xuất (CẦN CONFIRM thứ tự trước khi làm tiếp):**
 
+> Các mục đã hoàn thành (bug Quiz, tài nguyên tĩnh khoá học, cấu trúc tab lesson player, banner
+> Live/Bundle ở course detail, KnowledgeGapsWidget, toggle riêng tư/hồ sơ công khai, giỏ hàng,
+> lịch sử thanh toán, ranking/leaderboard, dubbing/transcript, giới hạn 1 phiên xem đồng thời)
+> đã dọn khỏi bảng này — xem lịch sử commit repo `mobile` nếu cần chi tiết.
+
 | # | Tính năng | Vì sao quan trọng | Phụ thuộc BE |
 |---|---|---|---|
-| 1 | Hoàn thiện bug Quiz (LECTURE_QUIZ) ở trên | Đang có tính năng làm SAI, ưu tiên trên cả tính năng mới | `/api/v1/quizzes/**` (đã có) — ✅ xong 07/10 |
-| 1b | ✅ Học liệu AI: thêm tài nguyên tĩnh khoá học (07/10/2026, dùng `GET /api/v1/student/courses/{id}/resources`, không phải path `instructor` bản web dùng — endpoint student tự check ghi danh, chặt hơn) | Phát hiện ở rà soát lần 2 — Materials Workspace vẫn thiếu nguồn thứ 3 | Xong |
-| 2 | ✅ Lesson player: thêm cấu trúc tab (Tổng quan/Lộ trình AI/Hỏi đáp/AI Gia sư/Bài tập/Bảng điểm/Tài nguyên/Đánh giá) (08/10/2026, gộp tab "AI Gia sư" vào chung 1 hàng tab dưới video thay vì 2 tầng tab như web — hợp lý hơn cho màn hình hẹp; Hỏi đáp dùng STOMP qua WebSocket thuần tại `/ws/websocket`, không SockJS; bỏ dubbing/transcript/giới hạn phiên xem đồng thời, dời sang mục 10/11) | Phát hiện ở rà soát lần 2 — lesson player mobile hiện chỉ có video, thiếu gần hết nội dung trang web gốc, không phải chỉ thiếu 2 tab AI như tưởng ban đầu | Xong — repo `mobile` commit `18fdf48` |
-| 3 | ✅ Course detail: banner Live session + Bundle upsell widget (08/10/2026, cả 2 chỉ hiển thị thông tin, không điều hướng/hành động — mobile chưa có màn xem live (mục 8) hay giỏ hàng (mục 6)) | Phát hiện ở rà soát lần 2 | Xong — repo `mobile` commit `2d1d742` |
-| 4 | ✅ Gradebook: `KnowledgeGapsWidget` (AI phân tích điểm yếu) (08/10/2026, tái dùng UI cho mobile) | Phát hiện ở rà soát lần 2 — gradebook mobile thiếu phần AI | Xong — repo `mobile` |
-| 5 | ✅ Hồ sơ: toggle riêng tư, hồ sơ công khai, danh sách phiên đăng nhập + đăng xuất thiết bị khác, đổi mật khẩu (08/10/2026, bỏ phân trang danh sách phiên và `CertificatePreview`/sắp xếp chứng chỉ trong hồ sơ công khai — mobile chưa có màn chi tiết/xác thực chứng chỉ riêng) | Phát hiện ở rà soát lần 2 — tài khoản email/password trên mobile không đổi được mật khẩu | Xong — repo `mobile` commit `366f9c5` |
-| 6 | ✅ Giỏ hàng + checkout nhiều khoá (`cart`, `checkout/cart`) (08/10/2026) | Mở rộng ngoài đặc tả gốc trên web — mobile hiện chỉ mua được 1 khoá/lần | Xong — repo `mobile` |
-| 7 | ✅ Lịch sử thanh toán (`payments`) (08/10/2026, xem trực tiếp từ màn Hồ sơ) | Học viên không xem lại được đã mua gì qua mobile | Xong — repo `mobile` |
 | 8 | Live session (màn riêng, không chỉ banner) | Học trực tiếp — chưa rõ mobile có cần ngay không (camera/stream phức tạp) | `live.ts`: `/api/v1/live-sessions/**` |
-| 9 | ✅ Ranking/leaderboard, banner thông báo hệ thống (08/10/2026) | Tính năng phụ, không chặn luồng học | Xong — repo `mobile` |
-| 10 | ✅ Dubbing/đổi ngôn ngữ bài giảng + transcript trong lesson player (08/10/2026) | Phát hiện ở rà soát lần 2 — tính năng cốt lõi làm nên khác biệt của nền tảng | Xong — repo `mobile` |
-| 11 | ✅ Giới hạn 1 phiên xem đồng thời (heartbeat, chặn mở 2 thiết bị cùng lúc) (08/10/2026) | Phát hiện ở rà soát lần 2 — business rule đang bị bỏ qua hoàn toàn trên mobile (không phải ẩn, mà là KHÔNG áp dụng) | Xong — repo `mobile` |
 
 **Quy ước xác nhận:** không tự ý chọn thứ tự làm tiếp nữa (đã có 2 lần đặt sai phạm vi trong buổi — nối "Học liệu AI" vào trang chưa mua, và nối LECTURE_QUIZ vào màn thi chính thức) — luôn hỏi ưu tiên trước khi bắt đầu mục mới trong bảng trên.
 
