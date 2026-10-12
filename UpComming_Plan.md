@@ -78,6 +78,38 @@ song song với tính năng tương đương bên web (`fe` commit `b1a6551`/`ef
 stagger CSS vì mobile chưa dùng `react-native-reanimated` ở đâu khác. Fix "ẩn chatbot AI lúc thi"
 bên web KHÔNG áp dụng cho mobile — mobile chưa có chatbot AI Discovery nào để sửa.
 
+### Mobile — Rà soát toàn diện lần 3 (12/10/2026, theo yêu cầu đối chiếu từng domain: auth, học liệu, bảng điểm, hỏi đáp, giám sát thi, cộng đồng, hồ sơ/thiết bị — KHÔNG đụng domain video/stream/dubbing, thuộc phạm vi người khác)
+
+**Kết quả: đa số domain đã đạt parity đầy đủ với web, chỉ có 2 gap thật + 1 gap cosmetic:**
+
+- ✅ **Auth/tài khoản** (đăng ký+OTP, đăng nhập email/Google, quên mật khẩu, danh sách phiên đăng
+  nhập + đăng xuất thiết bị khác) — parity đầy đủ, cùng endpoint BE. Lưu ý phụ: bản thân web
+  **không có** cơ chế "ban"/giới hạn số thiết bị tự động — chỉ Redis lưu session để hiển thị +
+  đăng xuất tất cả thiết bị khác thủ công (`AuthService.generateTokens`/`logoutAllDevices`,
+  be/src/main/java/com/lms/auth/service/AuthService.java), không có auto-evict/giới hạn số lượng.
+  Nếu sau này cần giới hạn thật, phải xây ở BE trước, không phải việc của mobile.
+- ✅ **Học liệu Workspace (3 nguồn: cá nhân/official/tài nguyên tĩnh)**, **SRS flashcard** (mobile
+  còn làm tốt hơn — có SM-2 local thật cho offline, `src/lib/db/flashcardDb.ts`, trong khi web chỉ
+  hiện gợi ý UI, tính thật ở BE), **Hỏi đáp** (`QnaTab.tsx` dùng STOMP WebSocket thật, không phải
+  stub), **Tài nguyên** (`ResourcesTab.tsx`), **Bảng điểm + KnowledgeGapsWidget** — parity đầy đủ.
+- ⚠️ **Gradebook — gap cosmetic nhỏ:** thiếu phân trang lịch sử quiz + badge "quiz đã bị xoá" so
+  với web (`CourseGradebookTab.tsx`). Không chặn luồng, ưu tiên thấp.
+- ❌ **Quiz cá nhân thiếu chức năng soạn/sửa câu hỏi** — web có `QuizPersonalEditor.tsx` (học viên
+  tự thêm/sửa câu hỏi trong quiz cá nhân), mobile `material/[id].tsx` chỉ có chế độ làm quiz
+  (`LectureQuiz`), không có chế độ soạn/sửa.
+- ❌ **Giám sát thi (AI proctoring) — thiếu phát hiện khuôn mặt/ánh mắt:** mobile đã quay camera +
+  upload bằng chứng + gọi đúng endpoint BE (`ProctoringCameraView.tsx`, `expo-camera`), nhưng CHỈ
+  `TAB_SWITCH` (qua `AppState`) hoạt động thật. `NO_FACE`/`MULTIPLE_FACES`/`HEAD_TURNED`/
+  `GAZE_AWAY` là code chết vì `expo-camera` (managed workflow) không hỗ trợ face detection —
+  `handleFacesDetected` không được gắn callback nào. Web dùng `@vladmandic/face-api` client-side
+  để TRIGGER, xác thực thật vẫn ở server qua Gemini Vision (endpoint
+  `POST /api/v1/quizzes/attempts/{attemptId}/proctor-frame`, đã có sẵn, không cần đổi BE).
+  **Hướng vá khả thi, KHÔNG cần EAS dev client:** mobile chụp still-frame định kỳ từ
+  `CameraView` đang chạy sẵn (`takePictureAsync`), gửi lên đúng endpoint `/proctor-frame` có sẵn —
+  tái dùng hạ tầng Gemini Vision của BE thay vì tự làm face-detection on-device (vốn cần
+  `react-native-vision-camera` + custom dev client, cùng nhóm vướng mắc như LiveKit ở mục Live
+  session, không đáng đánh đổi).
+
 **Acceptance Criteria:**
 - App chạy được qua Expo Go trên cả Android và iPhone thật, gọi đúng API `be` hiện có (không đổi BE).
 - Học viên hoàn thành được 1 luồng đầy đủ: đăng nhập → xem khoá học → học bài → làm quiz/flashcard → (từ tuần 7) làm bài thi có giám sát camera.
