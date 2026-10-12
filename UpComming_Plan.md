@@ -97,8 +97,8 @@ bên web KHÔNG áp dụng cho mobile — mobile chưa có chatbot AI Discovery 
 - ✅ **Quiz cá nhân — đã port soạn/sửa câu hỏi** (12/10/2026, repo `mobile` commit `5dfcc52`):
   `components/material/QuizPersonalEditor.tsx` (thêm/sửa/xoá câu hỏi, dùng `Modal` built-in RN).
   `material/[id].tsx` thêm tab "Làm bài"/"Soạn câu hỏi", CHỈ hiện khi `!material.isOfficial`.
-  Field `isOfficial` được BE bổ sung vào `MaterialDetailRes` (commit `b3b9fd9` trên `be`, **CHƯA
-  PUSH** — chờ `mvn clean verify`, môi trường code không có Maven để tự chạy) vì trước đây response
+  Field `isOfficial` được BE bổ sung vào `MaterialDetailRes` (commit `b3b9fd9` trên `be`, đã
+  `mvn clean verify` thật trong container `lms_backend` — PASS, đã push) vì trước đây response
   tính `isOfficial` nội bộ nhưng không trả ra; BE vẫn tự chặn server-side nếu cố sửa học liệu
   Official (`AccessDeniedDomainException`, đã verify sẵn có) — field mới chỉ để FE ẩn/hiện đúng UI.
 - ⚠️ **Giám sát thi — đã vá phần chụp frame, CẦN TEST THIẾT BỊ THẬT trước khi coi là xong**
@@ -114,6 +114,23 @@ bên web KHÔNG áp dụng cho mobile — mobile chưa có chatbot AI Discovery 
   `exam/[quizId]/index.tsx` trước đây bỏ qua response của `recordViolation` hoàn toàn khiến
   auto-submit khi vượt số lần vi phạm không bao giờ chạy dù BE đã đếm đúng — đã xử lý
   `shouldAutoSubmit` cho cả 2 nguồn vi phạm.
+
+### Mobile — Rà soát lần 4 (12/10/2026): AI Gia sư giải thích câu sai, phát âm flashcard, Lộ trình AI đầy đủ, Chat Discovery
+
+**Tất cả 4 việc đã xong, repo `mobile` nhánh `main` (đã bỏ nhánh `additional-features`, xem quy
+ước push mới ở memory `feedback_mobile_push_straight_to_main`):**
+- ✅ **Lộ trình AI bổ sung đầy đủ** (commit `46a215f`) — luồng "Cập nhật tiến độ" (reschedule) có
+  modal xem trước số liệu, xuất lịch .ics (tái dùng `saveAndShareBlob` có sẵn), tick tiến độ hoàn
+  thành (gạch ngang/bấm nhảy tới bài/badge phút học), form tạo lộ trình cho chọn ngày mục tiêu
+  (trước đây hardcode +30 ngày).
+- ✅ **AI Gia sư giải thích câu trả lời sai** (commit `facfac7`) —
+  `components/quiz/ExplainWrongAnswer.tsx` dùng chung cho `ExamResultView` (thi chính thức) và
+  `LectureQuiz` (ôn tập cá nhân), gọi `POST /api/v1/quizzes/tutor/explain`. Chưa hỗ trợ `?seek=`
+  nhảy tới đúng mốc video khi bấm "Ôn tập lại lý thuyết" (lesson player mobile chưa đọc query này).
+- ✅ **Phát âm flashcard cá nhân** (commit `c255c84`) — thêm dependency `expo-speech` (chạy được
+  Expo Go, không cần native linking) thay cho Web Speech API của web, cùng bảng map ngôn ngữ.
+- ✅ **Chat Discovery AI** (commit `6fe98ff`) — mobile trước đây hoàn toàn chưa có, giờ port đủ
+  (nút nổi + modal chat + gợi ý khoá học), ẩn lúc thi giống quy tắc đã áp dụng bên web.
 
 **Acceptance Criteria:**
 - App chạy được qua Expo Go trên cả Android và iPhone thật, gọi đúng API `be` hiện có (không đổi BE).
