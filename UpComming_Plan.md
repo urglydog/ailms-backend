@@ -94,21 +94,26 @@ bên web KHÔNG áp dụng cho mobile — mobile chưa có chatbot AI Discovery 
   stub), **Tài nguyên** (`ResourcesTab.tsx`), **Bảng điểm + KnowledgeGapsWidget** — parity đầy đủ.
 - ⚠️ **Gradebook — gap cosmetic nhỏ:** thiếu phân trang lịch sử quiz + badge "quiz đã bị xoá" so
   với web (`CourseGradebookTab.tsx`). Không chặn luồng, ưu tiên thấp.
-- ❌ **Quiz cá nhân thiếu chức năng soạn/sửa câu hỏi** — web có `QuizPersonalEditor.tsx` (học viên
-  tự thêm/sửa câu hỏi trong quiz cá nhân), mobile `material/[id].tsx` chỉ có chế độ làm quiz
-  (`LectureQuiz`), không có chế độ soạn/sửa.
-- ❌ **Giám sát thi (AI proctoring) — thiếu phát hiện khuôn mặt/ánh mắt:** mobile đã quay camera +
-  upload bằng chứng + gọi đúng endpoint BE (`ProctoringCameraView.tsx`, `expo-camera`), nhưng CHỈ
-  `TAB_SWITCH` (qua `AppState`) hoạt động thật. `NO_FACE`/`MULTIPLE_FACES`/`HEAD_TURNED`/
-  `GAZE_AWAY` là code chết vì `expo-camera` (managed workflow) không hỗ trợ face detection —
-  `handleFacesDetected` không được gắn callback nào. Web dùng `@vladmandic/face-api` client-side
-  để TRIGGER, xác thực thật vẫn ở server qua Gemini Vision (endpoint
-  `POST /api/v1/quizzes/attempts/{attemptId}/proctor-frame`, đã có sẵn, không cần đổi BE).
-  **Hướng vá khả thi, KHÔNG cần EAS dev client:** mobile chụp still-frame định kỳ từ
-  `CameraView` đang chạy sẵn (`takePictureAsync`), gửi lên đúng endpoint `/proctor-frame` có sẵn —
-  tái dùng hạ tầng Gemini Vision của BE thay vì tự làm face-detection on-device (vốn cần
-  `react-native-vision-camera` + custom dev client, cùng nhóm vướng mắc như LiveKit ở mục Live
-  session, không đáng đánh đổi).
+- ✅ **Quiz cá nhân — đã port soạn/sửa câu hỏi** (12/10/2026, repo `mobile` commit `5dfcc52`):
+  `components/material/QuizPersonalEditor.tsx` (thêm/sửa/xoá câu hỏi, dùng `Modal` built-in RN).
+  `material/[id].tsx` thêm tab "Làm bài"/"Soạn câu hỏi", CHỈ hiện khi `!material.isOfficial`.
+  Field `isOfficial` được BE bổ sung vào `MaterialDetailRes` (commit `b3b9fd9` trên `be`, **CHƯA
+  PUSH** — chờ `mvn clean verify`, môi trường code không có Maven để tự chạy) vì trước đây response
+  tính `isOfficial` nội bộ nhưng không trả ra; BE vẫn tự chặn server-side nếu cố sửa học liệu
+  Official (`AccessDeniedDomainException`, đã verify sẵn có) — field mới chỉ để FE ẩn/hiện đúng UI.
+- ⚠️ **Giám sát thi — đã vá phần chụp frame, CẦN TEST THIẾT BỊ THẬT trước khi coi là xong**
+  (12/10/2026, repo `mobile` commit `5dfcc52`): `ProctoringCameraView` giờ chụp still-frame định kỳ
+  (random 30-60s) gửi `/proctor-frame` cho Gemini Vision xác thực — nguồn vi phạm hình ảnh được
+  SERVER xác thực, giống cơ chế web dùng (trước đây mobile chỉ có `TAB_SWITCH` hoạt động thật,
+  `NO_FACE`/`MULTIPLE_FACES`/`HEAD_TURNED`/`GAZE_AWAY` là code chết vì `expo-camera` managed
+  workflow không hỗ trợ face detection on-device). **RỦI RO CHƯA XÁC MINH:** `takePictureAsync()`
+  gọi xen giữa lúc `recordAsync()` đang quay video liên tục CÓ THỂ làm dừng video đang quay (hành
+  vi đã biết của `expo-camera` ở nhiều phiên bản, không xác nhận được trong môi trường code vì
+  không có thiết bị thật) — PHẢI test thật trên điện thoại trước khi báo tính năng này ổn định; nếu
+  video bị cắt ngắn, cân nhắc bỏ quay liên tục, chỉ dựa vào chuỗi frame định kỳ. Fix kèm theo:
+  `exam/[quizId]/index.tsx` trước đây bỏ qua response của `recordViolation` hoàn toàn khiến
+  auto-submit khi vượt số lần vi phạm không bao giờ chạy dù BE đã đếm đúng — đã xử lý
+  `shouldAutoSubmit` cho cả 2 nguồn vi phạm.
 
 **Acceptance Criteria:**
 - App chạy được qua Expo Go trên cả Android và iPhone thật, gọi đúng API `be` hiện có (không đổi BE).
