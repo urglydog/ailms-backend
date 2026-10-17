@@ -3,6 +3,7 @@ package com.lms.enrollment.service;
 import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
 import com.lms.catalog.entity.Course;
+import com.lms.catalog.entity.Lesson;
 import com.lms.catalog.repository.LessonRepository;
 import com.lms.catalog.service.CourseAccessService;
 import com.lms.certificate.repository.CertificateRepository;
@@ -15,6 +16,8 @@ import com.lms.common.exception.BusinessRuleViolationException;
 import com.lms.enrollment.repository.CourseReviewRepository;
 import com.lms.enrollment.repository.EnrollmentRepository;
 import com.lms.enrollment.repository.LessonProgressRepository;
+import com.lms.enrollment.service.ResumePointResolver.LatestProgress;
+import com.lms.enrollment.service.ResumePointResolver.ResumePoint;
 import com.lms.payment.entity.Payment;
 import com.lms.payment.repository.CartItemRepository;
 import java.time.LocalDateTime;
@@ -66,6 +69,7 @@ public class EnrollmentService {
                 .orElse(null);
         LocalDateTime lastAccessedAt = lessonProgressRepository
                 .findLastAccessedAtByUserIdAndCourseId(user.getId(), course.getId());
+        ResumePoint resume = resolveResumePoint(user.getId(), course.getId());
         return new Res(
                 course.getId(),
                 course.getTitle(),
@@ -86,8 +90,24 @@ public class EnrollmentService {
                 lastAccessedAt,
                 certificateRepository.findByStudent_IdAndCourse_Id(user.getId(), course.getId())
                         .map(cert -> cert.getCertificateCode())
-                        .orElse(null)
+                        .orElse(null),
+                resume.lessonId(),
+                resume.positionSec()
         );
+    }
+
+    /** "Học tiếp": bài đang học dở (hoặc bài kế tiếp) và vị trí đã lưu — quy tắc ở {@link ResumePointResolver}. */
+    private ResumePoint resolveResumePoint(Long userId, Long courseId) {
+        List<Long> orderedLessonIds = lessonRepository
+                .findByChapter_CourseIdOrderByChapter_DisplayOrderAscDisplayOrderAsc(courseId).stream()
+                .map(Lesson::getId)
+                .toList();
+        LatestProgress latest = lessonProgressRepository
+                .findFirstByUser_IdAndLesson_Chapter_Course_IdOrderByUpdatedAtDesc(userId, courseId)
+                .map(lp -> new LatestProgress(lp.getLesson().getId(), lp.getLastPositionSec(),
+                        Boolean.TRUE.equals(lp.getIsCompleted())))
+                .orElse(null);
+        return ResumePointResolver.resolve(orderedLessonIds, latest);
     }
 
     @Transactional
