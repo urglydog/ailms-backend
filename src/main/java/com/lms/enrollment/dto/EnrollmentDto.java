@@ -34,6 +34,11 @@ public class EnrollmentDto {
             /** doc/DacTa_ChucNangChungChi.md — chỉ có giá trị khi đã hoàn thành 100% VÀ chứng chỉ
              * đã được cấp (luôn đi cùng {@code completedAt != null}, xem CertificateService);
              * FE dùng để điều hướng "Xem chứng chỉ" tới {@code /certificates/{code}}. */
-            String certificateCode
+            String certificateCode,
+            /** "Học tiếp" — bài học đang học dở (hoặc bài kế tiếp nếu bài gần nhất đã xong); null nếu khóa chưa có bài nào.
+             * Xem {@code ResumePointResolver}. */
+            Long resumeLessonId,
+            /** Vị trí (giây) để mở {@link #resumeLessonId}; 0 khi bắt đầu bài từ đầu. */
+            Integer resumePositionSec
     ) {}
 }

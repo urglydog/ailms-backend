@@ -32,6 +32,13 @@ public interface LessonProgressRepository extends JpaRepository<LessonProgress, 
             + "WHERE lp.user.id = :userId AND lp.lesson.chapter.course.id = :courseId")
     LocalDateTime findLastAccessedAtByUserIdAndCourseId(@Param("userId") Long userId, @Param("courseId") Long courseId);
 
+    /**
+     * "Học tiếp" (Khóa học của tôi) — bản ghi tiến độ cập nhật gần nhất của học viên trong khóa;
+     * xem {@code ResumePointResolver}. Empty nếu học viên chưa xem bài nào.
+     */
+    Optional<LessonProgress> findFirstByUser_IdAndLesson_Chapter_Course_IdOrderByUpdatedAtDesc(
+            Long userId, Long courseId);
+
     /** Sprint 3 mục 10 — Retention Heatmap: baseline (100%, decile 0) = số học viên KHÁC NHAU đã
      * từng mở bài học này (1 dòng {@code lesson_progress}/học viên, xem UNIQUE constraint của
      * entity) — mẫu số cho % giữ chân ở từng decile. */
