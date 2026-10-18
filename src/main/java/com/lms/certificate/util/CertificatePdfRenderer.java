@@ -52,10 +52,10 @@ public final class CertificatePdfRenderer {
     private static final float CENTER_X = 600f;
 
     private static final Color NAVY = new Color(0x1B, 0x2A, 0x4A);
-    /** Xanh dương thật của logo hệ thống ({@code tailwind.config.ts} — {@code accent: #2563EB}),
+    /** Xanh dương thật của logo hệ thống ({@code tailwind.config.ts} — {@code accent: #1A6FE0}),
      * KHÁC bảng màu vàng-navy trang trọng còn lại của chứng chỉ — cố ý giữ nguyên màu logo gốc
      * để chứng chỉ nhận diện đúng thương hiệu, theo yêu cầu (26/09/2026). */
-    private static final Color ACCENT_BLUE = new Color(0x25, 0x63, 0xEB);
+    private static final Color ACCENT_BLUE = new Color(0x1A, 0x6F, 0xE0);
     private static final Color GOLD = new Color(0xB8, 0x89, 0x2B);
     private static final Color GOLD_TEXT = new Color(0x8C, 0x6D, 0x1F);
     private static final Color SLATE = new Color(0x5B, 0x64, 0x72);
