@@ -166,6 +166,7 @@ public class DevCourseDataSeeder {
         course.setIsFree(price.compareTo(BigDecimal.ZERO) == 0);
         course.setCategory(category);
         course.setInstructor(instructor);
+        course.setReferralCode(java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 10));
         course.setStatus(CourseStatus.PUBLISHED);
         Course saved = courseRepository.save(course);
 
@@ -193,6 +194,7 @@ public class DevCourseDataSeeder {
         course.setIsFree(true);
         course.setCategory(category);
         course.setInstructor(instructor);
+        course.setReferralCode(java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 10));
         course.setStatus(status);
         courseRepository.save(course);
     }

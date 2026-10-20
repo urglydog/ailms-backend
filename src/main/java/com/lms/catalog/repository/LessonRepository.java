@@ -27,6 +27,9 @@ public interface LessonRepository extends JpaRepository<Lesson, Long> {
     /** "Học ngay" (my-courses) — bài học đầu tiên của khoá theo đúng thứ tự chương rồi bài. */
     Optional<Lesson> findFirstByChapter_CourseIdOrderByChapter_DisplayOrderAscDisplayOrderAsc(Long courseId);
 
+    /** "Học tiếp" (my-courses) — mọi bài của khóa theo đúng thứ tự chương rồi bài, để tìm bài kế tiếp. */
+    List<Lesson> findByChapter_CourseIdOrderByChapter_DisplayOrderAscDisplayOrderAsc(Long courseId);
+
     /** UC09 mở rộng (14/09/2026) — tổng thời lượng video của khóa, dùng cho bộ lọc "Video Duration". */
     @Query("SELECT COALESCE(SUM(l.durationSec), 0) FROM Lesson l WHERE l.chapter.course.id = :courseId")
     int sumDurationSecByCourseId(@Param("courseId") Long courseId);
