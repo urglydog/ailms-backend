@@ -3,6 +3,7 @@ package com.lms.auth.service;
 import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
 import com.lms.common.repository.AiUsageLogRepository;
+import com.lms.common.service.NotificationService;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -40,6 +41,7 @@ public class AiLockScanService {
 
     private final AiUsageLogRepository aiUsageLogRepository;
     private final UserRepository userRepository;
+    private final NotificationService notificationService;
 
     @Value("${lms.ai-lock.daily-request-threshold}")
     private long dailyRequestThreshold;
@@ -75,6 +77,14 @@ public class AiLockScanService {
                 userRepository.save(user);
                 proposalsCreated++;
                 log.info("Tao de xuat khoa AI cho user {}: {}", userId, reason);
+
+                // (23/10/2026, sửa bug thật) — trước đây chỉ ghi vào DB, Admin không có cách nào
+                // biết chủ động ngoài tự vào /admin/users xem banner. Không lo bị gọi lặp vì
+                // nhánh continue phía trên đã chặn tạo đề xuất trùng cho tới khi Admin xử lý xong.
+                String userEmail = user.getEmail();
+                userRepository.findByRole(com.lms.common.enums.Role.ADMIN).forEach(admin ->
+                        notificationService.notify(admin.getId(), "AI_LOCK_PROPOSED", "Đề xuất khóa AI mới",
+                                userEmail + " — " + reason, "/admin/users"));
             }
         }
         return proposalsCreated;

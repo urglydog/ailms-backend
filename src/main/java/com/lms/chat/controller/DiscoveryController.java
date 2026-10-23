@@ -1,5 +1,8 @@
 package com.lms.chat.controller;
 
+import com.lms.auth.entity.User;
+import com.lms.auth.repository.UserRepository;
+import com.lms.auth.security.AccountRestrictionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.*;
@@ -11,6 +14,7 @@ import org.springframework.web.client.RestTemplate;
 import java.security.Principal;
 import java.util.Collection;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * UC49 — Course Discovery Chat Proxy.
@@ -34,6 +38,8 @@ public class DiscoveryController {
 
     private final RestTemplate restTemplate;
     private final com.lms.common.config.AiWorkerConfig aiWorkerConfig;
+    private final UserRepository userRepository;
+    private final AccountRestrictionService accountRestrictionService;
 
     /**
      * POST /api/v1/discovery/chat
@@ -73,6 +79,14 @@ public class DiscoveryController {
                         .body(Map.of("error", "Admin không sử dụng Course Discovery Chat."));
             }
             role = "STUDENT";
+
+            // (23/10/2026, sửa lỗ hổng thật) — trước đây Discovery Chat hoàn toàn không check
+            // isAiLocked, khác với MaterialGenerationService/QuizService/TutorService. Guest
+            // (authentication == null) không có User để check, bỏ qua.
+            Optional<User> user = userRepository.findByEmail(authentication.getName());
+            if (user.isPresent()) {
+                accountRestrictionService.requireAiAllowed(user.get());
+            }
         }
 
         // ── TODO BR-DISCOVERY-01: quota check qua Redis ───────────────────

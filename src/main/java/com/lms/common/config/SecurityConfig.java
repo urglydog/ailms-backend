@@ -1,6 +1,10 @@
 package com.lms.common.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.net.URI;
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -24,6 +28,10 @@ import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.core.annotation.Order;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.security.web.AuthenticationEntryPoint;
+import org.springframework.security.web.access.AccessDeniedHandler;
 import lombok.RequiredArgsConstructor;
 /**
  * Cấu hình bảo mật — <b>khung sườn của Giai đoạn 0</b>.
@@ -161,8 +169,49 @@ public class SecurityConfig {
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(authenticationProvider())
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                // (23/10/2026, sửa bug thật) — mặc định Spring Security trả response RỖNG (không
+                // phải JSON) khi chặn ở tầng filter (vd user bị AccountLockRegistry chặn giữa
+                // phiên — xem docblock ở đó). FE lib/api/client.ts#parseProblem không parse được
+                // body rỗng nên rơi vào fallback "Yêu cầu thất bại với mã {status}" vô nghĩa.
+                .exceptionHandling(e -> e
+                        .authenticationEntryPoint(problemJsonEntryPoint())
+                        .accessDeniedHandler(problemJsonAccessDeniedHandler()));
         return http.build();
+    }
+
+    private AuthenticationEntryPoint problemJsonEntryPoint() {
+        return (request, response, authException) -> writeProblemJson(
+                response, HttpStatus.UNAUTHORIZED,
+                "Phiên đăng nhập không hợp lệ hoặc tài khoản đã bị khóa. Vui lòng đăng nhập lại.",
+                "AUTHENTICATION_REQUIRED", request.getRequestURI());
+    }
+
+    private AccessDeniedHandler problemJsonAccessDeniedHandler() {
+        return (request, response, accessDeniedException) -> writeProblemJson(
+                response, HttpStatus.FORBIDDEN,
+                "Bạn không có quyền thực hiện hành động này, hoặc tài khoản đã bị khóa.",
+                "ACCESS_DENIED", request.getRequestURI());
+    }
+
+    /** Cùng khuôn {@code ProblemDetail} với {@code GlobalExceptionHandler.build} — FE chỉ có 1
+     * cách parse lỗi duy nhất (xem lib/api/client.ts#parseProblem), không cần phân biệt lỗi đến
+     * từ filter chain hay từ controller advice. */
+    private void writeProblemJson(
+            jakarta.servlet.http.HttpServletResponse response, HttpStatus status,
+            String detail, String code, String path) throws java.io.IOException {
+        response.setStatus(status.value());
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        response.setCharacterEncoding("UTF-8");
+        Map<String, Object> body = Map.of(
+                "type", URI.create("https://lms.local/errors/" + code.toLowerCase().replace('_', '-')).toString(),
+                "title", status.getReasonPhrase(),
+                "status", status.value(),
+                "detail", detail,
+                "instance", path,
+                "code", code,
+                "timestamp", LocalDateTime.now().toString());
+        new ObjectMapper().writeValue(response.getWriter(), body);
     }
 
     @Bean
