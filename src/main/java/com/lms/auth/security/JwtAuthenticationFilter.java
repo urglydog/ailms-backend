@@ -18,17 +18,23 @@ import java.io.IOException;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtTokenProvider tokenProvider;
+    private final AccountLockRegistry accountLockRegistry;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
-        
+
         try {
             String jwt = getJwtFromRequest(request);
 
             if (StringUtils.hasText(jwt) && tokenProvider.validateToken(jwt)) {
-                Authentication authentication = tokenProvider.getAuthentication(jwt);
-                SecurityContextHolder.getContext().setAuthentication(authentication);
+                // Bug thật (23/10/2026) — xem docblock AccountLockRegistry: Admin khóa tài khoản
+                // phải có hiệu lực NGAY, không chờ access token hết hạn tự nhiên.
+                Long userId = tokenProvider.getUserId(jwt);
+                if (userId == null || !accountLockRegistry.isLocked(userId)) {
+                    Authentication authentication = tokenProvider.getAuthentication(jwt);
+                    SecurityContextHolder.getContext().setAuthentication(authentication);
+                }
             }
         } catch (Exception ex) {
             logger.error("Could not set user authentication in security context", ex);

@@ -8,6 +8,7 @@ import com.lms.auth.dto.UserDto.UpdateUserReq;
 import com.lms.auth.dto.UserDto.UserRes;
 import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
+import com.lms.auth.security.AccountLockRegistry;
 import com.lms.catalog.entity.Course;
 import com.lms.certificate.repository.CertificateRepository;
 import com.lms.certificate.service.CertificateService;
@@ -46,6 +47,7 @@ public class UserService {
     private final CourseReviewRepository courseReviewRepository;
     private final CertificateRepository certificateRepository;
     private final CertificateService certificateService;
+    private final AccountLockRegistry accountLockRegistry;
     private final Tika tika = new Tika();
 
     @Transactional(readOnly = true)
@@ -77,10 +79,17 @@ public class UserService {
         user.setFullName(req.fullName());
         user.setRole(req.role());
         user.setIsActive(req.isActive());
-        
+
         // Nếu user bị khóa (isActive = false), refresh token hiện tại của user sẽ không thể
-        // dùng để xin cấp lại token mới nhờ cơ chế chặn ở AuthService.refreshToken
-        
+        // dùng để xin cấp lại token mới nhờ cơ chế chặn ở AuthService.refreshToken.
+        // (23/10/2026, sửa bug thật) — riêng access token CŨ vẫn sống tới khi hết hạn tự nhiên
+        // nếu không chủ động thu hồi ở đây, xem docblock AccountLockRegistry.
+        if (req.isActive()) {
+            accountLockRegistry.unlock(id);
+        } else {
+            accountLockRegistry.lock(id);
+        }
+
         return mapToRes(userRepository.save(user));
     }
 
@@ -92,6 +101,7 @@ public class UserService {
         // Không xóa cứng để giữ toàn vẹn khóa ngoại (khóa học, hóa đơn, v.v)
         // Chỉ khóa tài khoản (Soft Delete / Deactivate)
         user.setIsActive(false);
+        accountLockRegistry.lock(id);
         userRepository.save(user);
     }
 
