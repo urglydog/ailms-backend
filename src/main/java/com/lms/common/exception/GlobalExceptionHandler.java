@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.security.authorization.AuthorizationDeniedException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -61,6 +62,19 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AuthorizationDeniedException.class)
     public ProblemDetail handleAuthorizationDenied(AuthorizationDeniedException ex, HttpServletRequest request) {
         return build(HttpStatus.FORBIDDEN, "Ban khong co quyen thuc hien hanh dong nay", "ACCESS_DENIED", request);
+    }
+
+    /**
+     * (23/10/2026, sửa bug thật) — bắt mọi {@link AuthenticationException} của Spring Security
+     * ném ra TRONG {@code AuthService.login} (không phải trong filter chain, nên
+     * {@code ExceptionTranslationFilter} không tự xử lý được): {@code LockedException} khi tài
+     * khoản bị Admin khóa ({@code isActive=false}) HOẶC khi sai mật khẩu 5 lần liên tiếp —
+     * trước đây không có handler nào bắt, rơi xuống {@link #handleUnexpected} thành lỗi 500
+     * chung chung, FE hiện thông báo vô nghĩa thay vì lý do thật.
+     */
+    @ExceptionHandler(AuthenticationException.class)
+    public ProblemDetail handleAuthentication(AuthenticationException ex, HttpServletRequest request) {
+        return build(HttpStatus.UNAUTHORIZED, ex.getMessage(), "AUTHENTICATION_FAILED", request);
     }
 
     /** Vượt dung lượng upload — BR-CHUNK-01 (video 2 GB), BR-UPLOAD-01 (tài liệu 50 MB). */

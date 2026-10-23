@@ -88,6 +88,14 @@ public class UserService {
             accountLockRegistry.unlock(id);
         } else {
             accountLockRegistry.lock(id);
+            // Cascade (23/10/2026) — khóa tài khoản là cấp hạn chế CAO NHẤT, phải kéo theo cả
+            // khóa AI và đánh dấu spam, xem docblock AccountRestrictionService. Chiều ngược lại
+            // (mở khóa) KHÔNG tự gỡ 2 cờ này — admin phải tự xử lý riêng nếu muốn, tránh gỡ oan.
+            user.setIsAiLocked(true);
+            if (!Boolean.TRUE.equals(user.getIsSpamFlagged())) {
+                user.setSpamFlagReason("Tự động theo khóa tài khoản");
+            }
+            user.setIsSpamFlagged(true);
         }
 
         return mapToRes(userRepository.save(user));

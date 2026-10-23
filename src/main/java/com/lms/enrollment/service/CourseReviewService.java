@@ -2,6 +2,7 @@ package com.lms.enrollment.service;
 
 import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
+import com.lms.auth.security.AccountRestrictionService;
 import com.lms.catalog.entity.Course;
 import com.lms.catalog.repository.CourseRepository;
 import com.lms.common.exception.AccessDeniedDomainException;
@@ -46,6 +47,7 @@ public class CourseReviewService {
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
     private final CacheEvictionHelper cacheEvictionHelper;
+    private final AccountRestrictionService accountRestrictionService;
 
     @Value("${lms.redis-keys.course-review-queue:lms:course-review:jobs}")
     private String reviewQueueKey;
@@ -64,6 +66,7 @@ public class CourseReviewService {
     public Res create(String studentEmail, Long courseId, CreateReq req) {
         User student = userRepository.findByEmail(studentEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("User", studentEmail));
+        accountRestrictionService.requireReviewAllowed(student);
         Course course = courseRepository.findById(courseId)
                 .orElseThrow(() -> new ResourceNotFoundException("Course", courseId));
 

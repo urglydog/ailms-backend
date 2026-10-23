@@ -6,6 +6,7 @@ import com.lms.auth.repository.UserRepository;
 import com.lms.auth.service.AuthService;
 import com.lms.common.exception.ResourceNotFoundException;
 import com.lms.common.repository.AiUsageLogRepository;
+import com.lms.common.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -23,10 +24,13 @@ public class AdminController {
     private final AiUsageLogRepository aiUsageLogRepository;
     private final UserRepository userRepository;
     private final AuthService authService;
+    private final NotificationService notificationService;
 
     public record SpamFlagReq(boolean flagged, String reason) {}
 
-    /** Chỉ Admin thấy — không public, không tự động khóa tài khoản (độc lập với isActive/isAiLocked). */
+    /** Chỉ Admin thấy — không public, không tự động khóa toàn bộ tài khoản (độc lập với
+     * isActive). Cascade (23/10/2026): đánh dấu spam kéo theo khóa AI luôn — xem docblock
+     * AccountRestrictionService. Bỏ đánh dấu spam KHÔNG tự mở khóa AI lại. */
     @PutMapping("/users/{userId}/spam-flag")
     @PreAuthorize("hasRole('ADMIN')")
     @Transactional
@@ -35,7 +39,15 @@ public class AdminController {
                 .orElseThrow(() -> new ResourceNotFoundException("User", userId));
         user.setIsSpamFlagged(req.flagged());
         user.setSpamFlagReason(req.flagged() ? req.reason() : null);
+        if (req.flagged()) {
+            user.setIsAiLocked(true);
+        }
         userRepository.save(user);
+        if (req.flagged()) {
+            notificationService.notify(userId, "SPAM_FLAGGED", "Tài khoản bị hạn chế",
+                    "Tài khoản của bạn đã bị đánh dấu vi phạm chính sách và bị khóa tính năng AI. Lý do: " + req.reason(),
+                    "/profile");
+        }
         return ResponseEntity.ok().build();
     }
 
@@ -70,6 +82,10 @@ public class AdminController {
                 .orElseThrow(() -> new ResourceNotFoundException("User", userId));
         user.setIsAiLocked(isLocked);
         userRepository.save(user);
+        if (isLocked) {
+            notificationService.notify(userId, "AI_LOCKED", "Tính năng AI đã bị khóa",
+                    "Tài khoản của bạn đã bị khóa tính năng AI do vi phạm chính sách sử dụng.", "/profile");
+        }
         return ResponseEntity.ok().build();
     }
 
@@ -101,6 +117,8 @@ public class AdminController {
         user.setAiLockProposedAt(null);
         user.setAiLockProposedReason(null);
         userRepository.save(user);
+        notificationService.notify(userId, "AI_LOCKED", "Tính năng AI đã bị khóa",
+                "Tài khoản của bạn đã bị khóa tính năng AI do vi phạm chính sách sử dụng.", "/profile");
         return ResponseEntity.ok().build();
     }
 
