@@ -219,6 +219,20 @@ public class SecurityConfig {
         DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider();
         authProvider.setUserDetailsService(customUserDetailsService);
         authProvider.setPasswordEncoder(passwordEncoder());
+        // (23/10/2026, sửa bug thật) — mặc định Spring Security ném LockedException với message
+        // tiếng Anh cứng "User account is locked" khi isAccountNonLocked()=false lúc đăng nhập —
+        // GlobalExceptionHandler.handleAuthentication trả thẳng ex.getMessage() ra FE, user thấy
+        // câu tiếng Anh vô nghĩa thay vì biết rõ tài khoản bị khóa cần liên hệ Admin.
+        authProvider.setPreAuthenticationChecks(user -> {
+            if (!user.isAccountNonLocked()) {
+                throw new org.springframework.security.authentication.LockedException(
+                        "Tài khoản của bạn đã bị khóa. Vui lòng liên hệ quản trị viên để được hỗ trợ.");
+            }
+            if (!user.isEnabled()) {
+                throw new org.springframework.security.authentication.DisabledException(
+                        "Tài khoản của bạn đã bị vô hiệu hóa.");
+            }
+        });
         return authProvider;
     }
 

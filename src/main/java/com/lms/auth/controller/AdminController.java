@@ -29,8 +29,9 @@ public class AdminController {
     public record SpamFlagReq(boolean flagged, String reason) {}
 
     /** Chỉ Admin thấy — không public, không tự động khóa toàn bộ tài khoản (độc lập với
-     * isActive). Cascade (23/10/2026): đánh dấu spam kéo theo khóa AI luôn — xem docblock
-     * AccountRestrictionService. Bỏ đánh dấu spam KHÔNG tự mở khóa AI lại. */
+     * isActive). Cascade ĐỐI XỨNG 2 CHIỀU (23/10/2026, sửa theo phản hồi test thật — bản trước
+     * chỉ cascade lúc đánh dấu, lúc bỏ đánh dấu phải tự mở AI riêng): đánh dấu spam kéo theo
+     * khóa AI; bỏ đánh dấu spam kéo theo mở khóa AI luôn — xem docblock AccountRestrictionService. */
     @PutMapping("/users/{userId}/spam-flag")
     @PreAuthorize("hasRole('ADMIN')")
     @Transactional
@@ -39,14 +40,15 @@ public class AdminController {
                 .orElseThrow(() -> new ResourceNotFoundException("User", userId));
         user.setIsSpamFlagged(req.flagged());
         user.setSpamFlagReason(req.flagged() ? req.reason() : null);
-        if (req.flagged()) {
-            user.setIsAiLocked(true);
-        }
+        user.setIsAiLocked(req.flagged());
         userRepository.save(user);
         if (req.flagged()) {
             notificationService.notify(userId, "SPAM_FLAGGED", "Tài khoản bị hạn chế",
                     "Tài khoản của bạn đã bị đánh dấu vi phạm chính sách và bị khóa tính năng AI. Lý do: " + req.reason(),
                     "/profile");
+        } else {
+            notificationService.notify(userId, "SPAM_UNFLAGGED", "Tài khoản đã được gỡ hạn chế",
+                    "Tài khoản của bạn đã được bỏ đánh dấu vi phạm và mở lại quyền dùng AI.", "/profile");
         }
         return ResponseEntity.ok().build();
     }
