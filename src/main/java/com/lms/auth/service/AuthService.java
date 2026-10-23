@@ -56,6 +56,9 @@ public class AuthService {
     @Value("${google.oauth.mobile-redirect-uri}")
     private String googleMobileRedirectUri;
 
+    @Value("${lms.frontend-base-url:http://localhost:3000}")
+    private String frontendBaseUrl;
+
     /** Scheme app mobile hợp lệ để redirect về sau khi đăng nhập Google — chặn open-redirect, xem app.json "scheme". */
     private static final Set<String> ALLOWED_MOBILE_RETURN_SCHEMES = Set.of("exp", "mobile");
 
@@ -356,6 +359,42 @@ public class AuthService {
                 new CustomUserDetails(user), null, new CustomUserDetails(user).getAuthorities());
 
         return generateTokens(authentication);
+    }
+
+    /**
+     * Admin hỗ trợ user khi quên-mật-khẩu-nhưng-email/OTP không tới được (23/10/2026) — khác
+     * hẳn {@link #forgotPassword}: sinh 1 token ngẫu nhiên (không gửi email), Admin tự copy link
+     * trả về và gửi thủ công cho user qua kênh khác (chat hỗ trợ, Zalo...). TTL 30 phút.
+     */
+    public ResetLinkRes generateAdminResetLink(String email) {
+        userRepository.findByEmail(email).orElseThrow(() -> new ResourceNotFoundException("User", email));
+
+        String token = UUID.randomUUID().toString();
+        String redisKey = "pwreset:token:" + token;
+        Duration ttl = Duration.ofMinutes(30);
+        redisTemplate.opsForValue().set(redisKey, email, ttl);
+
+        return new ResetLinkRes(
+                frontendBaseUrl + "/reset-password?token=" + token,
+                java.time.LocalDateTime.now().plus(ttl)
+        );
+    }
+
+    /** Consume token sinh bởi {@link #generateAdminResetLink} — không auto-login, user tự đăng nhập lại. */
+    @Transactional
+    public void resetPasswordByToken(String token, String newPassword) {
+        String redisKey = "pwreset:token:" + token;
+        String email = redisTemplate.opsForValue().get(redisKey);
+        if (email == null) {
+            throw new BusinessRuleViolationException("Link đặt lại mật khẩu đã hết hạn hoặc không hợp lệ");
+        }
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User", email));
+
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        user.setAuthProvider("LOCAL");
+        userRepository.save(user);
+        redisTemplate.delete(redisKey);
     }
 
     /**

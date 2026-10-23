@@ -4,7 +4,6 @@ import com.lms.common.enums.JobStatus;
 import com.lms.dubbing.dto.AiJobDto.Res;
 import com.lms.dubbing.entity.AiJob;
 import com.lms.dubbing.repository.AiJobRepository;
-import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -19,11 +18,9 @@ public class AiJobAdminService {
     private final AiJobRepository aiJobRepository;
 
     @Transactional(readOnly = true)
-    public Page<Res> getList(JobStatus status, Pageable pageable) {
-        Page<AiJob> page = status == null
-                ? aiJobRepository.findAll(pageable)
-                : aiJobRepository.findByStatusIn(List.of(status), pageable);
-        return page.map(this::mapToRes);
+    public Page<Res> getList(JobStatus status, String search, Pageable pageable) {
+        String normalizedSearch = (search == null || search.isBlank()) ? null : search.trim();
+        return aiJobRepository.search(status, normalizedSearch, pageable).map(this::mapToRes);
     }
 
     private Res mapToRes(AiJob job) {
