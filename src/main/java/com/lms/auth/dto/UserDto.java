@@ -22,7 +22,11 @@ public class UserDto {
             LocalDateTime updatedAt,
             /** "View public profile" (14/09/2026, mở rộng) — 2 công tắc tách riêng, xem {@code User}. */
             Boolean coursesPublic,
-            Boolean wishlistPublic
+            Boolean wishlistPublic,
+            Boolean isAiLocked,
+            /** Chỉ Admin nhìn thấy — 2 field cuối chỉ có ý nghĩa khi gọi qua {@code GET /api/v1/users/{id}} (Admin only). */
+            Boolean isSpamFlagged,
+            String spamFlagReason
     ) {}
 
     public record UpdateUserReq(

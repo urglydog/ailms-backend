@@ -66,6 +66,14 @@ public class AuthController {
         return authService.resetPassword(req.email(), req.otp(), req.newPassword());
     }
 
+    /** Consume link do Admin gửi thủ công qua {@code POST /api/v1/admin/users/{id}/send-reset-link}. */
+    @PostMapping("/reset-password-by-token")
+    @ResponseStatus(HttpStatus.OK)
+    public MessageRes resetPasswordByToken(@Valid @RequestBody ResetPasswordByTokenReq req) {
+        authService.resetPasswordByToken(req.token(), req.newPassword());
+        return new MessageRes("Đặt lại mật khẩu thành công. Vui lòng đăng nhập lại.");
+    }
+
     @PostMapping("/oauth/google/callback")
     @ResponseStatus(HttpStatus.OK)
     public TokenRes loginWithGoogle(@Valid @RequestBody GoogleOAuthCallbackReq req) throws Exception {

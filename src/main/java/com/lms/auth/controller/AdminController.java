@@ -1,7 +1,9 @@
 package com.lms.auth.controller;
 
+import com.lms.auth.dto.AuthResponseDto;
 import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
+import com.lms.auth.service.AuthService;
 import com.lms.common.exception.ResourceNotFoundException;
 import com.lms.common.repository.AiUsageLogRepository;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +22,32 @@ public class AdminController {
 
     private final AiUsageLogRepository aiUsageLogRepository;
     private final UserRepository userRepository;
+    private final AuthService authService;
+
+    public record SpamFlagReq(boolean flagged, String reason) {}
+
+    /** Chỉ Admin thấy — không public, không tự động khóa tài khoản (độc lập với isActive/isAiLocked). */
+    @PutMapping("/users/{userId}/spam-flag")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Transactional
+    public ResponseEntity<Void> setSpamFlag(@PathVariable Long userId, @RequestBody SpamFlagReq req) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", userId));
+        user.setIsSpamFlagged(req.flagged());
+        user.setSpamFlagReason(req.flagged() ? req.reason() : null);
+        userRepository.save(user);
+        return ResponseEntity.ok().build();
+    }
+
+    /** Hỗ trợ user khi quên-mật-khẩu-nhưng-email/OTP không nhận được (23/10/2026) — sinh link
+     * reset token (khác hẳn OTP email hiện có) để Admin tự copy gửi thủ công qua kênh khác. */
+    @PostMapping("/users/{userId}/send-reset-link")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<AuthResponseDto.ResetLinkRes> sendResetLink(@PathVariable Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", userId));
+        return ResponseEntity.ok(authService.generateAdminResetLink(user.getEmail()));
+    }
 
     @GetMapping("/ai-usage")
     @PreAuthorize("hasRole('ADMIN')")

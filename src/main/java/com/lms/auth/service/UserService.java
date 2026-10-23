@@ -270,7 +270,10 @@ public class UserService {
                 user.getCreatedAt(),
                 user.getUpdatedAt(),
                 user.getCoursesPublic(),
-                user.getWishlistPublic()
+                user.getWishlistPublic(),
+                user.getIsAiLocked(),
+                user.getIsSpamFlagged(),
+                user.getSpamFlagReason()
         );
     }
 }
