@@ -84,13 +84,18 @@ public class UserService {
         // dùng để xin cấp lại token mới nhờ cơ chế chặn ở AuthService.refreshToken.
         // (23/10/2026, sửa bug thật) — riêng access token CŨ vẫn sống tới khi hết hạn tự nhiên
         // nếu không chủ động thu hồi ở đây, xem docblock AccountLockRegistry.
+        //
+        // Cascade ĐỐI XỨNG 2 CHIỀU (23/10/2026, sửa theo phản hồi test thật — bản trước chỉ
+        // cascade 1 chiều lúc khóa, lúc mở khóa phải tự gỡ AI/spam thủ công riêng, admin phản
+        // ánh "chưa đồng bộ"): khóa tài khoản → tự khóa AI + đánh dấu spam; mở khóa tài khoản →
+        // tự mở AI + bỏ đánh dấu spam luôn, xem docblock AccountRestrictionService.
         if (req.isActive()) {
             accountLockRegistry.unlock(id);
+            user.setIsAiLocked(false);
+            user.setIsSpamFlagged(false);
+            user.setSpamFlagReason(null);
         } else {
             accountLockRegistry.lock(id);
-            // Cascade (23/10/2026) — khóa tài khoản là cấp hạn chế CAO NHẤT, phải kéo theo cả
-            // khóa AI và đánh dấu spam, xem docblock AccountRestrictionService. Chiều ngược lại
-            // (mở khóa) KHÔNG tự gỡ 2 cờ này — admin phải tự xử lý riêng nếu muốn, tránh gỡ oan.
             user.setIsAiLocked(true);
             if (!Boolean.TRUE.equals(user.getIsSpamFlagged())) {
                 user.setSpamFlagReason("Tự động theo khóa tài khoản");
