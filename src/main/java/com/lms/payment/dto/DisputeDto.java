@@ -1,10 +1,12 @@
 package com.lms.payment.dto;
 
 import com.lms.common.enums.DisputeStatus;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 public class DisputeDto {
 
@@ -12,8 +14,12 @@ public class DisputeDto {
             @NotBlank String paymentTxnRef,
             @NotBlank String reason,
             String description,
-            String refundBankAccount
+            String refundBankAccount,
+            @AssertTrue(message = "Bạn phải đồng ý với chính sách hoàn tiền trước khi gửi khiếu nại")
+            boolean termsAccepted
     ) {}
+
+    public record AttachmentRes(Long id, String fileUrl, String fileType) {}
 
     public record Res(
             Long id,
@@ -24,7 +30,8 @@ public class DisputeDto {
             String description,
             DisputeStatus status,
             String filedByEmail,
-            LocalDateTime createdAt
+            LocalDateTime createdAt,
+            List<AttachmentRes> attachments
     ) {}
 
     public record AdminRes(
@@ -40,7 +47,8 @@ public class DisputeDto {
             String adminNote,
             String resolvedByEmail,
             LocalDateTime resolvedAt,
-            LocalDateTime createdAt
+            LocalDateTime createdAt,
+            List<AttachmentRes> attachments
     ) {}
 
     public record ResolveReq(

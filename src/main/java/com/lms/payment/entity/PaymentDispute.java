@@ -5,6 +5,7 @@ import com.lms.common.entity.BaseEntity;
 import com.lms.common.enums.DisputeStatus;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
+import java.util.List;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -54,4 +55,12 @@ public class PaymentDispute extends BaseEntity {
 
     @Column(name = "resolved_at")
     private LocalDateTime resolvedAt;
+
+    /** Bắt buộc tick điều khoản trước khi gửi (23/10/2026) — chỉ lưu "đã tick lúc nào", không
+     * snapshot nội dung điều khoản (trang /legal/refund là nguồn sự thật duy nhất). */
+    @Column(name = "terms_accepted_at", nullable = false)
+    private LocalDateTime termsAcceptedAt;
+
+    @OneToMany(mappedBy = "dispute", fetch = FetchType.LAZY)
+    private List<DisputeAttachment> attachments;
 }

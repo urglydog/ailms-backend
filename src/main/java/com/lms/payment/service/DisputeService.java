@@ -2,39 +2,72 @@ package com.lms.payment.service;
 
 import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
+import com.lms.auth.service.EmailService;
 import com.lms.common.enums.DisputeStatus;
 import com.lms.common.enums.PaymentStatus;
 import com.lms.common.enums.Role;
 import com.lms.common.exception.BusinessRuleViolationException;
+import com.lms.common.exception.InvalidRequestException;
 import com.lms.common.exception.ResourceNotFoundException;
 import com.lms.common.service.NotificationService;
+import com.lms.common.storage.StorageService;
 import com.lms.payment.dto.DisputeDto;
+import com.lms.payment.entity.DisputeAttachment;
 import com.lms.payment.entity.Payment;
 import com.lms.payment.entity.PaymentDispute;
+import com.lms.payment.repository.DisputeAttachmentRepository;
 import com.lms.payment.repository.PaymentDisputeRepository;
 import com.lms.payment.repository.PaymentRepository;
+import java.io.IOException;
+import java.io.InputStream;
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.apache.tika.Tika;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
  * Khiếu nại/hoàn tiền giao dịch (23/10/2026) — trước đây nút "Hoàn tiền"/"Khiếu nại" ở trang
- * Đối soát giao dịch của Admin chỉ là toast, không gọi API nào. Tối giản có chủ đích: không
- * tích hợp cổng thanh toán thật, Admin chỉ đánh dấu đã hoàn tiền (xem docblock
- * {@link PaymentDispute}).
+ * Đối soát giao dịch của Admin chỉ là toast, không gọi API nào. Mở rộng (cùng ngày, chuyên
+ * nghiệp hóa) — cho đính kèm minh chứng ảnh/video, bắt buộc xác nhận điều khoản, gửi email
+ * formal khi admin xử lý xong. Vẫn tối giản có chủ đích: không tích hợp cổng thanh toán thật,
+ * Admin chỉ đánh dấu đã hoàn tiền (xem docblock {@link PaymentDispute}).
  */
 @Service
 @RequiredArgsConstructor
 public class DisputeService {
 
+    /** MIME thật (Tika) -> đuôi file hợp lệ — cùng khuôn với LessonDocumentService, mở rộng thêm ảnh/video. */
+    private static final Map<String, String> ALLOWED_MIME_TO_EXTENSION = Map.of(
+            "image/jpeg", "jpg",
+            "image/png", "png",
+            "image/webp", "webp",
+            "video/mp4", "mp4",
+            "video/webm", "webm"
+    );
+
     private final PaymentDisputeRepository disputeRepository;
+    private final DisputeAttachmentRepository attachmentRepository;
     private final PaymentRepository paymentRepository;
     private final UserRepository userRepository;
     private final NotificationService notificationService;
+    private final EmailService emailService;
+    private final StorageService storageService;
+    private final Tika tika = new Tika();
+
+    @Value("${lms.rules.max-dispute-evidence-files}")
+    private int maxEvidenceFiles;
+
+    @Value("${lms.rules.max-dispute-evidence-size-mb}")
+    private long maxEvidenceSizeMb;
 
     @Transactional
-    public DisputeDto.Res fileDispute(String email, DisputeDto.FileReq req) {
+    public DisputeDto.Res fileDispute(String email, DisputeDto.FileReq req, List<MultipartFile> files) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("User", email));
         Payment payment = paymentRepository.findByTxnRef(req.paymentTxnRef())
@@ -50,6 +83,14 @@ public class DisputeService {
                 .ifPresent(d -> {
                     throw new BusinessRuleViolationException("Giao dịch này đang có khiếu nại chưa xử lý");
                 });
+        if (!req.termsAccepted()) {
+            throw new BusinessRuleViolationException("Bạn phải đồng ý với chính sách hoàn tiền trước khi gửi khiếu nại");
+        }
+
+        List<MultipartFile> evidenceFiles = files == null ? List.of() : files.stream().filter(f -> !f.isEmpty()).toList();
+        if (evidenceFiles.size() > maxEvidenceFiles) {
+            throw new BusinessRuleViolationException("Chỉ được đính kèm tối đa " + maxEvidenceFiles + " file minh chứng");
+        }
 
         PaymentDispute dispute = new PaymentDispute();
         dispute.setPayment(payment);
@@ -58,7 +99,12 @@ public class DisputeService {
         dispute.setDescription(req.description());
         dispute.setRefundBankAccount(req.refundBankAccount());
         dispute.setStatus(DisputeStatus.OPEN);
+        dispute.setTermsAcceptedAt(LocalDateTime.now());
         PaymentDispute saved = disputeRepository.save(dispute);
+
+        for (MultipartFile file : evidenceFiles) {
+            attachmentRepository.save(uploadEvidence(saved, file));
+        }
 
         userRepository.findByRole(Role.ADMIN).forEach(admin ->
                 notificationService.notify(
@@ -70,6 +116,39 @@ public class DisputeService {
                 ));
 
         return toRes(saved);
+    }
+
+    private DisputeAttachment uploadEvidence(PaymentDispute dispute, MultipartFile file) {
+        long maxBytes = maxEvidenceSizeMb * 1024 * 1024;
+        if (file.getSize() > maxBytes) {
+            throw new BusinessRuleViolationException("File minh chứng vượt quá " + maxEvidenceSizeMb + "MB");
+        }
+
+        String detectedMime;
+        try (InputStream sniff = file.getInputStream()) {
+            detectedMime = tika.detect(sniff);
+        } catch (IOException e) {
+            throw new InvalidRequestException("Không đọc được file minh chứng: " + e.getMessage());
+        }
+        String extension = ALLOWED_MIME_TO_EXTENSION.get(detectedMime);
+        if (extension == null) {
+            throw new InvalidRequestException("Định dạng minh chứng không được hỗ trợ (chỉ nhận ảnh jpg/png/webp hoặc video mp4/webm)");
+        }
+
+        String key = "dispute-evidence/" + dispute.getId() + "/" + UUID.randomUUID() + "." + extension;
+        String url;
+        try (InputStream in = file.getInputStream()) {
+            url = storageService.upload(key, in, file.getSize(), detectedMime);
+        } catch (IOException e) {
+            throw new InvalidRequestException("Không tải được minh chứng lên kho lưu trữ: " + e.getMessage());
+        }
+
+        DisputeAttachment attachment = new DisputeAttachment();
+        attachment.setDispute(dispute);
+        attachment.setFileUrl(url);
+        attachment.setFileType(extension);
+        attachment.setFileSize(file.getSize());
+        return attachment;
     }
 
     @Transactional(readOnly = true)
@@ -98,20 +177,42 @@ public class DisputeService {
         dispute.setStatus(req.status());
         dispute.setAdminNote(req.note());
         dispute.setResolvedBy(admin);
-        dispute.setResolvedAt(java.time.LocalDateTime.now());
+        dispute.setResolvedAt(LocalDateTime.now());
         PaymentDispute saved = disputeRepository.save(dispute);
+
+        boolean refunded = req.status() == DisputeStatus.RESOLVED_REFUNDED;
 
         notificationService.notify(
                 dispute.getFiledBy().getId(),
                 "DISPUTE_RESOLVED",
                 "Khiếu nại của bạn đã được xử lý",
-                req.status() == DisputeStatus.RESOLVED_REFUNDED
+                refunded
                         ? "Giao dịch " + dispute.getPayment().getTxnRef() + " đã được đánh dấu hoàn tiền."
                         : "Giao dịch " + dispute.getPayment().getTxnRef() + " không được chấp nhận hoàn tiền.",
                 "/payments"
         );
 
+        // (23/10/2026) — trước đây kết quả xử lý CHỈ báo qua notification trong app, user không
+        // nhận được gì qua email. 1 nút submit duy nhất của admin giờ tự gửi email formal luôn,
+        // không cần thao tác thủ công nào thêm.
+        emailService.sendDisputeResolutionEmail(
+                dispute.getFiledBy().getEmail(),
+                refunded,
+                dispute.getPayment().getTxnRef(),
+                dispute.getPayment().getCourse().getTitle(),
+                dispute.getPayment().getAmount(),
+                dispute.getReason(),
+                req.note(),
+                dispute.getRefundBankAccount()
+        );
+
         return toAdminRes(saved);
+    }
+
+    private List<DisputeDto.AttachmentRes> toAttachmentRes(PaymentDispute d) {
+        return attachmentRepository.findByDispute_IdOrderByIdAsc(d.getId()).stream()
+                .map(a -> new DisputeDto.AttachmentRes(a.getId(), a.getFileUrl(), a.getFileType()))
+                .toList();
     }
 
     private DisputeDto.Res toRes(PaymentDispute d) {
@@ -124,7 +225,8 @@ public class DisputeService {
                 d.getDescription(),
                 d.getStatus(),
                 d.getFiledBy().getEmail(),
-                d.getCreatedAt()
+                d.getCreatedAt(),
+                toAttachmentRes(d)
         );
     }
 
@@ -142,7 +244,8 @@ public class DisputeService {
                 d.getAdminNote(),
                 d.getResolvedBy() != null ? d.getResolvedBy().getEmail() : null,
                 d.getResolvedAt(),
-                d.getCreatedAt()
+                d.getCreatedAt(),
+                toAttachmentRes(d)
         );
     }
 }

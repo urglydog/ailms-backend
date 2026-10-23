@@ -7,9 +7,11 @@ import jakarta.validation.Valid;
 import java.security.Principal;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 /** Khiếu nại/hoàn tiền giao dịch — xem docblock {@code DisputeService}. */
 @RestController
@@ -19,10 +21,15 @@ public class DisputeController {
 
     private final DisputeService disputeService;
 
-    @PostMapping
+    /** multipart thay vì JSON thuần (23/10/2026) — cho đính kèm minh chứng ảnh/video ngay lúc
+     * gửi khiếu nại, field "files" optional (0-5 file). */
+    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
-    public ResponseEntity<DisputeDto.Res> file(Principal principal, @Valid @RequestBody DisputeDto.FileReq req) {
-        return ResponseEntity.ok(disputeService.fileDispute(principal.getName(), req));
+    public ResponseEntity<DisputeDto.Res> file(
+            Principal principal,
+            @Valid @RequestPart("request") DisputeDto.FileReq req,
+            @RequestPart(value = "files", required = false) List<MultipartFile> files) {
+        return ResponseEntity.ok(disputeService.fileDispute(principal.getName(), req, files));
     }
 
     @GetMapping("/mine")
