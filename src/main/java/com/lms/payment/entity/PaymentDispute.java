@@ -17,6 +17,14 @@ import lombok.Setter;
  * <p>Tối giản có chủ đích: không có bảng log/audit-trail riêng, chỉ 1 field {@code adminNote}
  * — đủ dùng cho v1, không tích hợp cổng thanh toán thật khi hoàn tiền (chỉ đánh dấu
  * {@link #status} = RESOLVED_REFUNDED + set {@link #resolvedAt}).
+ *
+ * <p>Reopen (26/10/2026) — thanh toán qua QR nên hệ thống không có sẵn thông tin tài khoản
+ * người mua, {@link #refundBankAccount} do chính user tự nhập lúc khiếu nại; Admin hoàn tiền
+ * thủ công ngoài hệ thống nên không có cách nào hệ thống tự xác nhận tiền đã tới tay user.
+ * Nếu user báo "chưa nhận được tiền" sau khi đã RESOLVED_REFUNDED, có thể mở lại đúng 1 lần
+ * trong vòng {@code lms.rules.dispute-reopen-window-days} ngày — xem DisputeService#reopen.
+ * {@link #previousAdminNote} snapshot lại {@link #adminNote} của lần resolve đầu trước khi bị
+ * ghi đè bởi lần resolve thứ 2, để không mất thông tin xử lý trước đó.
  */
 @Entity
 @Table(name = "payment_disputes")
@@ -63,4 +71,18 @@ public class PaymentDispute extends BaseEntity {
 
     @OneToMany(mappedBy = "dispute", fetch = FetchType.LAZY)
     private List<DisputeAttachment> attachments;
+
+    /** Lý do user nêu khi mở lại khiếu nại — null nếu chưa bao giờ reopen. */
+    @Column(name = "reopen_reason", columnDefinition = "TEXT")
+    private String reopenReason;
+
+    /** Thời điểm user bấm "chưa nhận được tiền". != null nghĩa là ĐÃ dùng hết lượt reopen
+     * (tối đa 1 lần theo thiết kế tối giản — không cần cột đếm riêng). */
+    @Column(name = "reopened_at")
+    private LocalDateTime reopenedAt;
+
+    /** Snapshot {@link #adminNote} của lần resolve đầu, chụp lại trước khi bị ghi đè bởi lần
+     * resolve thứ 2 (sau khi dispute bị reopen). */
+    @Column(name = "previous_admin_note", columnDefinition = "TEXT")
+    private String previousAdminNote;
 }

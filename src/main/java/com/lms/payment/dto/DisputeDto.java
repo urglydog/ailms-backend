@@ -31,7 +31,9 @@ public class DisputeDto {
             DisputeStatus status,
             String filedByEmail,
             LocalDateTime createdAt,
-            List<AttachmentRes> attachments
+            List<AttachmentRes> attachments,
+            LocalDateTime resolvedAt,
+            LocalDateTime reopenedAt
     ) {}
 
     public record AdminRes(
@@ -48,11 +50,19 @@ public class DisputeDto {
             String resolvedByEmail,
             LocalDateTime resolvedAt,
             LocalDateTime createdAt,
-            List<AttachmentRes> attachments
+            List<AttachmentRes> attachments,
+            String reopenReason,
+            LocalDateTime reopenedAt,
+            String previousAdminNote
     ) {}
 
     public record ResolveReq(
             @NotNull DisputeStatus status,
             @NotBlank String note
+    ) {}
+
+    /** Reopen (26/10/2026) — user báo "chưa nhận được tiền" sau khi đã RESOLVED_REFUNDED. */
+    public record ReopenReq(
+            @NotBlank String reopenReason
     ) {}
 }
