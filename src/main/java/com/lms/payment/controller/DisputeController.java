@@ -50,4 +50,12 @@ public class DisputeController {
             Principal principal, @PathVariable Long id, @Valid @RequestBody DisputeDto.ResolveReq req) {
         return ResponseEntity.ok(disputeService.resolve(principal.getName(), id, req));
     }
+
+    /** User báo "chưa nhận được tiền" sau khi admin đã đánh dấu hoàn tiền (26/10/2026). */
+    @PostMapping("/mine/{id}/reopen")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
+    public ResponseEntity<DisputeDto.Res> reopen(
+            Principal principal, @PathVariable Long id, @Valid @RequestBody DisputeDto.ReopenReq req) {
+        return ResponseEntity.ok(disputeService.reopen(principal.getName(), id, req));
+    }
 }

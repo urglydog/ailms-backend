@@ -148,6 +148,7 @@ lms:
     review-min-progress-percent: 20          # UpComming_Plan.md Sprint 2 mục 6 — AC "học >= 20-30% mới được review"
     max-dispute-evidence-files: 5            # Khiếu nại giao dịch (23/10/2026)
     max-dispute-evidence-size-mb: 20         # Khiếu nại giao dịch (23/10/2026)
+    dispute-reopen-window-days: 7            # Khiếu nại: hạn user báo "chưa nhận được tiền" sau khi admin resolve (26/10/2026)
 
   storage:
     b2-bucket-name: ${B2_BUCKET_NAME:}

@@ -66,6 +66,9 @@ public class DisputeService {
     @Value("${lms.rules.max-dispute-evidence-size-mb}")
     private long maxEvidenceSizeMb;
 
+    @Value("${lms.rules.dispute-reopen-window-days}")
+    private int reopenWindowDays;
+
     @Transactional
     public DisputeDto.Res fileDispute(String email, DisputeDto.FileReq req, List<MultipartFile> files) {
         User user = userRepository.findByEmail(email)
@@ -168,11 +171,16 @@ public class DisputeService {
     public DisputeDto.AdminRes resolve(String adminEmail, Long disputeId, DisputeDto.ResolveReq req) {
         PaymentDispute dispute = disputeRepository.findById(disputeId)
                 .orElseThrow(() -> new ResourceNotFoundException("PaymentDispute", disputeId));
-        if (dispute.getStatus() != DisputeStatus.OPEN) {
+        if (dispute.getStatus() != DisputeStatus.OPEN && dispute.getStatus() != DisputeStatus.REOPENED) {
             throw new BusinessRuleViolationException("Khiếu nại này đã được xử lý trước đó");
         }
         User admin = userRepository.findByEmail(adminEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("User", adminEmail));
+
+        // Resolve lần 2 (sau reopen) — giữ lại note của lần resolve đầu trước khi bị ghi đè.
+        if (dispute.getStatus() == DisputeStatus.REOPENED && dispute.getAdminNote() != null) {
+            dispute.setPreviousAdminNote(dispute.getAdminNote());
+        }
 
         dispute.setStatus(req.status());
         dispute.setAdminNote(req.note());
@@ -209,6 +217,49 @@ public class DisputeService {
         return toAdminRes(saved);
     }
 
+    /** User báo "chưa nhận được tiền" sau khi admin đã RESOLVED_REFUNDED (26/10/2026) — chỉ
+     * cho phép khi đã hoàn tiền (không áp dụng cho RESOLVED_REJECTED, đó là quyết định từ chối
+     * chứ không phải lỗi hoàn tiền), trong hạn {@link #reopenWindowDays} ngày, và chỉ 1 lần. */
+    @Transactional
+    public DisputeDto.Res reopen(String email, Long disputeId, DisputeDto.ReopenReq req) {
+        PaymentDispute dispute = disputeRepository.findById(disputeId)
+                .orElseThrow(() -> new ResourceNotFoundException("PaymentDispute", disputeId));
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User", email));
+
+        if (!dispute.getFiledBy().getId().equals(user.getId())) {
+            throw new BusinessRuleViolationException("Bạn chỉ có thể mở lại khiếu nại của chính mình");
+        }
+        if (dispute.getStatus() != DisputeStatus.RESOLVED_REFUNDED) {
+            throw new BusinessRuleViolationException("Chỉ có thể mở lại khiếu nại đã được đánh dấu hoàn tiền");
+        }
+        if (dispute.getReopenedAt() != null) {
+            throw new BusinessRuleViolationException("Khiếu nại này đã được mở lại trước đó, vui lòng liên hệ hỗ trợ trực tiếp");
+        }
+        if (dispute.getResolvedAt() == null
+                || dispute.getResolvedAt().plusDays(reopenWindowDays).isBefore(LocalDateTime.now())) {
+            throw new BusinessRuleViolationException(
+                    "Đã quá hạn " + reopenWindowDays + " ngày để mở lại khiếu nại này, vui lòng liên hệ hỗ trợ trực tiếp");
+        }
+
+        dispute.setStatus(DisputeStatus.REOPENED);
+        dispute.setReopenReason(req.reopenReason());
+        dispute.setReopenedAt(LocalDateTime.now());
+        PaymentDispute saved = disputeRepository.save(dispute);
+
+        userRepository.findByRole(Role.ADMIN).forEach(admin ->
+                notificationService.notify(
+                        admin.getId(),
+                        "DISPUTE_REOPENED",
+                        "⚠️ Khiếu nại bị MỞ LẠI — ưu tiên xử lý",
+                        user.getFullName() + " báo CHƯA NHẬN ĐƯỢC TIỀN cho giao dịch "
+                                + dispute.getPayment().getTxnRef() + " (đã đánh dấu hoàn tiền trước đó)",
+                        "/admin/transactions/disputes"
+                ));
+
+        return toRes(saved);
+    }
+
     private List<DisputeDto.AttachmentRes> toAttachmentRes(PaymentDispute d) {
         return attachmentRepository.findByDispute_IdOrderByIdAsc(d.getId()).stream()
                 .map(a -> new DisputeDto.AttachmentRes(a.getId(), a.getFileUrl(), a.getFileType()))
@@ -226,7 +277,9 @@ public class DisputeService {
                 d.getStatus(),
                 d.getFiledBy().getEmail(),
                 d.getCreatedAt(),
-                toAttachmentRes(d)
+                toAttachmentRes(d),
+                d.getResolvedAt(),
+                d.getReopenedAt()
         );
     }
 
@@ -245,7 +298,10 @@ public class DisputeService {
                 d.getResolvedBy() != null ? d.getResolvedBy().getEmail() : null,
                 d.getResolvedAt(),
                 d.getCreatedAt(),
-                toAttachmentRes(d)
+                toAttachmentRes(d),
+                d.getReopenReason(),
+                d.getReopenedAt(),
+                d.getPreviousAdminNote()
         );
     }
 }
