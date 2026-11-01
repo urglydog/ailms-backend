@@ -34,6 +34,9 @@ import org.springframework.core.annotation.Order;
  */
 @Configuration
 @Profile("dev")
+// Khi nạp dữ liệu demo thật (app.demo-seed.enabled=true) thì không seed lại các khóa ngẫu nhiên này.
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(
+        name = "app.demo-seed.enabled", havingValue = "false", matchIfMissing = true)
 public class DevExtraCourseSeeder {
 
     private static final Logger log = LoggerFactory.getLogger(DevExtraCourseSeeder.class);
