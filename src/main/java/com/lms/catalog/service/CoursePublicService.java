@@ -283,6 +283,7 @@ public class CoursePublicService {
                 course.getSlug(),
                 course.getDescription(),
                 course.getInstructor().getFullName(),
+                course.getInstructor().getAvatarUrl(),
                 course.getThumbnailUrl(),
                 course.getLevel(),
                 course.getPrice(),
