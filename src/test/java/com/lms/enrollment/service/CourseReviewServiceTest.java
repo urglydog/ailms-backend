@@ -41,6 +41,7 @@ class CourseReviewServiceTest {
     @Mock private CourseRepository courseRepository;
     @Mock private EnrollmentRepository enrollmentRepository;
     @Mock private UserRepository userRepository;
+    @Mock private com.lms.auth.security.AccountRestrictionService accountRestrictionService;
 
     @InjectMocks
     private CourseReviewService courseReviewService;

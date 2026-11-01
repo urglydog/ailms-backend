@@ -6,6 +6,7 @@ import com.lms.auth.dto.UserDto.UpdatePrivacyReq;
 import com.lms.auth.dto.UserDto.UserRes;
 import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
+import com.lms.auth.security.AccountLockRegistry;
 import com.lms.catalog.entity.Course;
 import com.lms.certificate.repository.CertificateRepository;
 import com.lms.certificate.service.CertificateService;
@@ -63,6 +64,9 @@ class UserServiceTest {
 
     @Mock
     private CertificateService certificateService;
+
+    @Mock
+    private AccountLockRegistry accountLockRegistry;
 
     @InjectMocks
     private UserService userService;

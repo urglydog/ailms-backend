@@ -1,9 +1,13 @@
 package com.lms.auth.controller;
 
+import com.lms.auth.dto.AuthResponseDto;
 import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
+import com.lms.auth.service.AuthService;
+import com.lms.common.exception.BusinessRuleViolationException;
 import com.lms.common.exception.ResourceNotFoundException;
 import com.lms.common.repository.AiUsageLogRepository;
+import com.lms.common.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -20,6 +24,53 @@ public class AdminController {
 
     private final AiUsageLogRepository aiUsageLogRepository;
     private final UserRepository userRepository;
+    private final AuthService authService;
+    private final NotificationService notificationService;
+
+    public record SpamFlagReq(boolean flagged, String reason) {}
+
+    /** Chỉ Admin thấy — không public, không tự động khóa toàn bộ tài khoản (độc lập với
+     * isActive). Cascade ĐỐI XỨNG 2 CHIỀU (23/10/2026, sửa theo phản hồi test thật — bản trước
+     * chỉ cascade lúc đánh dấu, lúc bỏ đánh dấu phải tự mở AI riêng): đánh dấu spam kéo theo
+     * khóa AI; bỏ đánh dấu spam kéo theo mở khóa AI luôn — xem docblock AccountRestrictionService. */
+    @PutMapping("/users/{userId}/spam-flag")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Transactional
+    public ResponseEntity<Void> setSpamFlag(@PathVariable Long userId, @RequestBody SpamFlagReq req) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", userId));
+        // (23/10/2026, sửa bug thật — phát hiện qua test: DB thực tế có user isActive=0 nhưng
+        // isAiLocked=0/isSpamFlagged=0, tức admin đã tự sửa 2 cờ con trong lúc tài khoản vẫn
+        // khóa, tạo trạng thái vô nghĩa). isActive là cấp cao nhất, 2 cờ con CHỈ có ý nghĩa khi
+        // tài khoản đang mở — bắt admin mở khóa tài khoản trước mới cho sửa riêng lẻ.
+        if (Boolean.FALSE.equals(user.getIsActive())) {
+            throw new BusinessRuleViolationException(
+                    "Tài khoản này đang bị khóa — mở khóa tài khoản trước khi sửa cờ spam riêng lẻ.");
+        }
+        user.setIsSpamFlagged(req.flagged());
+        user.setSpamFlagReason(req.flagged() ? req.reason() : null);
+        user.setIsAiLocked(req.flagged());
+        userRepository.save(user);
+        if (req.flagged()) {
+            notificationService.notify(userId, "SPAM_FLAGGED", "Tài khoản bị hạn chế",
+                    "Tài khoản của bạn đã bị đánh dấu vi phạm chính sách và bị khóa tính năng AI. Lý do: " + req.reason(),
+                    "/profile");
+        } else {
+            notificationService.notify(userId, "SPAM_UNFLAGGED", "Tài khoản đã được gỡ hạn chế",
+                    "Tài khoản của bạn đã được bỏ đánh dấu vi phạm và mở lại quyền dùng AI.", "/profile");
+        }
+        return ResponseEntity.ok().build();
+    }
+
+    /** Hỗ trợ user khi quên-mật-khẩu-nhưng-email/OTP không nhận được (23/10/2026) — sinh link
+     * reset token (khác hẳn OTP email hiện có) để Admin tự copy gửi thủ công qua kênh khác. */
+    @PostMapping("/users/{userId}/send-reset-link")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<AuthResponseDto.ResetLinkRes> sendResetLink(@PathVariable Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", userId));
+        return ResponseEntity.ok(authService.generateAdminResetLink(user.getEmail()));
+    }
 
     @GetMapping("/ai-usage")
     @PreAuthorize("hasRole('ADMIN')")
@@ -40,8 +91,16 @@ public class AdminController {
     public ResponseEntity<Void> toggleAiLock(@PathVariable Long userId, @RequestParam boolean isLocked) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User", userId));
+        if (Boolean.FALSE.equals(user.getIsActive())) {
+            throw new BusinessRuleViolationException(
+                    "Tài khoản này đang bị khóa — mở khóa tài khoản trước khi sửa cờ AI riêng lẻ.");
+        }
         user.setIsAiLocked(isLocked);
         userRepository.save(user);
+        if (isLocked) {
+            notificationService.notify(userId, "AI_LOCKED", "Tính năng AI đã bị khóa",
+                    "Tài khoản của bạn đã bị khóa tính năng AI do vi phạm chính sách sử dụng.", "/profile");
+        }
         return ResponseEntity.ok().build();
     }
 
@@ -73,6 +132,8 @@ public class AdminController {
         user.setAiLockProposedAt(null);
         user.setAiLockProposedReason(null);
         userRepository.save(user);
+        notificationService.notify(userId, "AI_LOCKED", "Tính năng AI đã bị khóa",
+                "Tài khoản của bạn đã bị khóa tính năng AI do vi phạm chính sách sử dụng.", "/profile");
         return ResponseEntity.ok().build();
     }
 

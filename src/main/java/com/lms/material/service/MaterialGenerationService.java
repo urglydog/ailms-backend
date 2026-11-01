@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
+import com.lms.auth.security.AccountRestrictionService;
 import com.lms.catalog.entity.Course;
 import com.lms.catalog.repository.CourseRepository;
 import com.lms.common.enums.GenStatus;
@@ -57,6 +58,7 @@ public class MaterialGenerationService {
     private final ObjectMapper objectMapper;
     private final com.lms.dubbing.service.TranscriptExtractionService transcriptExtractionService;
     private final com.lms.catalog.service.CourseActivityLogService activityLogService;
+    private final AccountRestrictionService accountRestrictionService;
 
     @Value("${lms.redis-keys.material-queue:lms:material:jobs}")
     private String queueKey;
@@ -97,9 +99,7 @@ public class MaterialGenerationService {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("User", email));
                 
-        if (Boolean.TRUE.equals(user.getIsAiLocked())) {
-            throw new AccessDeniedDomainException("Tai khoan cua ban da bi khoa tinh nang AI do vi pham chinh sach su dung.");
-        }
+        accountRestrictionService.requireAiAllowed(user);
         Course course = courseRepository.findById(req.courseId())
                 .orElseThrow(() -> new ResourceNotFoundException("Course", req.courseId()));
 

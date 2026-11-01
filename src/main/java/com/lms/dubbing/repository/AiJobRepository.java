@@ -24,4 +24,15 @@ public interface AiJobRepository extends JpaRepository<AiJob, Long> {
 
     /** UC45 — Admin giam sat hang doi TOAN HE THONG, phan trang theo trang thai. */
     Page<AiJob> findByStatusIn(Collection<JobStatus> statuses, Pageable pageable);
+
+    /** UC45 (23/10/2026, mo rong) — tim theo ten bai hoc/ngon ngu dich, ket hop optional status,
+     * phan trang server-side thay vi chi loc theo status nhu truoc. */
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT j FROM AiJob j WHERE (:status IS NULL OR j.status = :status) "
+            + "AND (:search IS NULL OR LOWER(j.lesson.title) LIKE LOWER(CONCAT('%', :search, '%')) "
+            + "OR LOWER(j.targetLanguage) LIKE LOWER(CONCAT('%', :search, '%')))")
+    Page<AiJob> search(
+            @org.springframework.data.repository.query.Param("status") JobStatus status,
+            @org.springframework.data.repository.query.Param("search") String search,
+            Pageable pageable);
 }

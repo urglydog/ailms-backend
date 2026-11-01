@@ -93,4 +93,12 @@ public class User extends BaseEntity {
      * UPDATE ... SET total_xp = total_xp + :amount atomic, không load-modify-save). */
     @Column(name = "total_xp", nullable = false)
     private Long totalXp = 0L;
+
+    /** Admin đánh dấu tài khoản spam/scam (23/10/2026) — chỉ Admin nhìn thấy, không public,
+     * không tự động khóa tài khoản (tách biệt với {@link #isActive}). */
+    @Column(name = "is_spam_flagged", nullable = false)
+    private Boolean isSpamFlagged = false;
+
+    @Column(name = "spam_flag_reason", length = 500)
+    private String spamFlagReason;
 }

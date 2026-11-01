@@ -2,6 +2,7 @@ package com.lms.material.service;
 
 import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
+import com.lms.auth.security.AccountRestrictionService;
 import com.lms.auth.service.XpService;
 import com.lms.catalog.entity.Course;
 import com.lms.catalog.repository.CourseRepository;
@@ -35,6 +36,7 @@ public class QuizService {
     private final QuizAttemptRepository quizAttemptRepository;
     private final QuizAnswerRepository quizAnswerRepository;
     private final UserRepository userRepository;
+    private final AccountRestrictionService accountRestrictionService;
     private final CourseRepository courseRepository;
     private final EnrollmentRepository enrollmentRepository;
     private final org.springframework.web.client.RestTemplate restTemplate;
@@ -957,10 +959,8 @@ public class QuizService {
     public QuizAttemptDto.ExplainRes explainWrongAnswer(String studentEmail, QuizAttemptDto.ExplainReq req) {
         User user = userRepository.findByEmail(studentEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("User", studentEmail));
-        if (Boolean.TRUE.equals(user.getIsAiLocked())) {
-            throw new AccessDeniedDomainException("Tai khoan cua ban da bi khoa tinh nang AI do vi pham chinh sach su dung.");
-        }
-        
+        accountRestrictionService.requireAiAllowed(user);
+
         QuizQuestion question = quizQuestionRepository.findById(req.questionId())
                 .orElseThrow(() -> new ResourceNotFoundException("QuizQuestion", req.questionId()));
                 

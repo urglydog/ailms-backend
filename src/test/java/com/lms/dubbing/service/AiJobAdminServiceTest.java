@@ -20,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-/** UC45 — danh sách job cho Admin, có/không lọc theo trạng thái. */
+/** UC45 — danh sách job cho Admin, có/không lọc theo trạng thái và tìm kiếm (23/10/2026, mở rộng). */
 @ExtendWith(MockitoExtension.class)
 class AiJobAdminServiceTest {
 
@@ -47,12 +47,12 @@ class AiJobAdminServiceTest {
     }
 
     @Test
-    void getList_withoutStatusFilter_callsFindAll() {
+    void getList_withoutFilters_callsSearchWithNulls() {
         Pageable pageable = PageRequest.of(0, 20);
         Page<AiJob> page = new PageImpl<>(List.of(job(1L, JobStatus.PROCESSING)));
-        when(aiJobRepository.findAll(pageable)).thenReturn(page);
+        when(aiJobRepository.search(null, null, pageable)).thenReturn(page);
 
-        Page<Res> result = aiJobAdminService.getList(null, pageable);
+        Page<Res> result = aiJobAdminService.getList(null, null, pageable);
 
         assertThat(result.getContent()).hasSize(1);
         Res res = result.getContent().get(0);
@@ -63,15 +63,38 @@ class AiJobAdminServiceTest {
     }
 
     @Test
-    void getList_withStatusFilter_callsFindByStatusIn() {
+    void getList_withStatusFilter_passesStatusThrough() {
         Pageable pageable = PageRequest.of(0, 20);
         Page<AiJob> page = new PageImpl<>(List.of(job(2L, JobStatus.FAILED)));
-        when(aiJobRepository.findByStatusIn(List.of(JobStatus.FAILED), pageable)).thenReturn(page);
+        when(aiJobRepository.search(JobStatus.FAILED, null, pageable)).thenReturn(page);
 
-        Page<Res> result = aiJobAdminService.getList(JobStatus.FAILED, pageable);
+        Page<Res> result = aiJobAdminService.getList(JobStatus.FAILED, null, pageable);
 
         assertThat(result.getContent()).hasSize(1);
         assertThat(result.getContent().get(0).status()).isEqualTo("FAILED");
-        verify(aiJobRepository).findByStatusIn(List.of(JobStatus.FAILED), pageable);
+        verify(aiJobRepository).search(JobStatus.FAILED, null, pageable);
+    }
+
+    @Test
+    void getList_withBlankSearch_normalizesToNull() {
+        Pageable pageable = PageRequest.of(0, 20);
+        Page<AiJob> page = new PageImpl<>(List.of());
+        when(aiJobRepository.search(null, null, pageable)).thenReturn(page);
+
+        aiJobAdminService.getList(null, "   ", pageable);
+
+        verify(aiJobRepository).search(null, null, pageable);
+    }
+
+    @Test
+    void getList_withSearch_trimsAndPassesThrough() {
+        Pageable pageable = PageRequest.of(0, 20);
+        Page<AiJob> page = new PageImpl<>(List.of(job(3L, JobStatus.COMPLETED)));
+        when(aiJobRepository.search(null, "Bài 1", pageable)).thenReturn(page);
+
+        Page<Res> result = aiJobAdminService.getList(null, " Bài 1 ", pageable);
+
+        assertThat(result.getContent()).hasSize(1);
+        verify(aiJobRepository).search(null, "Bài 1", pageable);
     }
 }

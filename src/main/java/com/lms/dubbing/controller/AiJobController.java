@@ -27,8 +27,9 @@ public class AiJobController {
     @GetMapping
     public ResponseEntity<Page<Res>> getList(
             @RequestParam(required = false) JobStatus status,
+            @RequestParam(required = false) String search,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
-        return ResponseEntity.ok(aiJobAdminService.getList(status, pageable));
+        return ResponseEntity.ok(aiJobAdminService.getList(status, search, pageable));
     }
 
     @PostMapping("/{id}/retry")

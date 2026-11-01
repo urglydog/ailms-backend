@@ -8,6 +8,7 @@ import com.lms.auth.dto.UserDto.UpdateUserReq;
 import com.lms.auth.dto.UserDto.UserRes;
 import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
+import com.lms.auth.security.AccountLockRegistry;
 import com.lms.catalog.entity.Course;
 import com.lms.certificate.repository.CertificateRepository;
 import com.lms.certificate.service.CertificateService;
@@ -46,6 +47,7 @@ public class UserService {
     private final CourseReviewRepository courseReviewRepository;
     private final CertificateRepository certificateRepository;
     private final CertificateService certificateService;
+    private final AccountLockRegistry accountLockRegistry;
     private final Tika tika = new Tika();
 
     @Transactional(readOnly = true)
@@ -77,10 +79,30 @@ public class UserService {
         user.setFullName(req.fullName());
         user.setRole(req.role());
         user.setIsActive(req.isActive());
-        
+
         // Nếu user bị khóa (isActive = false), refresh token hiện tại của user sẽ không thể
-        // dùng để xin cấp lại token mới nhờ cơ chế chặn ở AuthService.refreshToken
-        
+        // dùng để xin cấp lại token mới nhờ cơ chế chặn ở AuthService.refreshToken.
+        // (23/10/2026, sửa bug thật) — riêng access token CŨ vẫn sống tới khi hết hạn tự nhiên
+        // nếu không chủ động thu hồi ở đây, xem docblock AccountLockRegistry.
+        //
+        // Cascade ĐỐI XỨNG 2 CHIỀU (23/10/2026, sửa theo phản hồi test thật — bản trước chỉ
+        // cascade 1 chiều lúc khóa, lúc mở khóa phải tự gỡ AI/spam thủ công riêng, admin phản
+        // ánh "chưa đồng bộ"): khóa tài khoản → tự khóa AI + đánh dấu spam; mở khóa tài khoản →
+        // tự mở AI + bỏ đánh dấu spam luôn, xem docblock AccountRestrictionService.
+        if (req.isActive()) {
+            accountLockRegistry.unlock(id);
+            user.setIsAiLocked(false);
+            user.setIsSpamFlagged(false);
+            user.setSpamFlagReason(null);
+        } else {
+            accountLockRegistry.lock(id);
+            user.setIsAiLocked(true);
+            if (!Boolean.TRUE.equals(user.getIsSpamFlagged())) {
+                user.setSpamFlagReason("Tự động theo khóa tài khoản");
+            }
+            user.setIsSpamFlagged(true);
+        }
+
         return mapToRes(userRepository.save(user));
     }
 
@@ -92,6 +114,7 @@ public class UserService {
         // Không xóa cứng để giữ toàn vẹn khóa ngoại (khóa học, hóa đơn, v.v)
         // Chỉ khóa tài khoản (Soft Delete / Deactivate)
         user.setIsActive(false);
+        accountLockRegistry.lock(id);
         userRepository.save(user);
     }
 
@@ -270,7 +293,10 @@ public class UserService {
                 user.getCreatedAt(),
                 user.getUpdatedAt(),
                 user.getCoursesPublic(),
-                user.getWishlistPublic()
+                user.getWishlistPublic(),
+                user.getIsAiLocked(),
+                user.getIsSpamFlagged(),
+                user.getSpamFlagReason()
         );
     }
 }

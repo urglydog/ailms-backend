@@ -143,6 +143,30 @@ bên web KHÔNG áp dụng cho mobile — mobile chưa có chatbot AI Discovery 
 
 - **Nộp bài thi bị đứng hình trên Safari iOS** (`fe/app/(student)/exam/[quizId]/page.tsx`) — học viên phải tự bấm Dynamic Island tắt ghi hình rồi back lại mới nộp được bài, không tự động như desktop. Đã thử vá 1 lần (06/10/2026, dừng camera ngay trước khi đợi recorder.stop()) nhưng gây regression mất luôn phát hiện khuôn mặt — đã revert về bản cũ (commit `8bc7bab` trên `fe`). **Quyết định: KHÔNG vá tiếp trên web** — sẽ tự hết khi học viên chuyển sang làm bài thi trên app native (dùng `expo-camera` thật, không qua giới hạn WebKit `getUserMedia`/`MediaRecorder`), xem epic Mobile Native App ở trên, Tuần 5-7.
 
+### Audit be/fe/ai-worker (14/10/2026, read-only, trước khi dồn hẳn sang mobile)
+
+**Ưu tiên cao — nên fix trước khi rời sang mobile (liên quan tiền/dữ liệu thật):**
+1. **FE: `npx tsc --noEmit` đang FAIL thật** — thiếu module `recharts` (dùng ở `app/admin/ai-analytics`, `app/instructor/revenue/list`, `retention`, `reviews`) và `next-intl` (dùng ở `Footer`/`Header`/`LanguageModal`/`LocaleProvider`). Lỗi build thật, không phải nợ kỹ thuật vặt.
+2. **BE `payment/service/PaymentService.java:465-467`** — catch rỗng thực chất (`catch (Exception e) { e.printStackTrace(); }`) khi build hash VNPAY; nếu `URLEncoder.encode` lỗi, flow vẫn tiếp tục tạo URL thanh toán với checksum sai mà không throw/log chuẩn — lỗi thanh toán âm thầm.
+3. **BE `enrollment/service/CourseReviewService.java:53-54`** — bug nghiệp vụ tự ghi nhận trong code ("BUG THẬT 03/10/2026"): chưa enforce yêu cầu học viên phải học ≥20-30% khóa học mới được review, dù mục này từng đánh dấu "ĐÃ HOÀN THÀNH". Rủi ro review giả khi chưa học.
+
+**Mức trung — ghi lại để theo dõi, chưa gấp:**
+- `chat/controller/DiscoveryController.java:78` — TODO rõ ràng: chưa triển khai quota Redis cho BR-DISCOVERY-01 (Guest 15/IP/giờ, Student 30/ngày), hiện không giới hạn gì.
+- `material/service/MaterialGenerationService.java:354-356, 494-496` — 2 catch `JsonProcessingException` bị bỏ qua lặng lẽ khi parse `customLessonIds`/scope.
+- FE `components/auth/RegisterForm.tsx:96-144`, `LoginForm.tsx:69` — vẫn đọc `error.response?.data?.detail` kiểu axios, chưa đồng bộ với `ApiError`/`.message` như checkout đã fix.
+- FE `app/(student)/exam/[quizId]/page.tsx:533-545` — heuristic phát hiện DevTools qua `outerWidth/innerWidth` vẫn còn, tự ghi chú false-positive trên mobile nhưng chưa xử lý triệt để.
+- ai-worker `app/config.py:58` — giá trị cấu hình tạm (0.7) cho convert DOCX→Markdown, TODO tham chiếu `business-rules.md` chưa chốt.
+
+**Mức thấp:**
+- FE: literal Tailwind color (`text-gray-*`, `bg-gray-*`, `bg-red-600`, `bg-cyan-600`...) rải rác ở `admin/`, `instructor/live`, `instructor/communication`, trang exam — vi phạm rule design token.
+- FE `app/instructor/live/[sessionId]/page.tsx:90` — chưa có flow upload ảnh riêng cho live session, đang dùng tạm ảnh bìa khóa học.
+- ai-worker `app/api/discovery.py:84` — `_fetch_category_slugs()` tự mở `httpx.AsyncClient()` riêng cho API public `/api/v1/categories` thay vì dùng `backend_client` chung (không phải bug header vì là API public, chỉ là không tận dụng pool/retry chung).
+- BE: `mvn clean compile`/`mvn clean verify` **chưa được chạy xác nhận thật** trong đợt audit này (môi trường agent không có `mvn`) — cần tự chạy thủ công trước khi coi BE là sạch.
+
+**Đã xác nhận SẠCH/ĐÃ FIX (không cần làm gì):** `InternalInstructorAiService.getInstructorDashboard` (đã dùng `DashboardService` thật); header callback nội bộ ai-worker (đã dùng đúng `X-Internal-Token` qua `backend_client`); MediaRecorder codec webm (đã có `isTypeSupported`); "Event loop is closed" (đã mitigated bằng `aclose()` trong `finally` ở mọi task Celery — **nhớ áp dụng lại pattern này nếu thêm task Celery mới**); dubbing pipeline không còn import chết whisperx/demucs/pyannote.
+
+Chi tiết đầy đủ: `~/LMS_Audit_BeFeAiWorker.md` (ngoài source, không commit).
+
 ---
 
 Tip bảo mật data: check request nào thường xuyên hoặc truy xuất lượng dữ liệu lớn => AI cảnh báo admin

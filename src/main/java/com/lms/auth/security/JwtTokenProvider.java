@@ -86,6 +86,17 @@ public class JwtTokenProvider {
         return new UsernamePasswordAuthenticationToken(principal, token, authorities);
     }
 
+    /** Dùng bởi {@link JwtAuthenticationFilter} để check {@link AccountLockRegistry} — tách riêng
+     * khỏi {@link #getAuthentication} vì chỉ cần claim "id", không cần dựng cả Authentication. */
+    public Long getUserId(String token) {
+        Claims claims = Jwts.parser()
+                .verifyWith(key)
+                .build()
+                .parseSignedClaims(token)
+                .getPayload();
+        return claims.get("id", Long.class);
+    }
+
     public boolean validateToken(String authToken) {
         try {
             Jwts.parser().verifyWith(key).build().parseSignedClaims(authToken);

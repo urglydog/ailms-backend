@@ -3,6 +3,7 @@ package com.lms.chat.service;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
+import com.lms.auth.security.AccountRestrictionService;
 import com.lms.catalog.entity.Course;
 import com.lms.catalog.entity.Lesson;
 import com.lms.catalog.repository.CourseRepository;
@@ -96,6 +97,7 @@ public class TutorService {
     private final ChatMessageRepository chatMessageRepository;
     private final ChatMessageAttachmentRepository chatMessageAttachmentRepository;
     private final StorageService storageService;
+    private final AccountRestrictionService accountRestrictionService;
     private final RestTemplate restTemplate;
     private final AiWorkerConfig aiWorkerConfig;
     private final Tika tika = new Tika();
@@ -109,6 +111,7 @@ public class TutorService {
     @Transactional
     public AskRes ask(String email, Long courseId, AskReq req) {
         User user = requireAccess(email, courseId);
+        accountRestrictionService.requireAiAllowed(user);
         Course course = courseRepository.findById(courseId)
                 .orElseThrow(() -> new ResourceNotFoundException("Course", courseId));
         Lesson currentLesson = requireLessonInCourse(req.currentLessonId(), courseId);

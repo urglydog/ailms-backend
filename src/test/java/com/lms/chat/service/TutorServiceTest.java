@@ -78,6 +78,7 @@ class TutorServiceTest {
     @Mock private StorageService storageService;
     @Mock private org.springframework.web.client.RestTemplate restTemplate;
     @Mock private AiWorkerConfig aiWorkerConfig;
+    @Mock private com.lms.auth.security.AccountRestrictionService accountRestrictionService;
 
     @InjectMocks
     private TutorService tutorService;
