@@ -40,6 +40,8 @@ public class CoursePublicDto {
             String slug,
             String description,
             String instructorName,
+            /** Ảnh đại diện giảng viên (null nếu chưa đặt) — FE hiện chữ cái đầu thay thế. */
+            String instructorAvatarUrl,
             String thumbnailUrl,
             String level,
             BigDecimal price,
