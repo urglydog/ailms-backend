@@ -2,6 +2,8 @@ package com.lms.auth.service;
 
 import jakarta.mail.internet.MimeMessage;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -61,6 +63,47 @@ public class EmailService {
                 + "<p style=\"font-size:13px;color:#64748B;text-align:center;margin:0;\">Mã có hiệu lực trong <strong>5 phút</strong>. Vui lòng không chia sẻ mã này cho bất kỳ ai.</p>"
                 + "<hr style=\"border:none;border-top:1px solid #E2E8F0;margin:24px 0;\">"
                 + "<p style=\"font-size:12px;color:#94A3B8;text-align:center;margin:0;\">Nếu bạn không yêu cầu mã này, hãy bỏ qua email này.</p>"
+                + "</div>";
+    }
+
+    /** Email link đặt lại mật khẩu do Admin tạo (05/11/2026) — best-effort giống
+     * {@link #sendDisputeResolutionEmail}: lỗi gửi mail KHÔNG throw, Admin vẫn thấy link ở UI để
+     * gửi tay làm phương án dự phòng (xem {@code AuthService.generateAdminResetLink}). */
+    public void sendPasswordResetLinkEmail(String toEmail, String resetLink, LocalDateTime expiresAt) {
+        try {
+            String expiresText = expiresAt.format(DateTimeFormatter.ofPattern("HH:mm dd/MM/yyyy"));
+            MimeMessage mimeMessage = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
+            helper.setFrom(fromAddress);
+            helper.setTo(toEmail);
+            helper.setSubject("Đặt lại mật khẩu - LinguaLearn");
+            helper.setText(
+                    "Quản trị viên đã tạo link đặt lại mật khẩu cho tài khoản của bạn.\n\n"
+                            + "Đặt lại mật khẩu: " + resetLink + "\n\n"
+                            + "Link có hiệu lực đến " + expiresText + " và chỉ dùng được 1 lần. "
+                            + "Nếu bạn không yêu cầu, hãy bỏ qua email này.",
+                    buildPasswordResetLinkHtml(resetLink, expiresText));
+
+            mailSender.send(mimeMessage);
+            log.info("Đã gửi link đặt lại mật khẩu đến email: {}", toEmail);
+        } catch (Exception e) {
+            log.error("Lỗi khi gửi link đặt lại mật khẩu đến {}: {}", toEmail, e.getMessage());
+        }
+    }
+
+    private String buildPasswordResetLinkHtml(String resetLink, String expiresText) {
+        return "<div style=\"font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;background:#ffffff;\">"
+                + "<div style=\"text-align:center;margin-bottom:24px;\">"
+                + "<span style=\"display:inline-block;width:36px;height:36px;background:#1A6FE0;border-radius:10px;color:#ffffff;font-weight:700;font-size:20px;line-height:36px;\">L</span>"
+                + "<div style=\"margin-top:8px;font-size:18px;font-weight:700;color:#0F172A;\">LinguaLearn</div>"
+                + "</div>"
+                + "<h2 style=\"font-size:16px;color:#0F172A;text-align:center;margin:0 0 8px;\">Đặt lại mật khẩu</h2>"
+                + "<p style=\"font-size:14px;color:#64748B;text-align:center;margin:0 0 24px;\">Quản trị viên đã tạo link đặt lại mật khẩu cho tài khoản của bạn.</p>"
+                + "<p style=\"text-align:center;margin:0 0 24px;\"><a href=\"" + resetLink + "\" style=\"display:inline-block;padding:12px 24px;background:#1A6FE0;color:#ffffff;border-radius:10px;font-size:14px;font-weight:700;text-decoration:none;\">Đặt lại mật khẩu</a></p>"
+                + "<p style=\"font-size:13px;color:#64748B;text-align:center;margin:0;\">Link có hiệu lực đến <strong>" + expiresText + "</strong> và chỉ dùng được 1 lần.</p>"
+                + "<hr style=\"border:none;border-top:1px solid #E2E8F0;margin:24px 0;\">"
+                + "<p style=\"font-size:12px;color:#94A3B8;text-align:center;margin:0;\">Nếu nút không bấm được, sao chép link: <br><span style=\"word-break:break-all;\">" + resetLink + "</span></p>"
+                + "<p style=\"font-size:12px;color:#94A3B8;text-align:center;margin:8px 0 0;\">Nếu bạn không yêu cầu, hãy bỏ qua email này.</p>"
                 + "</div>";
     }
 

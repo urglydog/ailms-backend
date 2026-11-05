@@ -363,8 +363,9 @@ public class AuthService {
 
     /**
      * Admin hỗ trợ user khi quên-mật-khẩu-nhưng-email/OTP không tới được (23/10/2026) — khác
-     * hẳn {@link #forgotPassword}: sinh 1 token ngẫu nhiên (không gửi email), Admin tự copy link
-     * trả về và gửi thủ công cho user qua kênh khác (chat hỗ trợ, Zalo...). TTL 30 phút.
+     * hẳn {@link #forgotPassword}: sinh 1 token ngẫu nhiên thay vì OTP. Từ 05/11/2026 link được
+     * tự động gửi qua email cho user; link vẫn trả về cho Admin làm dự phòng (mail lỗi/vào spam).
+     * TTL 30 phút.
      */
     public ResetLinkRes generateAdminResetLink(String email) {
         userRepository.findByEmail(email).orElseThrow(() -> new ResourceNotFoundException("User", email));
@@ -374,10 +375,12 @@ public class AuthService {
         Duration ttl = Duration.ofMinutes(30);
         redisTemplate.opsForValue().set(redisKey, email, ttl);
 
-        return new ResetLinkRes(
-                frontendBaseUrl + "/reset-password?token=" + token,
-                java.time.LocalDateTime.now().plus(ttl)
-        );
+        String resetLink = frontendBaseUrl + "/reset-password?token=" + token;
+        java.time.LocalDateTime expiresAt = java.time.LocalDateTime.now().plus(ttl);
+        // Best-effort (05/11/2026): lỗi gửi mail không throw — Admin vẫn thấy link ở UI làm dự phòng.
+        emailService.sendPasswordResetLinkEmail(email, resetLink, expiresAt);
+
+        return new ResetLinkRes(resetLink, expiresAt);
     }
 
     /** Consume token sinh bởi {@link #generateAdminResetLink} — không auto-login, user tự đăng nhập lại. */
