@@ -20,11 +20,16 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Objects;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.apache.tika.Tika;
 import org.springframework.beans.factory.annotation.Value;
@@ -61,6 +66,7 @@ public class SupportTicketService {
     private final EmailService emailService;
     private final StorageService storageService;
     private final StringRedisTemplate redisTemplate;
+    private final ObjectMapper objectMapper;
     private final Tika tika = new Tika();
 
     @Value("${lms.rules.max-support-ticket-files}")
@@ -75,8 +81,11 @@ public class SupportTicketService {
     @Value("${lms.rules.support-ticket-email-limit-per-day}")
     private int emailLimitPerDay;
 
-    public static String codeOf(Long id) {
-        return String.format("TKT-%06d", id);
+    private static final DateTimeFormatter CODE_DATE = DateTimeFormatter.ofPattern("yyMMdd");
+
+    /** Mã hiển thị SUP-{yyMMdd}-{NHÓM}-{id 5 số}: ngày tạo + nhóm vấn đề + số thứ tự — đọc mã là biết ticket thuộc loại gì, tạo khi nào. */
+    static String buildCode(SupportTicket t, LocalDateTime createdAt) {
+        return "SUP-" + createdAt.format(CODE_DATE) + "-" + t.getCategory().getCode() + "-" + String.format("%05d", t.getId());
     }
 
     @Transactional
@@ -96,30 +105,35 @@ public class SupportTicketService {
                 "Email này đã gửi quá nhiều yêu cầu hôm nay, vui lòng thử lại vào ngày mai");
 
         SupportTicket ticket = new SupportTicket();
+        // `code` NOT NULL + UNIQUE nhưng mã thật cần id (sinh sau INSERT) — tạm mã ngẫu nhiên, đổi ngay trong cùng transaction.
+        ticket.setCode("TMP-" + UUID.randomUUID().toString().replace("-", ""));
         ticket.setEmail(email);
         ticket.setCategory(req.category());
         ticket.setSubject(req.subject().trim());
         ticket.setMessage(req.message().trim());
         ticket.setStatus(SupportTicketStatus.OPEN);
         SupportTicket saved = ticketRepository.save(ticket);
+        LocalDateTime createdAt = saved.getCreatedAt() != null ? saved.getCreatedAt() : LocalDateTime.now();
+        saved.setCode(buildCode(saved, createdAt));
+        saved = ticketRepository.save(saved);
 
         for (MultipartFile file : evidence) {
             attachmentRepository.save(upload(saved, file));
         }
 
-        String code = codeOf(saved.getId());
+        String code = saved.getCode();
+        SupportTicket created = saved;
         userRepository.findByRole(Role.ADMIN).forEach(admin ->
                 notificationService.notify(
                         admin.getId(),
                         "SUPPORT_TICKET",
                         "Yêu cầu hỗ trợ mới " + code,
-                        saved.getSubject(),
+                        created.getSubject(),
                         "/admin/support"
                 ));
 
         emailService.sendSupportTicketReceivedEmail(
-                email, recipientName(email), code, categoryText(saved.getCategory()), saved.getSubject(), saved.getMessage(),
-                saved.getCreatedAt() != null ? saved.getCreatedAt() : LocalDateTime.now());
+                email, recipientName(email), code, categoryText(saved.getCategory()), saved.getSubject(), saved.getMessage(), createdAt);
         return new SupportDto.CreateRes(code);
     }
 
@@ -193,19 +207,20 @@ public class SupportTicketService {
         User admin = userRepository.findByEmail(adminEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("User", adminEmail));
 
-        String reply = req.reply() == null ? "" : req.reply().trim();
-        List<String> steps = cleanSteps(req.steps());
-        if (req.status() == SupportTicketStatus.RESOLVED && reply.isEmpty() && ticket.getAdminReply() == null) {
-            throw new BusinessRuleViolationException("Vui lòng nhập phản hồi cho người dùng trước khi đánh dấu đã xử lý");
-        }
-        if (reply.isEmpty() && !steps.isEmpty()) {
-            throw new BusinessRuleViolationException("Vui lòng nhập nội dung phản hồi kèm theo các bước hướng dẫn");
+        SupportDto.EmailContent cleaned = cleanContent(req.content());
+        boolean hasReply = cleaned != null;
+        if (req.status() == SupportTicketStatus.RESOLVED && !hasReply
+                && ticket.getAdminContent() == null && ticket.getAdminReply() == null) {
+            throw new BusinessRuleViolationException("Vui lòng soạn phản hồi cho người dùng trước khi đánh dấu đã xử lý");
         }
 
         ticket.setStatus(req.status());
-        if (!reply.isEmpty()) {
-            ticket.setAdminReply(reply);
-            ticket.setAdminSteps(steps.isEmpty() ? null : String.join("\n", steps));
+        EmailService.SupportReplyContent resolved = null;
+        if (hasReply) {
+            resolved = resolveContent(cleaned, ticket, nameFor(ticket.getEmail(), userRepository.findByEmail(ticket.getEmail())),
+                    admin.getFullName() != null && !admin.getFullName().isBlank() ? admin.getFullName() : "Quản trị viên");
+            ticket.setAdminContent(writeJson(cleaned));
+            ticket.setAdminReply(flatten(resolved));
         }
         if (req.status() == SupportTicketStatus.RESOLVED) {
             ticket.setResolvedBy(admin);
@@ -216,27 +231,123 @@ public class SupportTicketService {
         }
         SupportTicket saved = ticketRepository.save(ticket);
 
-        // Chỉ gửi mail khi Admin thực sự nhập phản hồi mới — đổi trạng thái không kèm lời nhắn thì không làm phiền người dùng.
-        if (!reply.isEmpty()) {
+        // Chỉ gửi mail khi Admin thực sự soạn phản hồi — chỉ đổi trạng thái thì không làm phiền người dùng.
+        if (resolved != null) {
+            boolean includeOriginal = cleaned.includeOriginal() == null || cleaned.includeOriginal();
             emailService.sendSupportTicketReplyEmail(
-                    saved.getEmail(), recipientName(saved.getEmail()), codeOf(saved.getId()), categoryText(saved.getCategory()),
-                    saved.getSubject(), statusText(saved.getStatus()), reply, steps,
-                    admin.getFullName() != null && !admin.getFullName().isBlank() ? admin.getFullName() : "Quản trị viên",
-                    saved.getMessage());
+                    saved.getEmail(), saved.getCode(), categoryText(saved.getCategory()), saved.getSubject(),
+                    statusText(saved.getStatus()), includeOriginal ? saved.getMessage() : null, resolved);
         }
         return toAdminRes(saved);
     }
 
-    /** Bỏ bước rỗng, ép mỗi bước về 1 dòng (xuống dòng trong 1 bước sẽ phá format danh sách đánh số trong email). */
-    private static List<String> cleanSteps(List<String> raw) {
-        if (raw == null) {
-            return List.of();
+    /** Trả null nếu Admin không soạn gì (không có mục nào có nội dung). Bỏ mục rỗng, ép mỗi dòng danh sách về 1 dòng
+     * (xuống dòng trong 1 dòng sẽ phá format danh sách đánh số trong email). */
+    private static SupportDto.EmailContent cleanContent(SupportDto.EmailContent in) {
+        if (in == null || in.sections() == null) {
+            return null;
         }
-        return raw.stream()
-                .filter(x -> x != null)
-                .map(x -> x.replaceAll("\\s*[\\r\\n]+\\s*", " ").trim())
-                .filter(x -> !x.isEmpty())
+        List<SupportDto.Section> sections = new ArrayList<>();
+        for (SupportDto.Section sec : in.sections()) {
+            String title = sec.title() == null ? "" : sec.title().trim();
+            if (sec.type() == SupportDto.SectionType.LIST) {
+                List<String> items = sec.items() == null ? List.of() : sec.items().stream()
+                        .filter(Objects::nonNull)
+                        .map(x -> x.replaceAll("\\s*[\\r\\n]+\\s*", " ").trim())
+                        .filter(x -> !x.isEmpty())
+                        .toList();
+                if (!items.isEmpty()) {
+                    sections.add(new SupportDto.Section(title, SupportDto.SectionType.LIST, null, items));
+                }
+            } else {
+                String text = sec.text() == null ? "" : sec.text().trim();
+                if (!text.isEmpty()) {
+                    sections.add(new SupportDto.Section(title, SupportDto.SectionType.TEXT, text, null));
+                }
+            }
+        }
+        if (sections.isEmpty()) {
+            return null;
+        }
+        return new SupportDto.EmailContent(trimToNull(in.greeting()), trimToNull(in.intro()), sections, trimToNull(in.closing()),
+                trimToNull(in.signatureName()), trimToNull(in.signatureTeam()), in.includeOriginal());
+    }
+
+    private static String trimToNull(String v) {
+        return v == null || v.isBlank() ? null : v.trim();
+    }
+
+    /** Thay placeholder {name}/{code}/{subject}/{category} trong mọi chuỗi và điền mặc định cho phần Admin bỏ trống. */
+    private EmailService.SupportReplyContent resolveContent(
+            SupportDto.EmailContent c, SupportTicket ticket, String recipientName, String adminName) {
+        Map<String, String> vars = Map.of(
+                "{name}", recipientName, "{code}", ticket.getCode(),
+                "{subject}", ticket.getSubject(), "{category}", categoryText(ticket.getCategory()));
+        List<EmailService.SupportReplySection> sections = c.sections().stream()
+                .map(sec -> new EmailService.SupportReplySection(
+                        fill(sec.title(), vars),
+                        sec.type() == SupportDto.SectionType.LIST,
+                        fill(sec.text(), vars),
+                        sec.items() == null ? List.of() : sec.items().stream().map(i -> fill(i, vars)).toList()))
                 .toList();
+        return new EmailService.SupportReplyContent(
+                fill(c.greeting() != null ? c.greeting() : "Kính gửi {name},", vars),
+                fill(c.intro() != null ? c.intro() : "Về yêu cầu hỗ trợ {code}, chúng tôi xin phản hồi như sau.", vars),
+                sections,
+                fill(c.closing() != null ? c.closing() : "Trân trọng,", vars),
+                fill(c.signatureName() != null ? c.signatureName() : adminName, vars),
+                fill(c.signatureTeam() != null ? c.signatureTeam() : "Đội ngũ hỗ trợ LinguaLearn", vars));
+    }
+
+    private static String fill(String template, Map<String, String> vars) {
+        if (template == null) {
+            return null;
+        }
+        String out = template;
+        for (Map.Entry<String, String> e : vars.entrySet()) {
+            out = out.replace(e.getKey(), e.getValue());
+        }
+        return out;
+    }
+
+    /** Bản text phẳng của phản hồi — lưu ở {@code admin_reply} để hiển thị nhanh và cho điều kiện "đã có phản hồi". */
+    private static String flatten(EmailService.SupportReplyContent c) {
+        StringBuilder sb = new StringBuilder();
+        for (EmailService.SupportReplySection sec : c.sections()) {
+            if (!sb.isEmpty()) {
+                sb.append("\n\n");
+            }
+            if (sec.title() != null && !sec.title().isBlank()) {
+                sb.append(sec.title()).append(":\n");
+            }
+            if (sec.list()) {
+                for (int i = 0; i < sec.items().size(); i++) {
+                    sb.append(i + 1).append(". ").append(sec.items().get(i)).append(i < sec.items().size() - 1 ? "\n" : "");
+                }
+            } else {
+                sb.append(sec.text());
+            }
+        }
+        return sb.toString();
+    }
+
+    private String writeJson(SupportDto.EmailContent c) {
+        try {
+            return objectMapper.writeValueAsString(c);
+        } catch (JsonProcessingException e) {
+            throw new InvalidRequestException("Không lưu được nội dung phản hồi: " + e.getMessage());
+        }
+    }
+
+    private SupportDto.EmailContent readJson(String json) {
+        if (json == null || json.isBlank()) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(json, SupportDto.EmailContent.class);
+        } catch (JsonProcessingException e) {
+            return null; // dữ liệu hỏng không được làm sập cả danh sách ticket của Admin
+        }
     }
 
     /** Tên trong lời chào email: họ tên nếu email khớp tài khoản, không thì phần trước @ — luôn có giá trị. */
@@ -255,8 +366,15 @@ public class SupportTicketService {
         return switch (category) {
             case ACCOUNT -> "Tài khoản & đăng nhập";
             case PAYMENT -> "Thanh toán & hoàn tiền";
-            case COURSE -> "Khóa học & học tập";
+            case COURSE -> "Khóa học & nội dung";
+            case LEARNING -> "Học tập: quiz, flashcard, học liệu";
+            case AI_FEATURES -> "Tính năng AI";
             case EXAM -> "Thi & giám sát";
+            case CERTIFICATE -> "Chứng chỉ";
+            case COMMUNITY -> "Cộng đồng & đánh giá";
+            case LIVE -> "Buổi học trực tiếp";
+            case INSTRUCTOR -> "Dành cho giảng viên";
+            case PRIVACY -> "Quyền riêng tư & dữ liệu";
             case TECHNICAL -> "Lỗi kỹ thuật";
             case OTHER -> "Vấn đề khác";
         };
@@ -273,14 +391,12 @@ public class SupportTicketService {
     private SupportDto.AdminRes toAdminRes(SupportTicket t) {
         Optional<User> account = userRepository.findByEmail(t.getEmail());
         Long userId = account.map(User::getId).orElse(null);
-        List<String> steps = t.getAdminSteps() == null || t.getAdminSteps().isBlank()
-                ? List.of() : List.of(t.getAdminSteps().split("\n"));
         List<SupportDto.AttachmentRes> attachments = attachmentRepository.findByTicket_IdOrderByIdAsc(t.getId()).stream()
                 .map(a -> new SupportDto.AttachmentRes(a.getId(), a.getFileUrl(), a.getFileType()))
                 .toList();
         return new SupportDto.AdminRes(
-                t.getId(), codeOf(t.getId()), t.getEmail(), userId, nameFor(t.getEmail(), account), t.getCategory(), t.getSubject(), t.getMessage(),
-                t.getStatus(), t.getAdminReply(), steps,
+                t.getId(), t.getCode(), t.getEmail(), userId, nameFor(t.getEmail(), account), t.getCategory(), t.getSubject(), t.getMessage(),
+                t.getStatus(), t.getAdminReply(), readJson(t.getAdminContent()),
                 t.getResolvedBy() != null ? t.getResolvedBy().getEmail() : null,
                 t.getResolvedAt(), t.getCreatedAt(), attachments);
     }

@@ -21,6 +21,10 @@ import lombok.Setter;
 @Setter
 public class SupportTicket extends BaseEntity {
 
+    /** Mã hiển thị cho người dùng, vd SUP-251105-ACC-00002: ngày tạo + nhóm vấn đề + số thứ tự (id). */
+    @Column(name = "code", nullable = false, length = 40, unique = true)
+    private String code;
+
     @Column(name = "email", nullable = false, length = 255)
     private String email;
 
@@ -41,9 +45,9 @@ public class SupportTicket extends BaseEntity {
     @Column(name = "admin_reply", columnDefinition = "TEXT")
     private String adminReply;
 
-    /** Các bước hướng dẫn trong phản hồi của Admin, mỗi bước 1 dòng (đã loại xuống dòng thừa trong từng bước). */
-    @Column(name = "admin_steps", columnDefinition = "TEXT")
-    private String adminSteps;
+    /** Nội dung email phản hồi của Admin dạng JSON ({@code SupportDto.EmailContent}) — để mở lại chỉnh sửa. */
+    @Column(name = "admin_content", columnDefinition = "TEXT")
+    private String adminContent;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "resolved_by_user_id")
