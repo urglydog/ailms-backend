@@ -287,6 +287,7 @@ public class AuthService {
     public void forgotPassword(String email) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("User", email));
+        rejectIfGoogleAccount(user);
 
         String otp = generateOtp();
         String redisKey = "otp:forgot:" + email;
@@ -318,6 +319,7 @@ public class AuthService {
     public TokenRes resetPassword(String email, String otp, String newPassword) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("User", email));
+        rejectIfGoogleAccount(user);
 
         String redisKey = "otp:forgot:" + email;
         String storedOtp = redisTemplate.opsForValue().get(redisKey);
@@ -361,6 +363,15 @@ public class AuthService {
         return generateTokens(authentication);
     }
 
+    /** Tài khoản Google không có mật khẩu (BR-AUTH-01) — mọi luồng đặt lại mật khẩu (OTP, link Admin)
+     * đều phải chặn, nếu không {@code setAuthProvider("LOCAL")} sẽ biến tài khoản Google thành LOCAL (05/11/2026). */
+    private void rejectIfGoogleAccount(User user) {
+        if ("GOOGLE".equals(user.getAuthProvider())) {
+            throw new BusinessRuleViolationException(
+                    "Tài khoản này đăng nhập bằng Google, không có mật khẩu để đặt lại. Vui lòng dùng nút Đăng nhập bằng Google.");
+        }
+    }
+
     /**
      * Admin hỗ trợ user khi quên-mật-khẩu-nhưng-email/OTP không tới được (23/10/2026) — khác
      * hẳn {@link #forgotPassword}: sinh 1 token ngẫu nhiên thay vì OTP. Từ 05/11/2026 link được
@@ -369,11 +380,7 @@ public class AuthService {
      */
     public ResetLinkRes generateAdminResetLink(String email) {
         User target = userRepository.findByEmail(email).orElseThrow(() -> new ResourceNotFoundException("User", email));
-        // Tài khoản Google không có mật khẩu (BR-AUTH-01) — họ đăng nhập bằng Google, link reset vô nghĩa.
-        if ("GOOGLE".equals(target.getAuthProvider())) {
-            throw new BusinessRuleViolationException(
-                    "Tài khoản này đăng nhập bằng Google, không có mật khẩu để đặt lại.");
-        }
+        rejectIfGoogleAccount(target);
 
         String token = UUID.randomUUID().toString();
         String redisKey = "pwreset:token:" + token;
@@ -398,6 +405,8 @@ public class AuthService {
         }
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("User", email));
+        // Chặn cả lúc consume: token sinh trước khi có guard ở generateAdminResetLink vẫn không đổi được tài khoản Google.
+        rejectIfGoogleAccount(user);
 
         user.setPasswordHash(passwordEncoder.encode(newPassword));
         user.setAuthProvider("LOCAL");
