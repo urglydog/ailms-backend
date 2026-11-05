@@ -41,6 +41,10 @@ public class SupportTicket extends BaseEntity {
     @Column(name = "admin_reply", columnDefinition = "TEXT")
     private String adminReply;
 
+    /** Các bước hướng dẫn trong phản hồi của Admin, mỗi bước 1 dòng (đã loại xuống dòng thừa trong từng bước). */
+    @Column(name = "admin_steps", columnDefinition = "TEXT")
+    private String adminSteps;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "resolved_by_user_id")
     private User resolvedBy;

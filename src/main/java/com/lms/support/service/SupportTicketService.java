@@ -4,6 +4,7 @@ import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
 import com.lms.auth.service.EmailService;
 import com.lms.common.enums.Role;
+import com.lms.common.enums.SupportTicketCategory;
 import com.lms.common.enums.SupportTicketStatus;
 import com.lms.common.exception.BusinessRuleViolationException;
 import com.lms.common.exception.InvalidRequestException;
@@ -22,6 +23,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.apache.tika.Tika;
@@ -115,7 +117,9 @@ public class SupportTicketService {
                         "/admin/support"
                 ));
 
-        emailService.sendSupportTicketReceivedEmail(email, code, saved.getSubject(), saved.getMessage());
+        emailService.sendSupportTicketReceivedEmail(
+                email, recipientName(email), code, categoryText(saved.getCategory()), saved.getSubject(), saved.getMessage(),
+                saved.getCreatedAt() != null ? saved.getCreatedAt() : LocalDateTime.now());
         return new SupportDto.CreateRes(code);
     }
 
@@ -190,13 +194,18 @@ public class SupportTicketService {
                 .orElseThrow(() -> new ResourceNotFoundException("User", adminEmail));
 
         String reply = req.reply() == null ? "" : req.reply().trim();
+        List<String> steps = cleanSteps(req.steps());
         if (req.status() == SupportTicketStatus.RESOLVED && reply.isEmpty() && ticket.getAdminReply() == null) {
             throw new BusinessRuleViolationException("Vui lòng nhập phản hồi cho người dùng trước khi đánh dấu đã xử lý");
+        }
+        if (reply.isEmpty() && !steps.isEmpty()) {
+            throw new BusinessRuleViolationException("Vui lòng nhập nội dung phản hồi kèm theo các bước hướng dẫn");
         }
 
         ticket.setStatus(req.status());
         if (!reply.isEmpty()) {
             ticket.setAdminReply(reply);
+            ticket.setAdminSteps(steps.isEmpty() ? null : String.join("\n", steps));
         }
         if (req.status() == SupportTicketStatus.RESOLVED) {
             ticket.setResolvedBy(admin);
@@ -209,9 +218,48 @@ public class SupportTicketService {
 
         // Chỉ gửi mail khi Admin thực sự nhập phản hồi mới — đổi trạng thái không kèm lời nhắn thì không làm phiền người dùng.
         if (!reply.isEmpty()) {
-            emailService.sendSupportTicketReplyEmail(saved.getEmail(), codeOf(saved.getId()), statusText(saved.getStatus()), reply);
+            emailService.sendSupportTicketReplyEmail(
+                    saved.getEmail(), recipientName(saved.getEmail()), codeOf(saved.getId()), categoryText(saved.getCategory()),
+                    saved.getSubject(), statusText(saved.getStatus()), reply, steps,
+                    admin.getFullName() != null && !admin.getFullName().isBlank() ? admin.getFullName() : "Quản trị viên",
+                    saved.getMessage());
         }
         return toAdminRes(saved);
+    }
+
+    /** Bỏ bước rỗng, ép mỗi bước về 1 dòng (xuống dòng trong 1 bước sẽ phá format danh sách đánh số trong email). */
+    private static List<String> cleanSteps(List<String> raw) {
+        if (raw == null) {
+            return List.of();
+        }
+        return raw.stream()
+                .filter(x -> x != null)
+                .map(x -> x.replaceAll("\\s*[\\r\\n]+\\s*", " ").trim())
+                .filter(x -> !x.isEmpty())
+                .toList();
+    }
+
+    /** Tên trong lời chào email: họ tên nếu email khớp tài khoản, không thì phần trước @ — luôn có giá trị. */
+    private String recipientName(String email) {
+        return nameFor(email, userRepository.findByEmail(email));
+    }
+
+    private static String nameFor(String email, Optional<User> account) {
+        return account
+                .map(User::getFullName)
+                .filter(n -> n != null && !n.isBlank())
+                .orElseGet(() -> email.contains("@") ? email.substring(0, email.indexOf('@')) : email);
+    }
+
+    private static String categoryText(SupportTicketCategory category) {
+        return switch (category) {
+            case ACCOUNT -> "Tài khoản & đăng nhập";
+            case PAYMENT -> "Thanh toán & hoàn tiền";
+            case COURSE -> "Khóa học & học tập";
+            case EXAM -> "Thi & giám sát";
+            case TECHNICAL -> "Lỗi kỹ thuật";
+            case OTHER -> "Vấn đề khác";
+        };
     }
 
     private static String statusText(SupportTicketStatus status) {
@@ -223,13 +271,16 @@ public class SupportTicketService {
     }
 
     private SupportDto.AdminRes toAdminRes(SupportTicket t) {
-        Long userId = userRepository.findByEmail(t.getEmail()).map(User::getId).orElse(null);
+        Optional<User> account = userRepository.findByEmail(t.getEmail());
+        Long userId = account.map(User::getId).orElse(null);
+        List<String> steps = t.getAdminSteps() == null || t.getAdminSteps().isBlank()
+                ? List.of() : List.of(t.getAdminSteps().split("\n"));
         List<SupportDto.AttachmentRes> attachments = attachmentRepository.findByTicket_IdOrderByIdAsc(t.getId()).stream()
                 .map(a -> new SupportDto.AttachmentRes(a.getId(), a.getFileUrl(), a.getFileType()))
                 .toList();
         return new SupportDto.AdminRes(
-                t.getId(), codeOf(t.getId()), t.getEmail(), userId, t.getCategory(), t.getSubject(), t.getMessage(),
-                t.getStatus(), t.getAdminReply(),
+                t.getId(), codeOf(t.getId()), t.getEmail(), userId, nameFor(t.getEmail(), account), t.getCategory(), t.getSubject(), t.getMessage(),
+                t.getStatus(), t.getAdminReply(), steps,
                 t.getResolvedBy() != null ? t.getResolvedBy().getEmail() : null,
                 t.getResolvedAt(), t.getCreatedAt(), attachments);
     }

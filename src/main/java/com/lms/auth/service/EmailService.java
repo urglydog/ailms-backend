@@ -203,21 +203,42 @@ public class EmailService {
     }
 
     /** Email xác nhận đã nhận ticket hỗ trợ (05/11/2026) — best-effort, lỗi gửi mail KHÔNG làm hỏng
-     * việc tạo ticket. Nội dung người dùng nhập được escape HTML vì ticket gửi được khi chưa đăng nhập. */
-    public void sendSupportTicketReceivedEmail(String toEmail, String code, String subject, String message) {
+     * việc tạo ticket. Mọi nội dung người dùng nhập đều được escape HTML vì ticket gửi được khi chưa đăng nhập. */
+    public void sendSupportTicketReceivedEmail(
+            String toEmail, String recipientName, String code, String categoryText, String subject, String message, LocalDateTime createdAt) {
         try {
-            MimeMessage mimeMessage = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
-            helper.setFrom(fromAddress);
-            helper.setTo(toEmail);
-            helper.setSubject("Đã nhận yêu cầu hỗ trợ " + code + " - LinguaLearn");
-            helper.setText(
-                    "Chúng tôi đã nhận được yêu cầu hỗ trợ " + code + " của bạn và sẽ phản hồi trong vòng 24-48 giờ.\n\n"
-                            + "Tiêu đề: " + subject + "\n\n" + message,
-                    buildSupportEmailHtml("Đã nhận yêu cầu hỗ trợ", code,
-                            "Chúng tôi đã nhận được yêu cầu của bạn và sẽ phản hồi trong vòng <strong>24-48 giờ</strong>.",
-                            "Nội dung bạn đã gửi", HtmlUtils.htmlEscape(subject) + "<br><br>" + HtmlUtils.htmlEscape(message).replace("\n", "<br>")));
-            mailSender.send(mimeMessage);
+            String sentAt = createdAt.format(SUPPORT_TIME_FORMAT);
+            String text = "Kính gửi " + recipientName + ",\n\n"
+                    + "Cảm ơn bạn đã liên hệ LinguaLearn. Chúng tôi đã nhận được yêu cầu hỗ trợ của bạn.\n\n"
+                    + "Mã yêu cầu: " + code + "\nNhóm vấn đề: " + categoryText + "\nTiêu đề: " + subject + "\nThời gian gửi: " + sentAt + "\n\n"
+                    + "Nội dung bạn đã gửi:\n" + message + "\n\n"
+                    + "Các bước tiếp theo:\n"
+                    + "1. Đội ngũ hỗ trợ tiếp nhận và xem xét yêu cầu của bạn.\n"
+                    + "2. Chúng tôi phản hồi qua chính địa chỉ email này trong vòng 24-48 giờ.\n"
+                    + "3. Với yêu cầu phức tạp, thời gian xử lý có thể lâu hơn; chúng tôi sẽ chủ động liên hệ nếu cần thêm thông tin.\n\n"
+                    + "Vui lòng giữ lại mã " + code + " để tra cứu. Nếu cần bổ sung thông tin, hãy gửi yêu cầu mới tại "
+                    + frontendBaseUrl + "/help kèm mã này.\n\n"
+                    + "Trân trọng,\nĐội ngũ hỗ trợ LinguaLearn";
+
+            String html = supportMailShell("Đã nhận yêu cầu hỗ trợ",
+                    greeting(recipientName)
+                            + paragraph("Cảm ơn bạn đã liên hệ LinguaLearn. Chúng tôi đã nhận được yêu cầu hỗ trợ của bạn và xin xác nhận thông tin như sau.")
+                            + summaryTable(new String[][]{
+                                    {"Mã yêu cầu", "<span style=\"font-family:monospace;font-weight:700;color:#1A6FE0;\">" + HtmlUtils.htmlEscape(code) + "</span>"},
+                                    {"Nhóm vấn đề", HtmlUtils.htmlEscape(categoryText)},
+                                    {"Tiêu đề", HtmlUtils.htmlEscape(subject)},
+                                    {"Thời gian gửi", sentAt}})
+                            + section("Nội dung bạn đã gửi", quotedBox(message))
+                            + section("Các bước tiếp theo", orderedList(java.util.List.of(
+                                    "Đội ngũ hỗ trợ tiếp nhận và xem xét yêu cầu của bạn.",
+                                    "Chúng tôi phản hồi qua chính địa chỉ email này trong vòng <strong>24-48 giờ</strong>.",
+                                    "Với yêu cầu phức tạp, thời gian xử lý có thể lâu hơn; chúng tôi sẽ chủ động liên hệ nếu cần thêm thông tin.")))
+                            + section("Lưu ý", paragraph("Vui lòng giữ lại mã <strong>" + HtmlUtils.htmlEscape(code)
+                                    + "</strong> để tra cứu. Nếu cần bổ sung thông tin, hãy gửi yêu cầu mới tại "
+                                    + "<a href=\"" + frontendBaseUrl + "/help\" style=\"color:#1A6FE0;\">Trung tâm trợ giúp</a> kèm mã này."))
+                            + closing(null));
+
+            sendHtmlMail(toEmail, "Đã nhận yêu cầu hỗ trợ " + code + " - LinguaLearn", text, html);
             log.info("Đã gửi email xác nhận ticket {} đến {}", code, toEmail);
         } catch (Exception e) {
             log.error("Lỗi khi gửi email xác nhận ticket {} đến {}: {}", code, toEmail, e.getMessage());
@@ -225,42 +246,109 @@ public class EmailService {
     }
 
     /** Email phản hồi của Admin cho ticket hỗ trợ (05/11/2026) — best-effort như {@link #sendSupportTicketReceivedEmail}. */
-    public void sendSupportTicketReplyEmail(String toEmail, String code, String statusText, String reply) {
+    public void sendSupportTicketReplyEmail(
+            String toEmail, String recipientName, String code, String categoryText, String subject, String statusText,
+            String reply, java.util.List<String> steps, String adminName, String originalMessage) {
         try {
-            MimeMessage mimeMessage = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
-            helper.setFrom(fromAddress);
-            helper.setTo(toEmail);
-            helper.setSubject("Yêu cầu hỗ trợ " + code + " đã được cập nhật - LinguaLearn");
-            helper.setText(
-                    "Yêu cầu hỗ trợ " + code + " của bạn đã được cập nhật (" + statusText + ").\n\nPhản hồi từ đội ngũ hỗ trợ:\n" + reply,
-                    buildSupportEmailHtml("Yêu cầu hỗ trợ đã được cập nhật", code,
-                            "Trạng thái hiện tại: <strong>" + HtmlUtils.htmlEscape(statusText) + "</strong>",
-                            "Phản hồi từ đội ngũ hỗ trợ", HtmlUtils.htmlEscape(reply).replace("\n", "<br>")));
-            mailSender.send(mimeMessage);
+            StringBuilder text = new StringBuilder();
+            text.append("Kính gửi ").append(recipientName).append(",\n\n")
+                    .append("Về yêu cầu hỗ trợ ").append(code).append(" (").append(subject).append("), chúng tôi xin phản hồi như sau.\n\n")
+                    .append("Trạng thái: ").append(statusText).append("\n\nPhản hồi:\n").append(reply).append("\n");
+            if (!steps.isEmpty()) {
+                text.append("\nHướng dẫn thực hiện:\n");
+                for (int i = 0; i < steps.size(); i++) {
+                    text.append(i + 1).append(". ").append(steps.get(i)).append("\n");
+                }
+            }
+            text.append("\nNếu vấn đề vẫn chưa được giải quyết, vui lòng gửi yêu cầu mới tại ").append(frontendBaseUrl)
+                    .append("/help kèm mã ").append(code).append(".\n\nTrân trọng,\n").append(adminName).append("\nĐội ngũ hỗ trợ LinguaLearn");
+
+            String html = supportMailShell("Phản hồi yêu cầu hỗ trợ",
+                    greeting(recipientName)
+                            + paragraph("Về yêu cầu hỗ trợ <strong>" + HtmlUtils.htmlEscape(code) + "</strong>, chúng tôi xin phản hồi như sau.")
+                            + summaryTable(new String[][]{
+                                    {"Mã yêu cầu", "<span style=\"font-family:monospace;font-weight:700;color:#1A6FE0;\">" + HtmlUtils.htmlEscape(code) + "</span>"},
+                                    {"Nhóm vấn đề", HtmlUtils.htmlEscape(categoryText)},
+                                    {"Tiêu đề", HtmlUtils.htmlEscape(subject)},
+                                    {"Trạng thái", "<strong>" + HtmlUtils.htmlEscape(statusText) + "</strong>"}})
+                            + section("Phản hồi", paragraph(HtmlUtils.htmlEscape(reply).replace("\n", "<br>")))
+                            + (steps.isEmpty() ? "" : section("Hướng dẫn thực hiện", orderedList(steps.stream().map(HtmlUtils::htmlEscape).toList())))
+                            + section("Nội dung yêu cầu ban đầu", quotedBox(originalMessage))
+                            + section("Nếu vấn đề chưa được giải quyết", paragraph("Vui lòng gửi yêu cầu mới tại "
+                                    + "<a href=\"" + frontendBaseUrl + "/help\" style=\"color:#1A6FE0;\">Trung tâm trợ giúp</a> kèm mã <strong>"
+                                    + HtmlUtils.htmlEscape(code) + "</strong>, chúng tôi sẽ tiếp tục hỗ trợ bạn."))
+                            + closing(adminName));
+
+            sendHtmlMail(toEmail, "Phản hồi yêu cầu hỗ trợ " + code + " - LinguaLearn", text.toString(), html);
             log.info("Đã gửi email phản hồi ticket {} đến {}", code, toEmail);
         } catch (Exception e) {
             log.error("Lỗi khi gửi email phản hồi ticket {} đến {}: {}", code, toEmail, e.getMessage());
         }
     }
 
-    /** {@code bodyHtml} và {@code intro} phải được escape/an toàn từ phía gọi — hàm này chèn nguyên văn. */
-    private String buildSupportEmailHtml(String heading, String code, String intro, String boxTitle, String bodyHtml) {
-        return "<div style=\"font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;background:#ffffff;\">"
+    private static final DateTimeFormatter SUPPORT_TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm dd/MM/yyyy");
+
+    private void sendHtmlMail(String toEmail, String subject, String text, String html) throws Exception {
+        MimeMessage mimeMessage = mailSender.createMimeMessage();
+        MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
+        helper.setFrom(fromAddress);
+        helper.setTo(toEmail);
+        helper.setSubject(subject);
+        helper.setText(text, html);
+        mailSender.send(mimeMessage);
+    }
+
+    // Các helper dựng HTML email hỗ trợ — tham số kiểu "html" phải được escape/an toàn từ phía gọi, hàm chỉ chèn nguyên văn.
+
+    private String supportMailShell(String heading, String bodyHtml) {
+        return "<div style=\"font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:560px;margin:0 auto;padding:32px 24px;background:#ffffff;color:#0F172A;\">"
                 + "<div style=\"text-align:center;margin-bottom:24px;\">"
                 + "<span style=\"display:inline-block;width:36px;height:36px;background:#1A6FE0;border-radius:10px;color:#ffffff;font-weight:700;font-size:20px;line-height:36px;\">L</span>"
-                + "<div style=\"margin-top:8px;font-size:18px;font-weight:700;color:#0F172A;\">LinguaLearn</div>"
+                + "<div style=\"margin-top:8px;font-size:18px;font-weight:700;\">LinguaLearn</div>"
                 + "</div>"
-                + "<h2 style=\"font-size:16px;color:#0F172A;text-align:center;margin:0 0 4px;\">" + heading + "</h2>"
-                + "<p style=\"text-align:center;margin:0 0 16px;\"><span style=\"display:inline-block;padding:4px 12px;border-radius:999px;background:#1A6FE01A;color:#1A6FE0;font-size:13px;font-weight:700;font-family:monospace;\">" + code + "</span></p>"
-                + "<p style=\"font-size:14px;color:#64748B;text-align:center;margin:0 0 20px;\">" + intro + "</p>"
-                + "<div style=\"background:#F1F5F9;border-radius:12px;padding:16px;margin-bottom:24px;\">"
-                + "<p style=\"font-size:12px;color:#64748B;margin:0 0 4px;font-weight:600;\">" + boxTitle + "</p>"
-                + "<p style=\"font-size:14px;color:#0F172A;margin:0;\">" + bodyHtml + "</p>"
-                + "</div>"
-                + "<hr style=\"border:none;border-top:1px solid #E2E8F0;margin:16px 0;\">"
-                + "<p style=\"font-size:12px;color:#94A3B8;text-align:center;margin:0;\">Email tự động, vui lòng không trả lời trực tiếp email này.</p>"
+                + "<h2 style=\"font-size:18px;text-align:center;margin:0 0 20px;\">" + heading + "</h2>"
+                + bodyHtml
+                + "<hr style=\"border:none;border-top:1px solid #E2E8F0;margin:24px 0 12px;\">"
+                + "<p style=\"font-size:12px;color:#94A3B8;text-align:center;margin:0;\">Email tự động từ hệ thống hỗ trợ LinguaLearn, vui lòng không trả lời trực tiếp email này.</p>"
                 + "</div>";
+    }
+
+    private String greeting(String name) {
+        return "<p style=\"font-size:14px;margin:0 0 12px;\">Kính gửi <strong>" + HtmlUtils.htmlEscape(name) + "</strong>,</p>";
+    }
+
+    private String paragraph(String html) {
+        return "<p style=\"font-size:14px;line-height:1.7;color:#334155;margin:0 0 16px;\">" + html + "</p>";
+    }
+
+    private String section(String title, String bodyHtml) {
+        return "<h3 style=\"font-size:14px;margin:20px 0 8px;color:#0F172A;\">" + title + "</h3>" + bodyHtml;
+    }
+
+    private String summaryTable(String[][] rows) {
+        StringBuilder sb = new StringBuilder("<table style=\"width:100%;border-collapse:collapse;font-size:14px;margin:0 0 8px;\">");
+        for (String[] row : rows) {
+            sb.append("<tr><td style=\"padding:6px 0;color:#64748B;width:130px;vertical-align:top;\">").append(row[0])
+                    .append("</td><td style=\"padding:6px 0;color:#0F172A;\">").append(row[1]).append("</td></tr>");
+        }
+        return sb.append("</table>").toString();
+    }
+
+    private String quotedBox(String rawText) {
+        return "<div style=\"background:#F1F5F9;border-radius:12px;padding:14px 16px;font-size:14px;line-height:1.7;color:#334155;margin:0 0 8px;\">"
+                + HtmlUtils.htmlEscape(rawText).replace("\n", "<br>") + "</div>";
+    }
+
+    private String orderedList(java.util.List<String> itemsHtml) {
+        StringBuilder sb = new StringBuilder("<ol style=\"font-size:14px;line-height:1.7;color:#334155;margin:0 0 16px;padding-left:20px;\">");
+        itemsHtml.forEach(i -> sb.append("<li style=\"margin-bottom:4px;\">").append(i).append("</li>"));
+        return sb.append("</ol>").toString();
+    }
+
+    private String closing(String adminName) {
+        return "<p style=\"font-size:14px;line-height:1.7;color:#334155;margin:24px 0 0;\">Trân trọng,<br>"
+                + (adminName != null ? "<strong>" + HtmlUtils.htmlEscape(adminName) + "</strong><br>" : "")
+                + "Đội ngũ hỗ trợ LinguaLearn</p>";
     }
 
     private static String formatVnd(BigDecimal amount) {

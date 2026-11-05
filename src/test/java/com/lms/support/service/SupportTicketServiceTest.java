@@ -77,7 +77,8 @@ class SupportTicketServiceTest {
         SupportDto.CreateRes res = service.create("1.2.3.4", req(), null);
 
         assertEquals("TKT-000123", res.code());
-        verify(emailService).sendSupportTicketReceivedEmail(eq("user@mail.com"), eq("TKT-000123"), anyString(), anyString());
+        verify(emailService).sendSupportTicketReceivedEmail(
+                eq("user@mail.com"), eq("user"), eq("TKT-000123"), eq("Tài khoản & đăng nhập"), anyString(), anyString(), any());
         verify(notificationService).notify(eq(1L), eq("SUPPORT_TICKET"), anyString(), anyString(), eq("/admin/support"));
     }
 
@@ -88,7 +89,7 @@ class SupportTicketServiceTest {
         assertThrows(BusinessRuleViolationException.class, () -> service.create("1.2.3.4", req(), null));
 
         verify(ticketRepository, never()).save(any());
-        verify(emailService, never()).sendSupportTicketReceivedEmail(anyString(), anyString(), anyString(), anyString());
+        verify(emailService, never()).sendSupportTicketReceivedEmail(anyString(), anyString(), anyString(), anyString(), anyString(), anyString(), any());
     }
 
     @Test
@@ -97,7 +98,7 @@ class SupportTicketServiceTest {
 
         assertThrows(BusinessRuleViolationException.class, () -> service.create("1.2.3.4", req(), null));
 
-        verify(emailService, never()).sendSupportTicketReceivedEmail(anyString(), anyString(), anyString(), anyString());
+        verify(emailService, never()).sendSupportTicketReceivedEmail(anyString(), anyString(), anyString(), anyString(), anyString(), anyString(), any());
     }
 
     @Test
@@ -142,26 +143,44 @@ class SupportTicketServiceTest {
         existingTicket();
 
         assertThrows(BusinessRuleViolationException.class,
-                () -> service.update("admin@lms.local", 7L, new SupportDto.UpdateReq(SupportTicketStatus.RESOLVED, "  ")));
+                () -> service.update("admin@lms.local", 7L, new SupportDto.UpdateReq(SupportTicketStatus.RESOLVED, "  ", null)));
 
         verify(ticketRepository, never()).save(any());
     }
 
     @Test
-    void update_WithReply_ShouldSendReplyEmail() {
+    void update_WithReplyAndSteps_ShouldCleanStepsAndSendReplyEmail() {
+        existingTicket();
+        User admin = new User();
+        admin.setFullName("Admin A");
+        when(userRepository.findByEmail("admin@lms.local")).thenReturn(Optional.of(admin));
+
+        SupportDto.AdminRes res = service.update("admin@lms.local", 7L, new SupportDto.UpdateReq(
+                SupportTicketStatus.RESOLVED, "Đã gửi link đặt lại mật khẩu.",
+                java.util.Arrays.asList("  Mở email \n kiểm tra Spam ", "", null, "Bấm nút đặt lại")));
+
+        assertEquals(List.of("Mở email kiểm tra Spam", "Bấm nút đặt lại"), res.adminSteps());
+        verify(emailService).sendSupportTicketReplyEmail(
+                eq("user@mail.com"), eq("user"), eq("TKT-000007"), eq("Tài khoản & đăng nhập"), eq("s"), eq("Đã xử lý"),
+                eq("Đã gửi link đặt lại mật khẩu."), eq(List.of("Mở email kiểm tra Spam", "Bấm nút đặt lại")), eq("Admin A"), eq("m"));
+    }
+
+    @Test
+    void update_StepsWithoutReply_ShouldReject() {
         existingTicket();
 
-        service.update("admin@lms.local", 7L, new SupportDto.UpdateReq(SupportTicketStatus.RESOLVED, "Đã gửi link đặt lại mật khẩu."));
+        assertThrows(BusinessRuleViolationException.class, () -> service.update("admin@lms.local", 7L,
+                new SupportDto.UpdateReq(SupportTicketStatus.IN_PROGRESS, " ", List.of("Bước 1"))));
 
-        verify(emailService).sendSupportTicketReplyEmail(eq("user@mail.com"), eq("TKT-000007"), eq("Đã xử lý"), eq("Đã gửi link đặt lại mật khẩu."));
+        verify(ticketRepository, never()).save(any());
     }
 
     @Test
     void update_StatusOnlyWithoutReply_ShouldNotSendEmail() {
         existingTicket();
 
-        service.update("admin@lms.local", 7L, new SupportDto.UpdateReq(SupportTicketStatus.IN_PROGRESS, null));
+        service.update("admin@lms.local", 7L, new SupportDto.UpdateReq(SupportTicketStatus.IN_PROGRESS, null, null));
 
-        verify(emailService, never()).sendSupportTicketReplyEmail(anyString(), anyString(), anyString(), anyString());
+        verify(emailService, never()).sendSupportTicketReplyEmail(anyString(), anyString(), anyString(), anyString(), anyString(), anyString(), anyString(), anyList(), anyString(), anyString());
     }
 }
