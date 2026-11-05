@@ -70,6 +70,8 @@ public class SecurityConfig {
             "/api/v1/payments/ipn-mock",
             // UC49 Course Discovery — stateless, cho phép Guest gọi (quota theo IP, kiểm trong controller)
             "/api/v1/discovery/chat",
+            // Ticket hỗ trợ (05/11/2026) — khách chưa đăng nhập (vd quên mật khẩu) vẫn gửi được; chống spam theo IP/email trong SupportTicketService
+            "/api/v1/support/tickets",
             // Giai đoạn 11 (F11.1) — LiveKit Cloud gọi vào, không có JWT của hệ thống; xác thực
             // thật là chữ ký HMAC kiểm trong LiveKitWebhookController (giống HMAC IPN thanh toán)
             "/api/v1/live/webhooks/livekit",

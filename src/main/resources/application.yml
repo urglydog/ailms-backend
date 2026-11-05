@@ -149,6 +149,10 @@ lms:
     max-dispute-evidence-files: 5            # Khiếu nại giao dịch (23/10/2026)
     max-dispute-evidence-size-mb: 20         # Khiếu nại giao dịch (23/10/2026)
     dispute-reopen-window-days: 7            # Khiếu nại: hạn user báo "chưa nhận được tiền" sau khi admin resolve (26/10/2026)
+    max-support-ticket-files: 3              # Ticket hỗ trợ (05/11/2026) — ảnh minh chứng
+    max-support-ticket-size-mb: 5            # Ticket hỗ trợ (05/11/2026)
+    support-ticket-ip-limit-per-hour: 3      # Ticket hỗ trợ: chống spam khách vãng lai theo IP
+    support-ticket-email-limit-per-day: 5    # Ticket hỗ trợ: chống email-bombing 1 địa chỉ qua form public
 
   storage:
     b2-bucket-name: ${B2_BUCKET_NAME:}

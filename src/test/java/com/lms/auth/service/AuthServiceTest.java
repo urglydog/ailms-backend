@@ -66,6 +66,51 @@ class AuthServiceTest {
     private AuthService authService;
 
     @Test
+    void testGenerateAdminResetLink_GoogleAccount_ShouldRejectAndNotSendEmail() {
+        User user = new User();
+        user.setEmail("google@lms.local");
+        user.setAuthProvider("GOOGLE");
+        when(userRepository.findByEmail("google@lms.local")).thenReturn(java.util.Optional.of(user));
+
+        org.junit.jupiter.api.Assertions.assertThrows(
+                com.lms.common.exception.BusinessRuleViolationException.class,
+                () -> authService.generateAdminResetLink("google@lms.local"));
+
+        verify(emailService, never()).sendPasswordResetLinkEmail(anyString(), anyString(), any());
+    }
+
+    @Test
+    void testForgotPassword_GoogleAccount_ShouldRejectAndNotSendOtp() {
+        User user = new User();
+        user.setEmail("google@lms.local");
+        user.setAuthProvider("GOOGLE");
+        when(userRepository.findByEmail("google@lms.local")).thenReturn(java.util.Optional.of(user));
+
+        assertThrows(com.lms.common.exception.BusinessRuleViolationException.class,
+                () -> authService.forgotPassword("google@lms.local"));
+
+        verify(emailService, never()).sendOtpEmail(anyString(), anyString());
+    }
+
+    @Test
+    void testResetPasswordByToken_GoogleAccount_ShouldRejectAndKeepProvider() {
+        User user = new User();
+        user.setEmail("google@lms.local");
+        user.setAuthProvider("GOOGLE");
+        org.springframework.data.redis.core.ValueOperations<String, String> ops =
+                org.mockito.Mockito.mock(org.springframework.data.redis.core.ValueOperations.class);
+        when(redisTemplate.opsForValue()).thenReturn(ops);
+        when(ops.get("pwreset:token:t1")).thenReturn("google@lms.local");
+        when(userRepository.findByEmail("google@lms.local")).thenReturn(java.util.Optional.of(user));
+
+        assertThrows(com.lms.common.exception.BusinessRuleViolationException.class,
+                () -> authService.resetPasswordByToken("t1", "NewPass123"));
+
+        assertEquals("GOOGLE", user.getAuthProvider());
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
     void testForgotPassword_ShouldSendOtpAndStoreInRedis() {
         String email = "student@lms.local";
         String generatedOtp = "123456";

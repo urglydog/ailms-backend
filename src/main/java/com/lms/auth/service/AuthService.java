@@ -287,6 +287,7 @@ public class AuthService {
     public void forgotPassword(String email) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("User", email));
+        rejectIfGoogleAccount(user);
 
         String otp = generateOtp();
         String redisKey = "otp:forgot:" + email;
@@ -318,6 +319,7 @@ public class AuthService {
     public TokenRes resetPassword(String email, String otp, String newPassword) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("User", email));
+        rejectIfGoogleAccount(user);
 
         String redisKey = "otp:forgot:" + email;
         String storedOtp = redisTemplate.opsForValue().get(redisKey);
@@ -361,23 +363,36 @@ public class AuthService {
         return generateTokens(authentication);
     }
 
+    /** Tài khoản Google không có mật khẩu (BR-AUTH-01) — mọi luồng đặt lại mật khẩu (OTP, link Admin)
+     * đều phải chặn, nếu không {@code setAuthProvider("LOCAL")} sẽ biến tài khoản Google thành LOCAL (05/11/2026). */
+    private void rejectIfGoogleAccount(User user) {
+        if ("GOOGLE".equals(user.getAuthProvider())) {
+            throw new BusinessRuleViolationException(
+                    "Tài khoản này đăng nhập bằng Google, không có mật khẩu để đặt lại. Vui lòng dùng nút Đăng nhập bằng Google.");
+        }
+    }
+
     /**
      * Admin hỗ trợ user khi quên-mật-khẩu-nhưng-email/OTP không tới được (23/10/2026) — khác
-     * hẳn {@link #forgotPassword}: sinh 1 token ngẫu nhiên (không gửi email), Admin tự copy link
-     * trả về và gửi thủ công cho user qua kênh khác (chat hỗ trợ, Zalo...). TTL 30 phút.
+     * hẳn {@link #forgotPassword}: sinh 1 token ngẫu nhiên thay vì OTP. Từ 05/11/2026 link được
+     * tự động gửi qua email cho user; link vẫn trả về cho Admin làm dự phòng (mail lỗi/vào spam).
+     * TTL 30 phút.
      */
     public ResetLinkRes generateAdminResetLink(String email) {
-        userRepository.findByEmail(email).orElseThrow(() -> new ResourceNotFoundException("User", email));
+        User target = userRepository.findByEmail(email).orElseThrow(() -> new ResourceNotFoundException("User", email));
+        rejectIfGoogleAccount(target);
 
         String token = UUID.randomUUID().toString();
         String redisKey = "pwreset:token:" + token;
         Duration ttl = Duration.ofMinutes(30);
         redisTemplate.opsForValue().set(redisKey, email, ttl);
 
-        return new ResetLinkRes(
-                frontendBaseUrl + "/reset-password?token=" + token,
-                java.time.LocalDateTime.now().plus(ttl)
-        );
+        String resetLink = frontendBaseUrl + "/reset-password?token=" + token;
+        java.time.LocalDateTime expiresAt = java.time.LocalDateTime.now().plus(ttl);
+        // Best-effort (05/11/2026): lỗi gửi mail không throw — Admin vẫn thấy link ở UI làm dự phòng.
+        emailService.sendPasswordResetLinkEmail(email, resetLink, expiresAt);
+
+        return new ResetLinkRes(resetLink, expiresAt);
     }
 
     /** Consume token sinh bởi {@link #generateAdminResetLink} — không auto-login, user tự đăng nhập lại. */
@@ -390,6 +405,8 @@ public class AuthService {
         }
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("User", email));
+        // Chặn cả lúc consume: token sinh trước khi có guard ở generateAdminResetLink vẫn không đổi được tài khoản Google.
+        rejectIfGoogleAccount(user);
 
         user.setPasswordHash(passwordEncoder.encode(newPassword));
         user.setAuthProvider("LOCAL");
