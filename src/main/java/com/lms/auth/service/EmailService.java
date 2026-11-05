@@ -11,6 +11,7 @@ import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
+import org.springframework.web.util.HtmlUtils;
 
 @Slf4j
 @Service
@@ -196,6 +197,67 @@ public class EmailService {
                 + "<p style=\"font-size:14px;color:#0F172A;margin:0;\">" + adminNote + "</p>"
                 + "</div>"
                 + "<p style=\"font-size:12px;color:#94A3B8;text-align:center;margin:0 0 8px;\">Xem đầy đủ <a href=\"" + frontendBaseUrl + "/legal/refund\" style=\"color:#1A6FE0;\">chính sách hoàn tiền</a> của LinguaLearn.</p>"
+                + "<hr style=\"border:none;border-top:1px solid #E2E8F0;margin:16px 0;\">"
+                + "<p style=\"font-size:12px;color:#94A3B8;text-align:center;margin:0;\">Email tự động, vui lòng không trả lời trực tiếp email này.</p>"
+                + "</div>";
+    }
+
+    /** Email xác nhận đã nhận ticket hỗ trợ (05/11/2026) — best-effort, lỗi gửi mail KHÔNG làm hỏng
+     * việc tạo ticket. Nội dung người dùng nhập được escape HTML vì ticket gửi được khi chưa đăng nhập. */
+    public void sendSupportTicketReceivedEmail(String toEmail, String code, String subject, String message) {
+        try {
+            MimeMessage mimeMessage = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
+            helper.setFrom(fromAddress);
+            helper.setTo(toEmail);
+            helper.setSubject("Đã nhận yêu cầu hỗ trợ " + code + " - LinguaLearn");
+            helper.setText(
+                    "Chúng tôi đã nhận được yêu cầu hỗ trợ " + code + " của bạn và sẽ phản hồi trong vòng 24-48 giờ.\n\n"
+                            + "Tiêu đề: " + subject + "\n\n" + message,
+                    buildSupportEmailHtml("Đã nhận yêu cầu hỗ trợ", code,
+                            "Chúng tôi đã nhận được yêu cầu của bạn và sẽ phản hồi trong vòng <strong>24-48 giờ</strong>.",
+                            "Nội dung bạn đã gửi", HtmlUtils.htmlEscape(subject) + "<br><br>" + HtmlUtils.htmlEscape(message).replace("\n", "<br>")));
+            mailSender.send(mimeMessage);
+            log.info("Đã gửi email xác nhận ticket {} đến {}", code, toEmail);
+        } catch (Exception e) {
+            log.error("Lỗi khi gửi email xác nhận ticket {} đến {}: {}", code, toEmail, e.getMessage());
+        }
+    }
+
+    /** Email phản hồi của Admin cho ticket hỗ trợ (05/11/2026) — best-effort như {@link #sendSupportTicketReceivedEmail}. */
+    public void sendSupportTicketReplyEmail(String toEmail, String code, String statusText, String reply) {
+        try {
+            MimeMessage mimeMessage = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
+            helper.setFrom(fromAddress);
+            helper.setTo(toEmail);
+            helper.setSubject("Yêu cầu hỗ trợ " + code + " đã được cập nhật - LinguaLearn");
+            helper.setText(
+                    "Yêu cầu hỗ trợ " + code + " của bạn đã được cập nhật (" + statusText + ").\n\nPhản hồi từ đội ngũ hỗ trợ:\n" + reply,
+                    buildSupportEmailHtml("Yêu cầu hỗ trợ đã được cập nhật", code,
+                            "Trạng thái hiện tại: <strong>" + HtmlUtils.htmlEscape(statusText) + "</strong>",
+                            "Phản hồi từ đội ngũ hỗ trợ", HtmlUtils.htmlEscape(reply).replace("\n", "<br>")));
+            mailSender.send(mimeMessage);
+            log.info("Đã gửi email phản hồi ticket {} đến {}", code, toEmail);
+        } catch (Exception e) {
+            log.error("Lỗi khi gửi email phản hồi ticket {} đến {}: {}", code, toEmail, e.getMessage());
+        }
+    }
+
+    /** {@code bodyHtml} và {@code intro} phải được escape/an toàn từ phía gọi — hàm này chèn nguyên văn. */
+    private String buildSupportEmailHtml(String heading, String code, String intro, String boxTitle, String bodyHtml) {
+        return "<div style=\"font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;background:#ffffff;\">"
+                + "<div style=\"text-align:center;margin-bottom:24px;\">"
+                + "<span style=\"display:inline-block;width:36px;height:36px;background:#1A6FE0;border-radius:10px;color:#ffffff;font-weight:700;font-size:20px;line-height:36px;\">L</span>"
+                + "<div style=\"margin-top:8px;font-size:18px;font-weight:700;color:#0F172A;\">LinguaLearn</div>"
+                + "</div>"
+                + "<h2 style=\"font-size:16px;color:#0F172A;text-align:center;margin:0 0 4px;\">" + heading + "</h2>"
+                + "<p style=\"text-align:center;margin:0 0 16px;\"><span style=\"display:inline-block;padding:4px 12px;border-radius:999px;background:#1A6FE01A;color:#1A6FE0;font-size:13px;font-weight:700;font-family:monospace;\">" + code + "</span></p>"
+                + "<p style=\"font-size:14px;color:#64748B;text-align:center;margin:0 0 20px;\">" + intro + "</p>"
+                + "<div style=\"background:#F1F5F9;border-radius:12px;padding:16px;margin-bottom:24px;\">"
+                + "<p style=\"font-size:12px;color:#64748B;margin:0 0 4px;font-weight:600;\">" + boxTitle + "</p>"
+                + "<p style=\"font-size:14px;color:#0F172A;margin:0;\">" + bodyHtml + "</p>"
+                + "</div>"
                 + "<hr style=\"border:none;border-top:1px solid #E2E8F0;margin:16px 0;\">"
                 + "<p style=\"font-size:12px;color:#94A3B8;text-align:center;margin:0;\">Email tự động, vui lòng không trả lời trực tiếp email này.</p>"
                 + "</div>";
