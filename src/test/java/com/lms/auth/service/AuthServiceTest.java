@@ -66,6 +66,20 @@ class AuthServiceTest {
     private AuthService authService;
 
     @Test
+    void testGenerateAdminResetLink_GoogleAccount_ShouldRejectAndNotSendEmail() {
+        User user = new User();
+        user.setEmail("google@lms.local");
+        user.setAuthProvider("GOOGLE");
+        when(userRepository.findByEmail("google@lms.local")).thenReturn(java.util.Optional.of(user));
+
+        org.junit.jupiter.api.Assertions.assertThrows(
+                com.lms.common.exception.BusinessRuleViolationException.class,
+                () -> authService.generateAdminResetLink("google@lms.local"));
+
+        verify(emailService, never()).sendPasswordResetLinkEmail(anyString(), anyString(), any());
+    }
+
+    @Test
     void testForgotPassword_ShouldSendOtpAndStoreInRedis() {
         String email = "student@lms.local";
         String generatedOtp = "123456";

@@ -368,7 +368,12 @@ public class AuthService {
      * TTL 30 phút.
      */
     public ResetLinkRes generateAdminResetLink(String email) {
-        userRepository.findByEmail(email).orElseThrow(() -> new ResourceNotFoundException("User", email));
+        User target = userRepository.findByEmail(email).orElseThrow(() -> new ResourceNotFoundException("User", email));
+        // Tài khoản Google không có mật khẩu (BR-AUTH-01) — họ đăng nhập bằng Google, link reset vô nghĩa.
+        if ("GOOGLE".equals(target.getAuthProvider())) {
+            throw new BusinessRuleViolationException(
+                    "Tài khoản này đăng nhập bằng Google, không có mật khẩu để đặt lại.");
+        }
 
         String token = UUID.randomUUID().toString();
         String redisKey = "pwreset:token:" + token;
