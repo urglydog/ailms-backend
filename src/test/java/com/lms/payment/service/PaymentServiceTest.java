@@ -29,6 +29,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 import vn.payos.PayOS;
 import vn.payos.model.v2.paymentRequests.CreatePaymentLinkResponse;
+import vn.payos.model.v2.paymentRequests.PaymentLink;
 import vn.payos.model.v2.paymentRequests.PaymentLinkStatus;
 import vn.payos.service.blocking.v2.paymentRequests.PaymentRequestsService;
 
@@ -375,6 +376,21 @@ class PaymentServiceTest {
         paymentService.createPayment(EMAIL, new CreateReq(10L, "PAYOS", null, null, null, null, null));
 
         assertThat(old.getStatus()).isEqualTo(PaymentStatus.PENDING);
+    }
+
+    @Test
+    void createPayment_cancelFailsButLinkAlreadyExpired_marksOldPaymentFailed() {
+        Payment old = pendingPayment("111222333", null, courseA, new BigDecimal("200000"));
+        when(paymentRepository.findByUser_IdAndStatusAndCourse_IdIn(1L, PaymentStatus.PENDING, List.of(10L)))
+                .thenReturn(List.of(old));
+        when(paymentRequestsService.cancel(any(Long.class), any(String.class))).thenThrow(new RuntimeException("het han"));
+        PaymentLink expiredLink = org.mockito.Mockito.mock(PaymentLink.class);
+        when(expiredLink.getStatus()).thenReturn(PaymentLinkStatus.EXPIRED);
+        when(paymentRequestsService.get(any(Long.class))).thenReturn(expiredLink);
+
+        paymentService.createPayment(EMAIL, new CreateReq(10L, "PAYOS", null, null, null, null, null));
+
+        assertThat(old.getStatus()).isEqualTo(PaymentStatus.FAILED);
     }
 
     // ── cancelPending (học viên hủy ở PayOS) ────────────────────────────

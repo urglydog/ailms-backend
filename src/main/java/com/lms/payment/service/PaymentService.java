@@ -420,10 +420,7 @@ public class PaymentService {
             if (ref == null || !handledRefs.add(ref)) {
                 continue;
             }
-            try {
-                payOS.paymentRequests().cancel(Long.parseLong(ref), "Thay bằng đơn thanh toán mới");
-            } catch (Exception e) {
-                log.warn("Không hủy được link PayOS cũ {} (giữ nguyên đơn PENDING): {}", ref, e.getMessage());
+            if (!cancelPayosLink(ref)) {
                 continue;
             }
             List<Payment> group = p.getOrderGroupRef() != null
@@ -434,6 +431,38 @@ public class PaymentService {
                     g.setStatus(PaymentStatus.FAILED);
                     paymentRepository.save(g);
                 }
+            }
+        }
+    }
+
+    /**
+     * Hủy link PayOS cũ; trả true nếu link CHẮC CHẮN không thể thanh toán nữa. Nếu lệnh hủy lỗi
+     * (vd link đã hết hạn/đã hủy sẵn bên PayOS) thì tra trạng thái thật — chỉ coi là xong khi
+     * CANCELLED/EXPIRED/FAILED; PAID/PROCESSING/không tra được thì trả false (không đụng đơn cũ).
+     */
+    private boolean cancelPayosLink(String ref) {
+        long orderCode;
+        try {
+            orderCode = Long.parseLong(ref);
+        } catch (NumberFormatException e) {
+            return false;
+        }
+        try {
+            payOS.paymentRequests().cancel(orderCode, "Thay bằng đơn thanh toán mới");
+            return true;
+        } catch (Exception cancelError) {
+            try {
+                var status = payOS.paymentRequests().get(orderCode).getStatus();
+                boolean dead = status == vn.payos.model.v2.paymentRequests.PaymentLinkStatus.CANCELLED
+                        || status == vn.payos.model.v2.paymentRequests.PaymentLinkStatus.EXPIRED
+                        || status == vn.payos.model.v2.paymentRequests.PaymentLinkStatus.FAILED;
+                if (!dead) {
+                    log.warn("Link PayOS {} ở trạng thái {} — giữ nguyên đơn PENDING cũ", ref, status);
+                }
+                return dead;
+            } catch (Exception statusError) {
+                log.warn("Không hủy/tra được link PayOS cũ {} (giữ nguyên đơn PENDING): {}", ref, statusError.getMessage());
+                return false;
             }
         }
     }
