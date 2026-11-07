@@ -34,9 +34,10 @@ import org.springframework.core.annotation.Order;
  */
 @Configuration
 @Profile("dev")
+// Tắt mặc định — bật bằng DEV_SEED_ENABLED=true (xem application-dev.yml).
 // Khi nạp dữ liệu demo thật (app.demo-seed.enabled=true) thì không seed lại các khóa ngẫu nhiên này.
-@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(
-        name = "app.demo-seed.enabled", havingValue = "false", matchIfMissing = true)
+@org.springframework.boot.autoconfigure.condition.ConditionalOnExpression(
+        "${app.dev-seed.enabled:false} and !${app.demo-seed.enabled:false}")
 public class DevExtraCourseSeeder {
 
     private static final Logger log = LoggerFactory.getLogger(DevExtraCourseSeeder.class);

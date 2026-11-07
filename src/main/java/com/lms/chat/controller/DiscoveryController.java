@@ -3,6 +3,7 @@ package com.lms.chat.controller;
 import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
 import com.lms.auth.security.AccountRestrictionService;
+import com.lms.chat.service.DiscoveryQuotaService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.*;
@@ -40,12 +41,13 @@ public class DiscoveryController {
     private final com.lms.common.config.AiWorkerConfig aiWorkerConfig;
     private final UserRepository userRepository;
     private final AccountRestrictionService accountRestrictionService;
+    private final DiscoveryQuotaService discoveryQuotaService;
 
     /**
      * POST /api/v1/discovery/chat
      *
      * <ul>
-     *   <li>Guest (no JWT): role = "GUEST", quota = 15 tin/IP/h (TODO: Redis counter)</li>
+     *   <li>Guest (no JWT): role = "GUEST", quota = 15 tin/IP/h (Redis counter)</li>
      *   <li>Student (JWT): role = "STUDENT", quota = 30 tin/ngày</li>
      *   <li>Instructor (JWT): redirect → 403, dùng /api/v1/instructor/ai-assistant/chat thay thế</li>
      *   <li>Admin (JWT): 403 — admin không dùng Discovery Chat</li>
@@ -89,10 +91,13 @@ public class DiscoveryController {
             }
         }
 
-        // ── TODO BR-DISCOVERY-01: quota check qua Redis ───────────────────
-        // Guest: key = "discovery:ip:<ip>", TTL 1h, limit 15
-        // Student: key = "discovery:user:<userId>", TTL 1 ngày, limit 30
-        // Hiện tại bỏ qua để không block dev — sẽ implement cùng BR-TUTOR-04
+        // ── Quota BR-DISCOVERY-01 (sau requireAiAllowed để người bị khóa AI không bị trừ lượt oan) ──
+        if ("GUEST".equals(role)) {
+            discoveryQuotaService.consumeGuest(extractClientIp(httpRequest));
+        } else {
+            userRepository.findByEmail(authentication.getName())
+                    .ifPresent(u -> discoveryQuotaService.consumeStudent(u.getId()));
+        }
 
         // ── Forward vào AI Worker với role context ────────────────────────
         Map<String, Object> aiPayload = Map.of(
@@ -116,5 +121,14 @@ public class DiscoveryController {
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                     .body(Map.of("error", "AI service hiện không khả dụng. Vui lòng thử lại sau."));
         }
+    }
+
+    /** Sau reverse proxy (Caddy) — lấy IP đầu của X-Forwarded-For, cùng cách {@code AuthService.extractClientIp}. */
+    private String extractClientIp(jakarta.servlet.http.HttpServletRequest http) {
+        String forwarded = http.getHeader("X-Forwarded-For");
+        if (forwarded != null && !forwarded.isBlank()) {
+            return forwarded.split(",")[0].trim();
+        }
+        return http.getRemoteAddr();
     }
 }

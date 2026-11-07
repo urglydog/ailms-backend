@@ -5,6 +5,8 @@ Tài liệu này định nghĩa chi tiết các Epic/User Story để nâng cấ
 Trước mỗi tính năng đều đi kèm với **Bối cảnh & Nỗi đau (Pain Point)** để đội ngũ kỹ thuật/vận hành luôn nắm rõ bài toán cốt lõi.
 
 > **Lưu ý:** Các task đã hoàn thành (Redis Cache, Coupons, Bundles, Streak, AI Sentiment Filter, AI Study Plan, Knowledge Gaps, Instructor Dashboard) đã được dọn khỏi file này để giữ chỗ cho task mới — xem lại chi tiết triển khai/ngày hoàn thành trong lịch sử commit của từng repo (`be`/`fe`/`ai-worker`) hoặc trong `weekly_report.md` (tóm tắt theo tuần để demo).
+>
+> **Dọn lại 30/10/2026:** các mục mobile đánh dấu ✅ đã xong qua 3 lần rà soát (lần 2/3/4: port auth, học liệu, gradebook, quiz cá nhân, leaderboard, lộ trình AI, AI tutor explain, phát âm flashcard, chat discovery...) đã được gỡ khỏi file này — xem lịch sử commit repo `mobile` nếu cần chi tiết. Chỉ giữ lại các gap THẬT sự còn pending.
 
 ---
 
@@ -33,33 +35,17 @@ Trước mỗi tính năng đều đi kèm với **Bối cảnh & Nỗi đau (Pa
 
 **Lưu ý rủi ro deadline:** nếu tới tuần 9-10 mà Giai đoạn 2-4 (port core + AI) chưa xong, cắt Giai đoạn 5 (offline flashcard) khỏi scope báo cáo trước — không cắt phần AI (giá trị cốt lõi khoá luận).
 
-### Mobile — Rà soát sâu lần 2 (07/10/2026, đối chiếu TOÀN BỘ component web, không chỉ file API)
+### Mobile — Gap thật còn pending (dọn lại 30/10/2026, gộp từ 3 lần rà soát)
 
-**Bài học:** lần khảo sát đầu (bên dưới) chỉ đọc file `lib/api/*.ts`, bỏ sót các màn web gộp NHIỀU nguồn dữ liệu trong 1 trang (vd Materials Workspace thật ra có 3 nguồn: cá nhân + official + tài nguyên tĩnh, không phải 1). Từ giờ: port bất kỳ màn nào PHẢI đọc hết component/hook web thật trước khi code mobile, không suy luận từ tên file — xem [[feedback_mobile_port_survey_first]] trong memory.
+Đa số domain (auth, học liệu workspace, SRS flashcard, hỏi đáp, gradebook, quiz cá nhân, leaderboard, lộ trình AI, AI tutor explain, phát âm flashcard, chat discovery...) đã đạt parity đầy đủ với web — xem lịch sử commit repo `mobile` nếu cần chi tiết triển khai. Chỉ còn 3 gap THẬT:
 
-**Lỗ hổng thật tìm thấy (rà lại 14 màn "đã xong") — TẤT CẢ đã fix xong, xem bảng "Chưa port" ở dưới (mục 8 là mục còn lại duy nhất):** Học liệu AI thiếu tài nguyên tĩnh, lesson player thiếu cấu trúc tab, course detail thiếu banner Live/Bundle, gradebook thiếu KnowledgeGapsWidget, hồ sơ thiếu toggle riêng tư/đổi mật khẩu — chi tiết triển khai xem lịch sử commit repo `mobile`.
-
-### Mobile — Khảo sát chi tiết màn hình còn thiếu (07/10/2026, đối chiếu từng route với `fe`)
-
-**Đã port xong, chạy được (verify qua web `expo start --web`, chưa test thiết bị thật):** đăng nhập (email/password + Google OAuth), đăng ký, quên mật khẩu, danh sách/chi tiết khoá học, khoá học của tôi, lesson player, làm bài thi (exam, chỉ OFFICIAL_EXAM không giám sát camera), lịch sử làm bài, gradebook, chứng chỉ, wishlist, thông báo, hồ sơ, checkout PayOS (1 khoá), Học liệu AI (Flashcard/Mindmap/Quiz).
-
-**Bug đã biết — rà lại 08/10/2026, cả 3 đã xong:**
-1. ✅ **Nhầm luồng Quiz** — đã fix xong 07/10 (code `material/[id].tsx` đã phân nhánh đúng theo `quizType`, xác nhận lại đúng khi rà soát 08/10).
-2. ✅ **Mindmap hiện quá nhỏ** — đã fix xong (`mermaidHtml.ts` đã áp đủ 3 patch CSS + `min-width: 700px` cho phép cuộn ngang, xác nhận lại đúng khi rà soát 08/10).
-3. ✅ **Thiếu nút "←" quay lại thủ công** — chỉ còn thiếu ở `exam/[quizId]/index.tsx`, đã thêm cho màn chặn "yêu cầu giám sát" (an toàn, chưa vào bài thi); CỐ Ý không thêm cho màn đang làm bài có tính giờ, tránh bấm nhầm mất lượt làm bài (repo `mobile` commit `aba3ed5`).
-
-**Chưa port — liệt kê theo mức ưu tiên đề xuất (CẦN CONFIRM thứ tự trước khi làm tiếp):**
-
-> Các mục đã hoàn thành (bug Quiz, tài nguyên tĩnh khoá học, cấu trúc tab lesson player, banner
-> Live/Bundle ở course detail, KnowledgeGapsWidget, toggle riêng tư/hồ sơ công khai, giỏ hàng,
-> lịch sử thanh toán, ranking/leaderboard, dubbing/transcript, giới hạn 1 phiên xem đồng thời)
-> đã dọn khỏi bảng này — xem lịch sử commit repo `mobile` nếu cần chi tiết.
-
-| # | Tính năng | Vì sao quan trọng | Phụ thuộc BE |
+| # | Gap | Trạng thái | Phụ thuộc |
 |---|---|---|---|
-| 8 | Live session (màn riêng, không chỉ banner) — **HOÃN** (12/10/2026, xem lý do bên dưới) | Học trực tiếp | `live.ts`: `/api/v1/live-sessions/**` |
+| 1 | Live session (màn riêng, không chỉ banner) | **HOÃN** — xem lý do bên dưới | `live.ts`: `/api/v1/live-sessions/**` |
+| 2 | Giám sát thi (proctoring) — đã code chụp frame định kỳ gửi Gemini Vision | **CẦN TEST THIẾT BỊ THẬT** trước khi coi là xong | `ProctoringCameraView` |
+| 3 | AI Gia sư giải thích câu sai chưa hỗ trợ `?seek=` nhảy mốc video khi "Ôn tập lại lý thuyết" | Chưa làm | `ExplainWrongAnswer.tsx`, lesson player mobile |
 
-**Mục 8 — Live session mobile, lý do hoãn (12/10/2026):** Web dùng LiveKit (WebRTC) thật
+**Gap 1 — Live session mobile, lý do hoãn (12/10/2026):** Web dùng LiveKit (WebRTC) thật
 (`@livekit/components-react`, video track camera/screen-share, chat + phụ đề dịch qua data
 channel của LiveKit, không qua STOMP) — port đúng kỹ thuật sang mobile cần
 `@livekit/react-native` + `@livekit/react-native-webrtc`, **bắt buộc build EAS dev client, KHÔNG
@@ -70,68 +56,15 @@ không đổi sang EAS dev client cho riêng tính năng này. BE không cần �
 sẵn `liveView.ts` (stub) và `LiveBanner.tsx` (cố tình chưa có `onPress`) chờ đúng việc này nếu
 sau này đổi quyết định.
 
-**Quy ước xác nhận:** không tự ý chọn thứ tự làm tiếp nữa (đã có 2 lần đặt sai phạm vi trong buổi — nối "Học liệu AI" vào trang chưa mua, và nối LECTURE_QUIZ vào màn thi chính thức) — luôn hỏi ưu tiên trước khi bắt đầu mục mới trong bảng trên.
+**Gap 2 — Giám sát thi, rủi ro chưa xác minh:** `ProctoringCameraView` chụp still-frame định kỳ
+(random 30-60s) gửi `/proctor-frame` cho Gemini Vision xác thực — nguồn vi phạm hình ảnh được
+SERVER xác thực, giống cơ chế web dùng. **RỦI RO CHƯA XÁC MINH:** `takePictureAsync()` gọi xen
+giữa lúc `recordAsync()` đang quay video liên tục CÓ THỂ làm dừng video đang quay (hành vi đã biết
+của `expo-camera` ở nhiều phiên bản, không xác nhận được trong môi trường code vì không có thiết
+bị thật) — PHẢI test thật trên điện thoại trước khi báo tính năng này ổn định; nếu video bị cắt
+ngắn, cân nhắc bỏ quay liên tục, chỉ dựa vào chuỗi frame định kỳ.
 
-**Đã xong (12/10/2026, repo `mobile` commit `1273ea0`):** port trang Cộng đồng/bảng xếp hạng đầy
-đủ (top 30, streak cá nhân, hạng của bạn, bấm 1 hạng → hồ sơ công khai mở sẵn tab Chứng chỉ) —
-song song với tính năng tương đương bên web (`fe` commit `b1a6551`/`ef1ae0a`). Không port animation
-stagger CSS vì mobile chưa dùng `react-native-reanimated` ở đâu khác. Fix "ẩn chatbot AI lúc thi"
-bên web KHÔNG áp dụng cho mobile — mobile chưa có chatbot AI Discovery nào để sửa.
-
-### Mobile — Rà soát toàn diện lần 3 (12/10/2026, theo yêu cầu đối chiếu từng domain: auth, học liệu, bảng điểm, hỏi đáp, giám sát thi, cộng đồng, hồ sơ/thiết bị — KHÔNG đụng domain video/stream/dubbing, thuộc phạm vi người khác)
-
-**Kết quả: đa số domain đã đạt parity đầy đủ với web, chỉ có 2 gap thật + 1 gap cosmetic:**
-
-- ✅ **Auth/tài khoản** (đăng ký+OTP, đăng nhập email/Google, quên mật khẩu, danh sách phiên đăng
-  nhập + đăng xuất thiết bị khác) — parity đầy đủ, cùng endpoint BE. Lưu ý phụ: bản thân web
-  **không có** cơ chế "ban"/giới hạn số thiết bị tự động — chỉ Redis lưu session để hiển thị +
-  đăng xuất tất cả thiết bị khác thủ công (`AuthService.generateTokens`/`logoutAllDevices`,
-  be/src/main/java/com/lms/auth/service/AuthService.java), không có auto-evict/giới hạn số lượng.
-  Nếu sau này cần giới hạn thật, phải xây ở BE trước, không phải việc của mobile.
-- ✅ **Học liệu Workspace (3 nguồn: cá nhân/official/tài nguyên tĩnh)**, **SRS flashcard** (mobile
-  còn làm tốt hơn — có SM-2 local thật cho offline, `src/lib/db/flashcardDb.ts`, trong khi web chỉ
-  hiện gợi ý UI, tính thật ở BE), **Hỏi đáp** (`QnaTab.tsx` dùng STOMP WebSocket thật, không phải
-  stub), **Tài nguyên** (`ResourcesTab.tsx`), **Bảng điểm + KnowledgeGapsWidget** — parity đầy đủ.
-- ✅ **Gradebook — đã dọn xong gap cosmetic** (12/10/2026, repo `mobile` commit `01d4855`): thêm
-  phân trang 10 quiz/trang + badge "đã được giảng viên lưu trữ" cho quiz `isDeleted=true`, khớp
-  đầy đủ `CourseGradebookTab.tsx` bên web. Không còn gap nào trong domain này.
-- ✅ **Quiz cá nhân — đã port soạn/sửa câu hỏi** (12/10/2026, repo `mobile` commit `5dfcc52`):
-  `components/material/QuizPersonalEditor.tsx` (thêm/sửa/xoá câu hỏi, dùng `Modal` built-in RN).
-  `material/[id].tsx` thêm tab "Làm bài"/"Soạn câu hỏi", CHỈ hiện khi `!material.isOfficial`.
-  Field `isOfficial` được BE bổ sung vào `MaterialDetailRes` (commit `b3b9fd9` trên `be`, đã
-  `mvn clean verify` thật trong container `lms_backend` — PASS, đã push) vì trước đây response
-  tính `isOfficial` nội bộ nhưng không trả ra; BE vẫn tự chặn server-side nếu cố sửa học liệu
-  Official (`AccessDeniedDomainException`, đã verify sẵn có) — field mới chỉ để FE ẩn/hiện đúng UI.
-- ⚠️ **Giám sát thi — đã vá phần chụp frame, CẦN TEST THIẾT BỊ THẬT trước khi coi là xong**
-  (12/10/2026, repo `mobile` commit `5dfcc52`): `ProctoringCameraView` giờ chụp still-frame định kỳ
-  (random 30-60s) gửi `/proctor-frame` cho Gemini Vision xác thực — nguồn vi phạm hình ảnh được
-  SERVER xác thực, giống cơ chế web dùng (trước đây mobile chỉ có `TAB_SWITCH` hoạt động thật,
-  `NO_FACE`/`MULTIPLE_FACES`/`HEAD_TURNED`/`GAZE_AWAY` là code chết vì `expo-camera` managed
-  workflow không hỗ trợ face detection on-device). **RỦI RO CHƯA XÁC MINH:** `takePictureAsync()`
-  gọi xen giữa lúc `recordAsync()` đang quay video liên tục CÓ THỂ làm dừng video đang quay (hành
-  vi đã biết của `expo-camera` ở nhiều phiên bản, không xác nhận được trong môi trường code vì
-  không có thiết bị thật) — PHẢI test thật trên điện thoại trước khi báo tính năng này ổn định; nếu
-  video bị cắt ngắn, cân nhắc bỏ quay liên tục, chỉ dựa vào chuỗi frame định kỳ. Fix kèm theo:
-  `exam/[quizId]/index.tsx` trước đây bỏ qua response của `recordViolation` hoàn toàn khiến
-  auto-submit khi vượt số lần vi phạm không bao giờ chạy dù BE đã đếm đúng — đã xử lý
-  `shouldAutoSubmit` cho cả 2 nguồn vi phạm.
-
-### Mobile — Rà soát lần 4 (12/10/2026): AI Gia sư giải thích câu sai, phát âm flashcard, Lộ trình AI đầy đủ, Chat Discovery
-
-**Tất cả 4 việc đã xong, repo `mobile` nhánh `main` (đã bỏ nhánh `additional-features`, xem quy
-ước push mới ở memory `feedback_mobile_push_straight_to_main`):**
-- ✅ **Lộ trình AI bổ sung đầy đủ** (commit `46a215f`) — luồng "Cập nhật tiến độ" (reschedule) có
-  modal xem trước số liệu, xuất lịch .ics (tái dùng `saveAndShareBlob` có sẵn), tick tiến độ hoàn
-  thành (gạch ngang/bấm nhảy tới bài/badge phút học), form tạo lộ trình cho chọn ngày mục tiêu
-  (trước đây hardcode +30 ngày).
-- ✅ **AI Gia sư giải thích câu trả lời sai** (commit `facfac7`) —
-  `components/quiz/ExplainWrongAnswer.tsx` dùng chung cho `ExamResultView` (thi chính thức) và
-  `LectureQuiz` (ôn tập cá nhân), gọi `POST /api/v1/quizzes/tutor/explain`. Chưa hỗ trợ `?seek=`
-  nhảy tới đúng mốc video khi bấm "Ôn tập lại lý thuyết" (lesson player mobile chưa đọc query này).
-- ✅ **Phát âm flashcard cá nhân** (commit `c255c84`) — thêm dependency `expo-speech` (chạy được
-  Expo Go, không cần native linking) thay cho Web Speech API của web, cùng bảng map ngôn ngữ.
-- ✅ **Chat Discovery AI** (commit `6fe98ff`) — mobile trước đây hoàn toàn chưa có, giờ port đủ
-  (nút nổi + modal chat + gợi ý khoá học), ẩn lúc thi giống quy tắc đã áp dụng bên web.
+**Quy ước xác nhận:** không tự ý chọn thứ tự làm tiếp — luôn hỏi ưu tiên trước khi bắt đầu gap mới trong bảng trên.
 
 **Acceptance Criteria:**
 - App chạy được qua Expo Go trên cả Android và iPhone thật, gọi đúng API `be` hiện có (không đổi BE).
@@ -143,30 +76,14 @@ bên web KHÔNG áp dụng cho mobile — mobile chưa có chatbot AI Discovery 
 
 - **Nộp bài thi bị đứng hình trên Safari iOS** (`fe/app/(student)/exam/[quizId]/page.tsx`) — học viên phải tự bấm Dynamic Island tắt ghi hình rồi back lại mới nộp được bài, không tự động như desktop. Đã thử vá 1 lần (06/10/2026, dừng camera ngay trước khi đợi recorder.stop()) nhưng gây regression mất luôn phát hiện khuôn mặt — đã revert về bản cũ (commit `8bc7bab` trên `fe`). **Quyết định: KHÔNG vá tiếp trên web** — sẽ tự hết khi học viên chuyển sang làm bài thi trên app native (dùng `expo-camera` thật, không qua giới hạn WebKit `getUserMedia`/`MediaRecorder`), xem epic Mobile Native App ở trên, Tuần 5-7.
 
-### Audit be/fe/ai-worker (14/10/2026, read-only, trước khi dồn hẳn sang mobile)
+### Dọn web trước khi dồn sang mobile (đối chiếu code thật 07/11/2026) — ĐÃ XONG
 
-**Ưu tiên cao — nên fix trước khi rời sang mobile (liên quan tiền/dữ liệu thật):**
-1. **FE: `npx tsc --noEmit` đang FAIL thật** — thiếu module `recharts` (dùng ở `app/admin/ai-analytics`, `app/instructor/revenue/list`, `retention`, `reviews`) và `next-intl` (dùng ở `Footer`/`Header`/`LanguageModal`/`LocaleProvider`). Lỗi build thật, không phải nợ kỹ thuật vặt.
-2. **BE `payment/service/PaymentService.java:465-467`** — catch rỗng thực chất (`catch (Exception e) { e.printStackTrace(); }`) khi build hash VNPAY; nếu `URLEncoder.encode` lỗi, flow vẫn tiếp tục tạo URL thanh toán với checksum sai mà không throw/log chuẩn — lỗi thanh toán âm thầm.
-3. **BE `enrollment/service/CourseReviewService.java:53-54`** — bug nghiệp vụ tự ghi nhận trong code ("BUG THẬT 03/10/2026"): chưa enforce yêu cầu học viên phải học ≥20-30% khóa học mới được review, dù mục này từng đánh dấu "ĐÃ HOÀN THÀNH". Rủi ro review giả khi chưa học.
+Đã làm: quota Discovery chat (`DiscoveryQuotaService`, khách 15/IP/giờ, học viên 30/ngày), cờ `DEV_SEED_ENABLED` tắt 4 seeder `Dev*` (mặc định false), gỡ VNPay (migration `V152` đổi `payment_method` VNPAY → PAYOS, không xoá dòng nào), Login/Register/Google/exam đọc lỗi qua `ApiError`, đổi ~600 literal màu gray/red/green/amber sang design token.
 
-**Mức trung — ghi lại để theo dõi, chưa gấp:**
-- `chat/controller/DiscoveryController.java:78` — TODO rõ ràng: chưa triển khai quota Redis cho BR-DISCOVERY-01 (Guest 15/IP/giờ, Student 30/ngày), hiện không giới hạn gì.
-- `material/service/MaterialGenerationService.java:354-356, 494-496` — 2 catch `JsonProcessingException` bị bỏ qua lặng lẽ khi parse `customLessonIds`/scope.
-- FE `components/auth/RegisterForm.tsx:96-144`, `LoginForm.tsx:69` — vẫn đọc `error.response?.data?.detail` kiểu axios, chưa đồng bộ với `ApiError`/`.message` như checkout đã fix.
-- FE `app/(student)/exam/[quizId]/page.tsx:533-545` — heuristic phát hiện DevTools qua `outerWidth/innerWidth` vẫn còn, tự ghi chú false-positive trên mobile nhưng chưa xử lý triệt để.
-- ai-worker `app/config.py:58` — giá trị cấu hình tạm (0.7) cho convert DOCX→Markdown, TODO tham chiếu `business-rules.md` chưa chốt.
-
-**Mức thấp:**
-- FE: literal Tailwind color (`text-gray-*`, `bg-gray-*`, `bg-red-600`, `bg-cyan-600`...) rải rác ở `admin/`, `instructor/live`, `instructor/communication`, trang exam — vi phạm rule design token.
-- FE `app/instructor/live/[sessionId]/page.tsx:90` — chưa có flow upload ảnh riêng cho live session, đang dùng tạm ảnh bìa khóa học.
-- ai-worker `app/api/discovery.py:84` — `_fetch_category_slugs()` tự mở `httpx.AsyncClient()` riêng cho API public `/api/v1/categories` thay vì dùng `backend_client` chung (không phải bug header vì là API public, chỉ là không tận dụng pool/retry chung).
-- BE: `mvn clean compile`/`mvn clean verify` **chưa được chạy xác nhận thật** trong đợt audit này (môi trường agent không có `mvn`) — cần tự chạy thủ công trước khi coi BE là sạch.
-
-**Đã xác nhận SẠCH/ĐÃ FIX (không cần làm gì):** `InternalInstructorAiService.getInstructorDashboard` (đã dùng `DashboardService` thật); header callback nội bộ ai-worker (đã dùng đúng `X-Internal-Token` qua `backend_client`); MediaRecorder codec webm (đã có `isTypeSupported`); "Event loop is closed" (đã mitigated bằng `aclose()` trong `finally` ở mọi task Celery — **nhớ áp dụng lại pattern này nếu thêm task Celery mới**); dubbing pipeline không còn import chết whisperx/demucs/pyannote.
-
-Chi tiết đầy đủ: `~/LMS_Audit_BeFeAiWorker.md` (ngoài source, không commit).
-
----
+**Còn lại (không gấp):**
+- Literal màu cyan/blue/purple/slate/indigo (~166 chỗ) chưa đổi — không có token tương đương (`cyan` token là cyan sáng, `bg-cyan-600` là cyan đậm), cần quyết định thiết kế riêng.
+- Exam: lỗi HTTP 500 khi nộp bài chưa tự kết thúc phiên (chỉ 404/410 xử lý) — cố ý, tránh 500 tạm thời làm mất bài.
+- ai-worker `app/config.py:58` (giá trị tạm 0.7 DOCX→Markdown); `MaterialGenerationService` 2 catch `JsonProcessingException` im lặng; `ai-worker discovery.py` `_fetch_category_slugs` tự mở `httpx.AsyncClient`.
+- Chạy `mvn clean verify` thủ công trước khi bảo vệ (đã chạy xanh 07/11/2026: 448 test).
 
 Tip bảo mật data: check request nào thường xuyên hoặc truy xuất lượng dữ liệu lớn => AI cảnh báo admin

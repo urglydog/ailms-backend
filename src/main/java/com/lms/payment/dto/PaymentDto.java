@@ -13,7 +13,7 @@ public class PaymentDto {
 
     public record CreateReq(
             @NotNull Long courseId,
-            @NotNull String paymentMethod, // VNPAY, MOMO
+            @NotNull String paymentMethod, // PAYOS
             String billingName,
             String billingPhone,
             /** UC57 mở rộng (15/09/2026) — mã giảm giá tự nhập, optional. */

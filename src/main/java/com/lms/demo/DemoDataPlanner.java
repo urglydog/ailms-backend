@@ -33,7 +33,7 @@ public final class DemoDataPlanner {
     private static final String[] GIVEN_M = {"An", "Bình", "Cường", "Dũng", "Hải", "Hiếu", "Huy", "Khoa", "Long", "Nam", "Phúc", "Quân", "Sơn", "Tài", "Thắng", "Trung", "Tuấn", "Việt", "Khang", "Đạt"};
     private static final String[] GIVEN_F = {"Anh", "Chi", "Dung", "Giang", "Hà", "Hạnh", "Hương", "Lan", "Linh", "Mai", "Ngân", "Nhung", "Oanh", "Quỳnh", "Thảo", "Trang", "Uyên", "Vy", "Yến", "Trinh"};
     private static final String[] DRAWN_STYLES = {"adventurer", "lorelei", "fun-emoji", "bottts", "thumbs", "big-smile", "notionists", "avataaars"};
-    private static final String[] METHODS = {"VNPAY", "MOMO", "ZALOPAY"};
+    private static final String[] METHODS = {"PAYOS", "MOMO", "ZALOPAY"};
 
     private static final String[] GOOD = {
         "Nội dung rõ ràng, dễ theo dõi, mình áp dụng được ngay vào bài tập.",

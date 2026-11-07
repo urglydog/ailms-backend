@@ -54,18 +54,6 @@ public class PaymentService {
     private final CartItemRepository cartItemRepository;
     private final PayOS payOS;
 
-    @Value("${payment.vnpay.tmnCode:}")
-    private String vnpTmnCode;
-
-    @Value("${payment.vnpay.hashSecret:}")
-    private String vnpHashSecret;
-
-    @Value("${payment.vnpay.url:}")
-    private String vnpUrl;
-
-    @Value("${payment.vnpay.returnUrl:}")
-    private String vnpReturnUrl;
-
     @Value("${payment.payos.returnUrl:http://localhost:3000/payments/callback}")
     private String payosReturnUrl;
 
@@ -92,9 +80,9 @@ public class PaymentService {
         }
         // BUG THẬT (25/09/2026) — xem docblock nhánh fallback bên dưới: validate NGAY từ đầu
         // (trước khi tạo dòng Payment PENDING) thay vì để tới cuối hàm.
-        if (!"PAYOS".equalsIgnoreCase(req.paymentMethod()) && !"VNPAY".equalsIgnoreCase(req.paymentMethod())) {
+        if (!"PAYOS".equalsIgnoreCase(req.paymentMethod())) {
             throw new BusinessRuleViolationException("PAYMENT_METHOD_UNAVAILABLE",
-                    "Phương thức thanh toán \"" + req.paymentMethod() + "\" hiện chưa được hỗ trợ. Vui lòng chọn VNPAY hoặc PayOS.");
+                    "Phương thức thanh toán \"" + req.paymentMethod() + "\" hiện chưa được hỗ trợ. Vui lòng chọn PayOS.");
         }
 
         // BR-PAY-02: Lấy giá từ server. UC57 mở rộng (15/09/2026) — áp coupon tốt nhất
@@ -139,13 +127,8 @@ public class PaymentService {
             return new PaymentDto.PaymentUrlRes(checkoutUrl, payment.getTxnRef());
         }
 
-        if ("VNPAY".equalsIgnoreCase(req.paymentMethod())) {
-            String orderInfo = "Thanh toan khoa hoc " + course.getId();
-            return new PaymentDto.PaymentUrlRes(buildVnpayUrl(txnRef, amount, orderInfo), txnRef);
-        }
-
         // Không thể tới đây nữa — đã validate paymentMethod ngay đầu hàm (trước đây MOMO/ZALOPAY
-        // và bất kỳ giá trị lạ nào rơi vào đây, ÂM THẦM trả URL sandbox VNPAY sai — bug thật,
+        // và bất kỳ giá trị lạ nào rơi vào đây, ÂM THẦM trả URL thanh toán sai — bug thật,
         // 25/09/2026).
         throw new IllegalStateException("Unreachable: paymentMethod đã được validate ở đầu hàm");
     }
@@ -168,9 +151,9 @@ public class PaymentService {
             throw new BusinessRuleViolationException("Chọn ít nhất 1 khóa học hoặc gói khóa học để thanh toán.");
         }
         
-        if (!"PAYOS".equalsIgnoreCase(req.paymentMethod()) && !"VNPAY".equalsIgnoreCase(req.paymentMethod())) {
+        if (!"PAYOS".equalsIgnoreCase(req.paymentMethod())) {
             throw new BusinessRuleViolationException("PAYMENT_METHOD_UNAVAILABLE",
-                    "Phương thức thanh toán \"" + req.paymentMethod() + "\" hiện chưa được hỗ trợ. Vui lòng chọn VNPAY hoặc PayOS.");
+                    "Phương thức thanh toán \"" + req.paymentMethod() + "\" hiện chưa được hỗ trợ. Vui lòng chọn PayOS.");
         }
 
         User user = userRepository.findByEmail(email)
@@ -356,13 +339,6 @@ public class PaymentService {
             return new PaymentDto.PaymentUrlRes(checkoutUrl, orderGroupRef);
         }
 
-        if ("VNPAY".equalsIgnoreCase(req.paymentMethod())) {
-            String orderInfo = checkoutItems.size() == 1
-                    ? "Thanh toan khoa hoc " + checkoutItems.get(0).course.getId()
-                    : "Thanh toan " + checkoutItems.size() + " khoa hoc";
-            return new PaymentDto.PaymentUrlRes(buildVnpayUrl(orderGroupRef, totalAmount, orderInfo), orderGroupRef);
-        }
-
         throw new IllegalStateException("Unreachable: paymentMethod đã được validate ở đầu hàm");
     }
 
@@ -409,77 +385,8 @@ public class PaymentService {
         }
     }
 
-    /** Dựng URL thanh toán VNPAY Sandbox thật — dùng chung bởi cả {@link #createPayment} (1
-     * khóa) lẫn {@link #createBatchPayment} (nhiều khóa, `vnpTxnRef`/`amount` là của CẢ
-     * nhóm). Logic giữ NGUYÊN VẸN so với bản gốc trước khi tách hàm — chỉ tham số hoá
-     * `vnpTxnRef`/`amount`/`orderInfo` thay vì đọc thẳng biến cục bộ. */
-    private String buildVnpayUrl(String vnpTxnRef, BigDecimal amount, String orderInfo) {
-        String vnp_Version = "2.1.0";
-        String vnp_Command = "pay";
-        String vnp_OrderInfo = orderInfo;
-        String orderType = "other";
-        String vnp_IpAddr = "127.0.0.1";
-        String vnp_TmnCode = vnpTmnCode;
-
-        int amountParam = amount.intValue() * 100;
-        java.util.Map<String, String> vnp_Params = new java.util.HashMap<>();
-        vnp_Params.put("vnp_Version", vnp_Version);
-        vnp_Params.put("vnp_Command", vnp_Command);
-        vnp_Params.put("vnp_TmnCode", vnp_TmnCode);
-        vnp_Params.put("vnp_Amount", String.valueOf(amountParam));
-        vnp_Params.put("vnp_CurrCode", "VND");
-        vnp_Params.put("vnp_BankCode", "NCB"); // Hardcode bank NCB để test Sandbox
-        vnp_Params.put("vnp_TxnRef", vnpTxnRef);
-        vnp_Params.put("vnp_OrderInfo", vnp_OrderInfo);
-        vnp_Params.put("vnp_OrderType", orderType);
-        vnp_Params.put("vnp_Locale", "vn");
-        vnp_Params.put("vnp_ReturnUrl", vnpReturnUrl);
-        vnp_Params.put("vnp_IpAddr", vnp_IpAddr);
-
-        java.util.Calendar cld = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("Asia/Ho_Chi_Minh"));
-        java.text.SimpleDateFormat formatter = new java.text.SimpleDateFormat("yyyyMMddHHmmss");
-        formatter.setTimeZone(java.util.TimeZone.getTimeZone("Asia/Ho_Chi_Minh"));
-        String vnp_CreateDate = formatter.format(cld.getTime());
-        vnp_Params.put("vnp_CreateDate", vnp_CreateDate);
-
-        cld.add(java.util.Calendar.MINUTE, 15);
-        String vnp_ExpireDate = formatter.format(cld.getTime());
-        vnp_Params.put("vnp_ExpireDate", vnp_ExpireDate);
-
-        List<String> fieldNames = new ArrayList<>(vnp_Params.keySet());
-        Collections.sort(fieldNames);
-        StringBuilder hashData = new StringBuilder();
-        StringBuilder query = new StringBuilder();
-        java.util.Iterator<String> itr = fieldNames.iterator();
-        while (itr.hasNext()) {
-            String fieldName = itr.next();
-            String fieldValue = vnp_Params.get(fieldName);
-            if ((fieldValue != null) && (fieldValue.length() > 0)) {
-                hashData.append(fieldName);
-                hashData.append('=');
-                try {
-                    hashData.append(java.net.URLEncoder.encode(fieldValue, StandardCharsets.US_ASCII.toString()));
-                    query.append(java.net.URLEncoder.encode(fieldName, StandardCharsets.US_ASCII.toString()));
-                    query.append('=');
-                    query.append(java.net.URLEncoder.encode(fieldValue, StandardCharsets.US_ASCII.toString()));
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-                if (itr.hasNext()) {
-                    query.append('&');
-                    hashData.append('&');
-                }
-            }
-        }
-
-        String queryUrl = query.toString();
-        String vnp_SecureHash = com.lms.payment.config.VnpayConfig.hmacSHA512(vnpHashSecret, hashData.toString());
-        queryUrl += "&vnp_SecureHash=" + vnp_SecureHash;
-        return vnpUrl + "?" + queryUrl;
-    }
-
     /**
-     * Giả lập xử lý IPN từ VNPAY. Thực tế sẽ cần truyền map parameters và verify checksum.
+     * Xử lý IPN/webhook từ cổng thanh toán (PayOS).
      *
      * <p>Giỏ hàng (06/09/2026) — {@code reference} có thể là {@code txnRef} của 1 Payment
      * đơn lẻ (luồng cũ) HOẶC {@code orderGroupRef} dùng chung bởi nhiều Payment tạo cùng 1
