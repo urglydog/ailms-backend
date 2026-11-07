@@ -13,4 +13,9 @@ public class QuotaExceededException extends DomainException {
     public QuotaExceededException(String quotaName, long limit) {
         super(HttpStatus.TOO_MANY_REQUESTS, "QUOTA_EXCEEDED", "Da dat gioi han " + quotaName + " (" + limit + ")");
     }
+
+    /** Thông báo tuỳ biến (có dấu, nói rõ thời điểm được hỏi lại) — hiển thị thẳng cho người dùng. */
+    public QuotaExceededException(String message) {
+        super(HttpStatus.TOO_MANY_REQUESTS, "QUOTA_EXCEEDED", message);
+    }
 }

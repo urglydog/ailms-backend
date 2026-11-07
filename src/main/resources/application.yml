@@ -115,6 +115,7 @@ lms:
     material-per-day: ${QUOTA_MATERIAL_PER_DAY:6}                 # BR-MAT-08
     tutor-msg-per-day: ${QUOTA_TUTOR_MSG_PER_DAY:30}              # BR-TUTOR-04
     discovery-guest-per-hour: ${QUOTA_DISCOVERY_GUEST_PER_HOUR:15} # BR-DISCOVERY-01
+    discovery-student-per-day: ${QUOTA_DISCOVERY_STUDENT_PER_DAY:30} # BR-DISCOVERY-01
 
   # Auto-ban bằng AI (25/09/2026) — ngưỡng tạo ĐỀ XUẤT khoá (không tự khoá), xem AiLockScanService.
   ai-lock:
@@ -161,7 +162,7 @@ lms:
     b2-endpoint: ${B2_ENDPOINT:}
 
   # doc/DacTa_ChucNangChungChi.md — gốc URL trang xác thực công khai chứng chỉ, in trên QR code
-  # + link chữ (BR-CERT-06/10). Cùng quy ước với payment.vnpay.returnUrl/payos.returnUrl bên dưới.
+  # + link chữ (BR-CERT-06/10). Cùng quy ước với payment.payos.returnUrl bên dưới.
   certificate:
     verify-base-url: ${CERTIFICATE_VERIFY_BASE_URL:http://localhost:3000/verify}
 
@@ -216,11 +217,6 @@ youtube:
   api-key: ${YOUTUBE_API_KEY:}
 
 payment:
-  vnpay:
-    tmnCode: ${VNPAY_TMN_CODE:}
-    hashSecret: ${VNPAY_HASH_SECRET:}
-    url: https://sandbox.vnpayment.vn/paymentv2/vpcpay.html
-    returnUrl: http://localhost:3000/payments/vnpay-return
   momo:
     partnerCode: ${MOMO_PARTNER_CODE:}
     accessKey: ${MOMO_ACCESS_KEY:}
