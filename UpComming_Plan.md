@@ -35,15 +35,19 @@ Trước mỗi tính năng đều đi kèm với **Bối cảnh & Nỗi đau (Pa
 
 **Lưu ý rủi ro deadline:** nếu tới tuần 9-10 mà Giai đoạn 2-4 (port core + AI) chưa xong, cắt Giai đoạn 5 (offline flashcard) khỏi scope báo cáo trước — không cắt phần AI (giá trị cốt lõi khoá luận).
 
-### Mobile — Gap thật còn pending (dọn lại 30/10/2026, gộp từ 3 lần rà soát)
+### Mobile — trạng thái (cập nhật 07/11/2026)
 
-Đa số domain (auth, học liệu workspace, SRS flashcard, hỏi đáp, gradebook, quiz cá nhân, leaderboard, lộ trình AI, AI tutor explain, phát âm flashcard, chat discovery...) đã đạt parity đầy đủ với web — xem lịch sử commit repo `mobile` nếu cần chi tiết triển khai. Chỉ còn 3 gap THẬT:
+**Đã port từ web trong đợt 07/11/2026 (repo `mobile`, push thẳng `main`):** khiếu nại giao dịch (+ mở lại "chưa nhận được tiền"), Trung tâm trợ giúp + gửi ticket (FAQ sao từ `fe/messages/vi.json`), tin nhắn học viên↔giảng viên (+ nút "Nhắn tin giảng viên", badge chưa đọc ở TopNav), checkout chọn khuyến mãi thủ công (`couponId`+`manualCoupon`, danh sách `GET /coupons/available`) + hủy PayOS (`POST /payments/cancel`) + sửa poll giỏ hàng (BE thêm `orderGroupRef` vào `PaymentDto.Res`), giỏ hàng chọn khóa + gói combo (bundle) khớp giá như web, mã giới thiệu `?ref=`, chứng chỉ (sao chép link/chia sẻ/LinkedIn), trang Buổi live (công khai/khóa của tôi; xem live mở bằng trình duyệt), trang Thông tin & Chính sách + xác thực chứng chỉ, bộ lọc khóa học đầy đủ + kệ trang chủ + khối lồng tiếng AI + khóa học liên quan, bài thi (nháp đáp án, giờ còn lại theo `startedAt` BE, xác nhận trước khi nộp, đánh dấu câu, chặn Back, hết cache lượt cũ), lesson player hỗ trợ `?seek=` (Gap 3 cũ — XONG).
 
-| # | Gap | Trạng thái | Phụ thuộc |
-|---|---|---|---|
-| 1 | Live session (màn riêng, không chỉ banner) | **HOÃN** — xem lý do bên dưới | `live.ts`: `/api/v1/live-sessions/**` |
-| 2 | Giám sát thi (proctoring) — đã code chụp frame định kỳ gửi Gemini Vision | **CẦN TEST THIẾT BỊ THẬT** trước khi coi là xong | `ProctoringCameraView` |
-| 3 | AI Gia sư giải thích câu sai chưa hỗ trợ `?seek=` nhảy mốc video khi "Ôn tập lại lý thuyết" | Chưa làm | `ExplainWrongAnswer.tsx`, lesson player mobile |
+**Còn lại:**
+
+| # | Gap | Trạng thái |
+|---|---|---|
+| 1 | Live session native (LiveKit) | **HOÃN** — cần EAS dev client; tạm mở phòng live bằng trình duyệt |
+| 2 | Giám sát thi (proctoring) — chụp frame định kỳ gửi Gemini Vision | **CẦN TEST THIẾT BỊ THẬT** (rủi ro `takePictureAsync` xen giữa `recordAsync`) |
+| 3 | Push notification (`expo-notifications`) | Chưa làm — Expo Go bỏ remote push; cần dev build |
+| 4 | Offline flashcard (`expo-sqlite`) | Đã có lớp DB/sync cơ bản; cần rà soát/test thiết bị thật |
+| 5 | Test thiết bị thật (Android + iOS) toàn bộ luồng mới ở trên | Chưa — code chỉ kiểm bằng `tsc` + lint trên server |
 
 **Gap 1 — Live session mobile, lý do hoãn (12/10/2026):** Web dùng LiveKit (WebRTC) thật
 (`@livekit/components-react`, video track camera/screen-share, chat + phụ đề dịch qua data
