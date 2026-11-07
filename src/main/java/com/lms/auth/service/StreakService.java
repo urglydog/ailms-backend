@@ -55,6 +55,13 @@ public class StreakService {
         }
         LocalDate todayInUserZone = LocalDate.ofInstant(completedAt, zone);
 
+        // Đã có learning day hôm nay (lần nộp bài/học bài thứ 2 trong ngày) — thoát SỚM, không insert để
+        // khỏi dựa vào lỗi unique-constraint (mỗi lần như vậy log ERROR 1062 và đánh dấu transaction
+        // rollback-only dù đã bắt exception).
+        if (userLearningDayRepository.existsByUser_IdAndActivityDate(userId, todayInUserZone)) {
+            return;
+        }
+
         // Record learning day
         try {
             UserLearningDay learningDay = new UserLearningDay();
