@@ -86,10 +86,11 @@ public class DemoDataLoader {
                 log.warn("Bo qua nap du lieu demo: chua dat app.demo-seed.password");
                 return;
             }
-            DemoCatalog catalog;
-            try (InputStream in = getClass().getResourceAsStream("/demo/courses.json")) {
-                catalog = mapper.readValue(in, DemoCatalog.class);
-            }
+            DemoCatalog base = readCatalog(mapper, "/demo/courses.json");
+            // File bổ sung tùy chọn (vd khóa mẫu lấy qua YouTube Data API): nối SAU danh sách chính để thứ tự và kế hoạch
+            // hoạt động của các khóa chính không đổi.
+            DemoCatalog extra = readCatalog(mapper, "/demo/courses-sample.json");
+            final DemoCatalog catalog = extra != null ? merge(base, extra) : base;
             tx.executeWithoutResult(status -> {
                 backdates.clear();
                 String hash = encoder.encode(password);
@@ -342,6 +343,28 @@ public class DemoDataLoader {
                 log.info("Nap du lieu demo: {} khoa moi, {} ghi danh ({} co thanh toan).", created.size(), enrolledCount, paidCount);
             });
         };
+    }
+
+    private DemoCatalog readCatalog(ObjectMapper mapper, String resource) throws java.io.IOException {
+        try (InputStream in = getClass().getResourceAsStream(resource)) {
+            return in == null ? null : mapper.readValue(in, DemoCatalog.class);
+        }
+    }
+
+    /** Gộp danh mục bổ sung vào danh mục chính: danh mục/giảng viên trùng thì bản bổ sung ghi đè, khóa học nối vào cuối. */
+    static DemoCatalog merge(DemoCatalog main, DemoCatalog extra) {
+        Map<String, String> categories = new java.util.LinkedHashMap<>(main.categories());
+        if (extra.categories() != null) {
+            categories.putAll(extra.categories());
+        }
+        Map<String, DemoCatalog.Instructor> instructors = new java.util.LinkedHashMap<>();
+        main.instructors().forEach(i -> instructors.put(i.email(), i));
+        extra.instructors().forEach(i -> instructors.put(i.email(), i));
+        List<DemoCatalog.Course> courses = new ArrayList<>(main.courses());
+        java.util.Set<String> slugs = new java.util.HashSet<>();
+        main.courses().forEach(c -> slugs.add(c.slug()));
+        extra.courses().stream().filter(c -> slugs.add(c.slug())).forEach(courses::add);
+        return new DemoCatalog(categories, new ArrayList<>(instructors.values()), courses);
     }
 
     /**
