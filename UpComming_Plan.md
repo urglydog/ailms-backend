@@ -35,15 +35,19 @@ Trước mỗi tính năng đều đi kèm với **Bối cảnh & Nỗi đau (Pa
 
 **Lưu ý rủi ro deadline:** nếu tới tuần 9-10 mà Giai đoạn 2-4 (port core + AI) chưa xong, cắt Giai đoạn 5 (offline flashcard) khỏi scope báo cáo trước — không cắt phần AI (giá trị cốt lõi khoá luận).
 
-### Mobile — Gap thật còn pending (dọn lại 30/10/2026, gộp từ 3 lần rà soát)
+### Mobile — trạng thái (cập nhật 07/11/2026)
 
-Đa số domain (auth, học liệu workspace, SRS flashcard, hỏi đáp, gradebook, quiz cá nhân, leaderboard, lộ trình AI, AI tutor explain, phát âm flashcard, chat discovery...) đã đạt parity đầy đủ với web — xem lịch sử commit repo `mobile` nếu cần chi tiết triển khai. Chỉ còn 3 gap THẬT:
+**Đã port từ web trong đợt 07/11/2026 (repo `mobile`, push thẳng `main`):** khiếu nại giao dịch (+ mở lại "chưa nhận được tiền"), Trung tâm trợ giúp + gửi ticket (FAQ sao từ `fe/messages/vi.json`), tin nhắn học viên↔giảng viên (+ nút "Nhắn tin giảng viên", badge chưa đọc ở TopNav), checkout chọn khuyến mãi thủ công (`couponId`+`manualCoupon`, danh sách `GET /coupons/available`) + hủy PayOS (`POST /payments/cancel`) + sửa poll giỏ hàng (BE thêm `orderGroupRef` vào `PaymentDto.Res`), giỏ hàng chọn khóa + gói combo (bundle) khớp giá như web, mã giới thiệu `?ref=`, chứng chỉ (sao chép link/chia sẻ/LinkedIn), trang Buổi live (công khai/khóa của tôi; xem live mở bằng trình duyệt), trang Thông tin & Chính sách + xác thực chứng chỉ, bộ lọc khóa học đầy đủ + kệ trang chủ + khối lồng tiếng AI + khóa học liên quan, bài thi (nháp đáp án, giờ còn lại theo `startedAt` BE, xác nhận trước khi nộp, đánh dấu câu, chặn Back, hết cache lượt cũ), lesson player hỗ trợ `?seek=` (Gap 3 cũ — XONG).
 
-| # | Gap | Trạng thái | Phụ thuộc |
-|---|---|---|---|
-| 1 | Live session (màn riêng, không chỉ banner) | **HOÃN** — xem lý do bên dưới | `live.ts`: `/api/v1/live-sessions/**` |
-| 2 | Giám sát thi (proctoring) — đã code chụp frame định kỳ gửi Gemini Vision | **CẦN TEST THIẾT BỊ THẬT** trước khi coi là xong | `ProctoringCameraView` |
-| 3 | AI Gia sư giải thích câu sai chưa hỗ trợ `?seek=` nhảy mốc video khi "Ôn tập lại lý thuyết" | Chưa làm | `ExplainWrongAnswer.tsx`, lesson player mobile |
+**Còn lại:**
+
+| # | Gap | Trạng thái |
+|---|---|---|
+| 1 | Live session native (LiveKit) | **HOÃN** — cần EAS dev client; tạm mở phòng live bằng trình duyệt |
+| 2 | Giám sát thi (proctoring) — chụp frame định kỳ gửi Gemini Vision | **CẦN TEST THIẾT BỊ THẬT** (rủi ro `takePictureAsync` xen giữa `recordAsync`) |
+| 3 | Push notification (`expo-notifications`) | Chưa làm — Expo Go bỏ remote push; cần dev build |
+| 4 | Offline flashcard (`expo-sqlite`) | Đã có lớp DB/sync cơ bản; cần rà soát/test thiết bị thật |
+| 5 | Test thiết bị thật (Android + iOS) toàn bộ luồng mới ở trên | Chưa — code chỉ kiểm bằng `tsc` + lint trên server |
 
 **Gap 1 — Live session mobile, lý do hoãn (12/10/2026):** Web dùng LiveKit (WebRTC) thật
 (`@livekit/components-react`, video track camera/screen-share, chat + phụ đề dịch qua data
@@ -76,14 +80,21 @@ ngắn, cân nhắc bỏ quay liên tục, chỉ dựa vào chuỗi frame địn
 
 - **Nộp bài thi bị đứng hình trên Safari iOS** (`fe/app/(student)/exam/[quizId]/page.tsx`) — học viên phải tự bấm Dynamic Island tắt ghi hình rồi back lại mới nộp được bài, không tự động như desktop. Đã thử vá 1 lần (06/10/2026, dừng camera ngay trước khi đợi recorder.stop()) nhưng gây regression mất luôn phát hiện khuôn mặt — đã revert về bản cũ (commit `8bc7bab` trên `fe`). **Quyết định: KHÔNG vá tiếp trên web** — sẽ tự hết khi học viên chuyển sang làm bài thi trên app native (dùng `expo-camera` thật, không qua giới hạn WebKit `getUserMedia`/`MediaRecorder`), xem epic Mobile Native App ở trên, Tuần 5-7.
 
-### Dọn web trước khi dồn sang mobile (đối chiếu code thật 07/11/2026) — ĐÃ XONG
+### Web — đã chốt xong (07/11/2026), chỉ còn việc nhỏ
 
-Đã làm: quota Discovery chat (`DiscoveryQuotaService`, khách 15/IP/giờ, học viên 30/ngày), cờ `DEV_SEED_ENABLED` tắt 4 seeder `Dev*` (mặc định false), gỡ VNPay (migration `V152` đổi `payment_method` VNPAY → PAYOS, không xoá dòng nào), Login/Register/Google/exam đọc lỗi qua `ApiError`, đổi ~600 literal màu gray/red/green/amber sang design token.
+Đã làm: quota Discovery chat; cờ `DEV_SEED_ENABLED`; gỡ VNPay (`V152`); Login/Register/Google/exam đọc lỗi qua `ApiError`; ~600 literal màu → token; toast góc phải trên, vuông, nền đặc; phòng thi ẩn Header/Footer, xin camera/màn hình đúng 1 lần, dọn camera khi nộp/rời trang, nộp bài nhanh (hết tự khoá XP 50s, AI giám sát chạy nền), reset state theo từng lượt thi, nhận diện khuôn mặt không còn đóng băng; thanh toán PayOS: hủy → tự về trang thanh toán, thay đơn PENDING cũ khi thanh toán lại, học viên **tự chọn khuyến mãi** (`GET /coupons/available`, `couponId`+`manualCoupon`), `POST /payments/cancel`.
 
-**Còn lại (không gấp):**
-- Literal màu cyan/blue/purple/slate/indigo (~166 chỗ) chưa đổi — không có token tương đương (`cyan` token là cyan sáng, `bg-cyan-600` là cyan đậm), cần quyết định thiết kế riêng.
-- Exam: lỗi HTTP 500 khi nộp bài chưa tự kết thúc phiên (chỉ 404/410 xử lý) — cố ý, tránh 500 tạm thời làm mất bài.
-- ai-worker `app/config.py:58` (giá trị tạm 0.7 DOCX→Markdown); `MaterialGenerationService` 2 catch `JsonProcessingException` im lặng; `ai-worker discovery.py` `_fetch_category_slugs` tự mở `httpx.AsyncClient`.
-- Chạy `mvn clean verify` thủ công trước khi bảo vệ (đã chạy xanh 07/11/2026: 448 test).
+**Còn lại (cần quyết định/không gấp):**
+- Khuyến mãi công khai: coupon có mã chưa có cờ `is_public` → danh sách ở trang thanh toán chỉ hiện coupon tự động (autoApply). Hướng A: thêm cột `is_public` + Flyway.
+- Dark theme thật: hiện khoá `color-scheme: only light` (chặn trình duyệt tự làm tối). Làm dark theme đầy đủ là việc lớn.
+- Literal màu cyan/blue/purple/slate/indigo (~166 chỗ) chưa đổi (không có token tương đương).
+- Exam: HTTP 500 khi nộp bài chưa tự kết thúc phiên (chỉ 404/410) — cố ý, tránh mất bài do lỗi tạm.
+- Trang `/cart` hiển thị giá theo coupon tự động; trang thanh toán dùng lựa chọn của học viên → có thể lệch nếu bỏ chọn.
+- Điểm các lượt thi thử 96–100 đều 0.00: chưa điều tra xem có phải lỗi chấm điểm hay chỉ do chọn sai.
+- ai-worker `app/config.py:58` (giá trị tạm 0.7); `MaterialGenerationService` 2 catch `JsonProcessingException` im lặng; ai-worker `discovery.py` tự mở `httpx.AsyncClient`.
+- Logo LinguaLearn cho kênh PayOS đã tạo ở `fe/public/brand/` (chưa commit).
+- `mvn clean verify` xanh 07/11/2026 (457 test).
+
+**Việc mobile đi kèm các thay đổi web:** checkout mobile cần nối cùng API chọn coupon thủ công (`couponId` + `manualCoupon: true`, `GET /coupons/available`) và `POST /payments/cancel` khi hủy PayOS; hiện vẫn chạy hành vi cũ (áp coupon tự động).
 
 Tip bảo mật data: check request nào thường xuyên hoặc truy xuất lượng dữ liệu lớn => AI cảnh báo admin

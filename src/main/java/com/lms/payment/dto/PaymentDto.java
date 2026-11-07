@@ -91,7 +91,10 @@ public class PaymentDto {
             /** UC57 mở rộng (15/09/2026) — NULL nếu không dùng coupon. */
             BigDecimal originalAmount,
             BigDecimal discountAmount,
-            String couponCode
+            String couponCode,
+            /** Mã nhóm khi thanh toán giỏ hàng (NULL với đơn lẻ) — mobile dùng để khớp giao dịch giỏ hàng
+             * với {@code PaymentUrlRes.txnRef} (chính là orderGroupRef) khi poll kết quả. */
+            String orderGroupRef
     ) {}
 
     public record AdminRes(

@@ -565,7 +565,8 @@ public class PaymentService {
                         p.getBillingPhone(),
                         p.getOriginalAmount(),
                         p.getDiscountAmount(),
-                        p.getCoupon() != null ? p.getCoupon().getCode() : null
+                        p.getCoupon() != null ? p.getCoupon().getCode() : null,
+                        p.getOrderGroupRef()
                 )).toList();
     }
 
