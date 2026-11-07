@@ -393,6 +393,25 @@ public class PaymentService {
      * lần gộp thanh toán (luồng giỏ hàng) — thử tìm theo NHÓM trước, không thấy nhóm nào
      * mới rơi về tra theo {@code txnRef} đơn lẻ như trước đây (không đổi hành vi cũ).
      */
+    /** Học viên hủy ở trang PayOS (callback `cancel=true`) — chỉ chủ giao dịch, chỉ khi còn PENDING. */
+    @Transactional
+    public void cancelPending(String email, String reference) {
+        List<Payment> group = paymentRepository.findByOrderGroupRef(reference);
+        List<Payment> targets = !group.isEmpty()
+                ? group
+                : List.of(paymentRepository.findByTxnRef(reference)
+                        .orElseThrow(() -> new ResourceNotFoundException("Payment", reference)));
+        for (Payment payment : targets) {
+            if (!payment.getUser().getEmail().equals(email)) {
+                throw new com.lms.common.exception.AccessDeniedDomainException("Bạn không có quyền hủy giao dịch này");
+            }
+            if (payment.getStatus() == PaymentStatus.PENDING) {
+                payment.setStatus(PaymentStatus.FAILED);
+                paymentRepository.save(payment);
+            }
+        }
+    }
+
     @Transactional
     public void processIpn(String reference, String gatewayTxnNo, boolean isSuccess) {
         List<Payment> group = paymentRepository.findByOrderGroupRef(reference);

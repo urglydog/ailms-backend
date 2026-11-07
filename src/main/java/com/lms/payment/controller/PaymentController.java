@@ -39,6 +39,16 @@ public class PaymentController {
         return ResponseEntity.ok(paymentService.createBatchPayment(principal.getName(), req));
     }
 
+    /** Học viên bấm hủy ở PayOS — đánh dấu đơn PENDING của chính mình thành FAILED. */
+    @PostMapping("/cancel")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
+    public ResponseEntity<java.util.Map<String, String>> cancelPayment(
+            Principal principal,
+            @RequestParam String orderCode) {
+        paymentService.cancelPending(principal.getName(), orderCode);
+        return ResponseEntity.ok(java.util.Map.of("status", "ok"));
+    }
+
     /**
      * Endpoint IPN giả lập để test — CHỈ Admin gọi được.
      *

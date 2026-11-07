@@ -351,6 +351,47 @@ class PaymentServiceTest {
         assertThat(payment.getInstructorEarning()).isEqualByComparingTo("194000");
     }
 
+    // ── cancelPending (học viên hủy ở PayOS) ────────────────────────────
+
+    @Test
+    void cancelPending_ownerPendingPayment_becomesFailed() {
+        Payment payment = pendingPayment("txn-1", null, courseA, new BigDecimal("200000"));
+        payment.setUser(user);
+        when(paymentRepository.findByOrderGroupRef("txn-1")).thenReturn(List.of());
+        when(paymentRepository.findByTxnRef("txn-1")).thenReturn(Optional.of(payment));
+
+        paymentService.cancelPending(EMAIL, "txn-1");
+
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.FAILED);
+    }
+
+    @Test
+    void cancelPending_otherUsersPayment_isRejectedAndUntouched() {
+        Payment payment = pendingPayment("txn-1", null, courseA, new BigDecimal("200000"));
+        User other = new User();
+        other.setEmail("khac@example.com");
+        payment.setUser(other);
+        when(paymentRepository.findByOrderGroupRef("txn-1")).thenReturn(List.of());
+        when(paymentRepository.findByTxnRef("txn-1")).thenReturn(Optional.of(payment));
+
+        assertThatThrownBy(() -> paymentService.cancelPending(EMAIL, "txn-1"))
+                .isInstanceOf(AccessDeniedDomainException.class);
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PENDING);
+    }
+
+    @Test
+    void cancelPending_alreadyPaid_isNotDowngraded() {
+        Payment payment = pendingPayment("txn-1", null, courseA, new BigDecimal("200000"));
+        payment.setUser(user);
+        payment.setStatus(PaymentStatus.PAID);
+        when(paymentRepository.findByOrderGroupRef("txn-1")).thenReturn(List.of());
+        when(paymentRepository.findByTxnRef("txn-1")).thenReturn(Optional.of(payment));
+
+        paymentService.cancelPending(EMAIL, "txn-1");
+
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PAID);
+    }
+
     private Payment pendingPayment(String txnRef, String orderGroupRef, Course course, BigDecimal amount) {
         Payment payment = new Payment();
         payment.setTxnRef(txnRef);
