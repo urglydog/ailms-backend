@@ -76,14 +76,21 @@ ngắn, cân nhắc bỏ quay liên tục, chỉ dựa vào chuỗi frame địn
 
 - **Nộp bài thi bị đứng hình trên Safari iOS** (`fe/app/(student)/exam/[quizId]/page.tsx`) — học viên phải tự bấm Dynamic Island tắt ghi hình rồi back lại mới nộp được bài, không tự động như desktop. Đã thử vá 1 lần (06/10/2026, dừng camera ngay trước khi đợi recorder.stop()) nhưng gây regression mất luôn phát hiện khuôn mặt — đã revert về bản cũ (commit `8bc7bab` trên `fe`). **Quyết định: KHÔNG vá tiếp trên web** — sẽ tự hết khi học viên chuyển sang làm bài thi trên app native (dùng `expo-camera` thật, không qua giới hạn WebKit `getUserMedia`/`MediaRecorder`), xem epic Mobile Native App ở trên, Tuần 5-7.
 
-### Dọn web trước khi dồn sang mobile (đối chiếu code thật 07/11/2026) — ĐÃ XONG
+### Web — đã chốt xong (07/11/2026), chỉ còn việc nhỏ
 
-Đã làm: quota Discovery chat (`DiscoveryQuotaService`, khách 15/IP/giờ, học viên 30/ngày), cờ `DEV_SEED_ENABLED` tắt 4 seeder `Dev*` (mặc định false), gỡ VNPay (migration `V152` đổi `payment_method` VNPAY → PAYOS, không xoá dòng nào), Login/Register/Google/exam đọc lỗi qua `ApiError`, đổi ~600 literal màu gray/red/green/amber sang design token.
+Đã làm: quota Discovery chat; cờ `DEV_SEED_ENABLED`; gỡ VNPay (`V152`); Login/Register/Google/exam đọc lỗi qua `ApiError`; ~600 literal màu → token; toast góc phải trên, vuông, nền đặc; phòng thi ẩn Header/Footer, xin camera/màn hình đúng 1 lần, dọn camera khi nộp/rời trang, nộp bài nhanh (hết tự khoá XP 50s, AI giám sát chạy nền), reset state theo từng lượt thi, nhận diện khuôn mặt không còn đóng băng; thanh toán PayOS: hủy → tự về trang thanh toán, thay đơn PENDING cũ khi thanh toán lại, học viên **tự chọn khuyến mãi** (`GET /coupons/available`, `couponId`+`manualCoupon`), `POST /payments/cancel`.
 
-**Còn lại (không gấp):**
-- Literal màu cyan/blue/purple/slate/indigo (~166 chỗ) chưa đổi — không có token tương đương (`cyan` token là cyan sáng, `bg-cyan-600` là cyan đậm), cần quyết định thiết kế riêng.
-- Exam: lỗi HTTP 500 khi nộp bài chưa tự kết thúc phiên (chỉ 404/410 xử lý) — cố ý, tránh 500 tạm thời làm mất bài.
-- ai-worker `app/config.py:58` (giá trị tạm 0.7 DOCX→Markdown); `MaterialGenerationService` 2 catch `JsonProcessingException` im lặng; `ai-worker discovery.py` `_fetch_category_slugs` tự mở `httpx.AsyncClient`.
-- Chạy `mvn clean verify` thủ công trước khi bảo vệ (đã chạy xanh 07/11/2026: 448 test).
+**Còn lại (cần quyết định/không gấp):**
+- Khuyến mãi công khai: coupon có mã chưa có cờ `is_public` → danh sách ở trang thanh toán chỉ hiện coupon tự động (autoApply). Hướng A: thêm cột `is_public` + Flyway.
+- Dark theme thật: hiện khoá `color-scheme: only light` (chặn trình duyệt tự làm tối). Làm dark theme đầy đủ là việc lớn.
+- Literal màu cyan/blue/purple/slate/indigo (~166 chỗ) chưa đổi (không có token tương đương).
+- Exam: HTTP 500 khi nộp bài chưa tự kết thúc phiên (chỉ 404/410) — cố ý, tránh mất bài do lỗi tạm.
+- Trang `/cart` hiển thị giá theo coupon tự động; trang thanh toán dùng lựa chọn của học viên → có thể lệch nếu bỏ chọn.
+- Điểm các lượt thi thử 96–100 đều 0.00: chưa điều tra xem có phải lỗi chấm điểm hay chỉ do chọn sai.
+- ai-worker `app/config.py:58` (giá trị tạm 0.7); `MaterialGenerationService` 2 catch `JsonProcessingException` im lặng; ai-worker `discovery.py` tự mở `httpx.AsyncClient`.
+- Logo LinguaLearn cho kênh PayOS đã tạo ở `fe/public/brand/` (chưa commit).
+- `mvn clean verify` xanh 07/11/2026 (457 test).
+
+**Việc mobile đi kèm các thay đổi web:** checkout mobile cần nối cùng API chọn coupon thủ công (`couponId` + `manualCoupon: true`, `GET /coupons/available`) và `POST /payments/cancel` khi hủy PayOS; hiện vẫn chạy hành vi cũ (áp coupon tự động).
 
 Tip bảo mật data: check request nào thường xuyên hoặc truy xuất lượng dữ liệu lớn => AI cảnh báo admin
