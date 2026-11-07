@@ -25,8 +25,20 @@ public class PaymentDto {
              * viên (query {@code ?ref=}), optional. Khớp {@code Course.referralCode} thì tính
              * {@code RevenueSource.INSTRUCTOR_REFERRAL}, không khớp/không gửi thì
              * {@code ORGANIC} — xem {@code PaymentService.resolveRevenueSource}. */
-            String referralCode
-    ) {}
+            String referralCode,
+            /** Học viên tự chọn 1 coupon trong danh sách ở trang thanh toán (không áp ngầm). Chỉ có
+             * hiệu lực khi {@code manualCoupon=true}. */
+            Long couponId,
+            /** true = chế độ chọn thủ công: KHÔNG tự áp coupon autoApply, chỉ dùng {@code couponId}
+             * (nếu có) và {@code couponCode}. null/false = hành vi cũ (mobile chưa đổi). */
+            Boolean manualCoupon
+    ) {
+        public CreateReq(Long courseId, String paymentMethod, String billingName, String billingPhone,
+                         String couponCode, String courseAccessPassword, String referralCode) {
+            this(courseId, paymentMethod, billingName, billingPhone, couponCode, courseAccessPassword,
+                    referralCode, null, null);
+        }
+    }
 
     /** Giỏ hàng (06/09/2026, mở rộng ngoài đặc tả gốc) — gộp thanh toán nhiều khóa học học
      * viên tự chọn trong 1 lần "Proceed to Checkout" (xem {@code PaymentService.
@@ -46,8 +58,17 @@ public class PaymentDto {
              * NULL hoặc thiếu entry cho 1 khóa → khóa đó tính {@code ORGANIC}. */
             Map<Long, String> referralCodes,
             /** Tính năng Course Bundles (29/09/2026) — danh sách ID các gói khóa học mà học viên chọn mua. */
-            List<Long> bundleIds
-    ) {}
+            List<Long> bundleIds,
+            /** Xem {@link CreateReq#couponId()} / {@link CreateReq#manualCoupon()}. */
+            Long couponId,
+            Boolean manualCoupon
+    ) {
+        public CreateBatchReq(List<Long> courseIds, String paymentMethod, String billingName, String billingPhone,
+                              String couponCode, Map<Long, String> referralCodes, List<Long> bundleIds) {
+            this(courseIds, paymentMethod, billingName, billingPhone, couponCode, referralCodes, bundleIds,
+                    null, null);
+        }
+    }
 
     public record PaymentUrlRes(
             String paymentUrl,

@@ -56,6 +56,16 @@ public class CouponController {
     @PostMapping("/preview")
     @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     public ResponseEntity<PriceRes> preview(Principal principal, @Valid @RequestBody PreviewReq req) {
-        return ResponseEntity.ok(couponService.previewPrice(principal.getName(), req.courseId(), req.code()));
+        return ResponseEntity.ok(Boolean.TRUE.equals(req.manualCoupon())
+                ? couponService.previewManualPrice(principal.getName(), req.courseId(), req.couponId(), req.code())
+                : couponService.previewPrice(principal.getName(), req.courseId(), req.code()));
+    }
+
+    /** Danh sách coupon học viên có thể chọn ở trang thanh toán, giảm nhiều nhất lên đầu. */
+    @GetMapping("/available")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
+    public ResponseEntity<List<com.lms.coupon.dto.CouponDto.AvailableRes>> available(
+            Principal principal, @RequestParam List<Long> courseIds) {
+        return ResponseEntity.ok(couponService.listAvailable(principal.getName(), courseIds));
     }
 }

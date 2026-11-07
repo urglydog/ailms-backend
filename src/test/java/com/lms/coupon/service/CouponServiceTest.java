@@ -212,6 +212,42 @@ class CouponServiceTest {
         return coupon;
     }
 
+    // ── Học viên tự chọn coupon ở trang thanh toán ─────────────────────
+
+    @Test
+    void resolveManualPrice_noSelection_ignoresAutoApplyCoupons() {
+        var result = couponService.resolveManualPrice(ownCourse, null, null, null);
+
+        assertThat(result.appliedCoupon()).isNull();
+        assertThat(result.finalPrice()).isEqualByComparingTo("200000");
+    }
+
+    @Test
+    void resolveManualPrice_selectedCoupon_isApplied() {
+        Coupon c = activeAutoApplyCoupon(admin, CouponScopeType.ALL_COURSES, DiscountType.PERCENTAGE, new BigDecimal("20"));
+        when(couponRepository.findById(900L)).thenReturn(Optional.of(c));
+
+        var result = couponService.resolveManualPrice(ownCourse, null, 900L, null);
+
+        assertThat(result.appliedCoupon()).isSameAs(c);
+        assertThat(result.finalPrice()).isEqualByComparingTo("160000");
+    }
+
+    @Test
+    void listAvailable_sortedBySavingsDescending() {
+        Coupon small = activeAutoApplyCoupon(admin, CouponScopeType.ALL_COURSES, DiscountType.PERCENTAGE, new BigDecimal("10"));
+        small.setId(901L);
+        Coupon big = activeAutoApplyCoupon(admin, CouponScopeType.ALL_COURSES, DiscountType.PERCENTAGE, new BigDecimal("30"));
+        big.setId(902L);
+        when(courseRepository.findAllById(List.of(100L))).thenReturn(List.of(ownCourse));
+        when(couponRepository.findByAutoApplyTrueAndIsActiveTrue()).thenReturn(List.of(small, big));
+
+        var list = couponService.listAvailable(ADMIN_EMAIL, List.of(100L));
+
+        assertThat(list).extracting(r -> r.id()).containsExactly(902L, 901L);
+        assertThat(list.get(0).savings()).isEqualByComparingTo("60000");
+    }
+
     @Test
     void resolveBestPrice_noCoupons_returnsOriginalPrice() {
         when(couponRepository.findByAutoApplyTrueAndIsActiveTrue()).thenReturn(List.of());

@@ -351,6 +351,32 @@ class PaymentServiceTest {
         assertThat(payment.getInstructorEarning()).isEqualByComparingTo("194000");
     }
 
+    // ── Thay đơn PENDING cũ khi thanh toán lại (Back từ PayOS) ───────────
+
+    @Test
+    void createPayment_oldPendingPaymentForSameCourse_isCancelledAndMarkedFailed() {
+        Payment old = pendingPayment("111222333", null, courseA, new BigDecimal("200000"));
+        when(paymentRepository.findByUser_IdAndStatusAndCourse_IdIn(1L, PaymentStatus.PENDING, List.of(10L)))
+                .thenReturn(List.of(old));
+
+        paymentService.createPayment(EMAIL, new CreateReq(10L, "PAYOS", null, null, null, null, null));
+
+        verify(paymentRequestsService).cancel(111222333L, "Thay bằng đơn thanh toán mới");
+        assertThat(old.getStatus()).isEqualTo(PaymentStatus.FAILED);
+    }
+
+    @Test
+    void createPayment_cancelOldLinkFails_keepsOldPaymentPending() {
+        Payment old = pendingPayment("111222333", null, courseA, new BigDecimal("200000"));
+        when(paymentRepository.findByUser_IdAndStatusAndCourse_IdIn(1L, PaymentStatus.PENDING, List.of(10L)))
+                .thenReturn(List.of(old));
+        when(paymentRequestsService.cancel(any(Long.class), any(String.class))).thenThrow(new RuntimeException("da thanh toan"));
+
+        paymentService.createPayment(EMAIL, new CreateReq(10L, "PAYOS", null, null, null, null, null));
+
+        assertThat(old.getStatus()).isEqualTo(PaymentStatus.PENDING);
+    }
+
     // ── cancelPending (học viên hủy ở PayOS) ────────────────────────────
 
     @Test
