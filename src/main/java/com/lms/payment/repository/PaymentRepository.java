@@ -28,6 +28,8 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
      * trị này, xem {@code Payment.orderGroupRef}. */
     List<Payment> findByOrderGroupRef(String orderGroupRef);
 
+    List<Payment> findByUser_IdAndStatusAndCourse_IdIn(Long userId, PaymentStatus status, java.util.Collection<Long> courseIds);
+
     @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"user", "course"})
     List<Payment> findAllByOrderByCreatedAtDesc();
 

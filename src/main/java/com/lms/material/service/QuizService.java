@@ -28,6 +28,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@lombok.extern.slf4j.Slf4j
 public class QuizService {
 
     private final QuizRepository quizRepository;
@@ -700,8 +701,21 @@ public class QuizService {
         // thành 1 nhận định rủi ro có giải thích, thay vì giảng viên chỉ thấy số đếm thô.
         // Lỗi ở đây KHÔNG được làm hỏng việc nộp bài (fail-open, giống mọi tích hợp AI phụ khác
         // trong dự án) — điểm số đã chốt xong ở trên trước khi bước này chạy.
+        // Chạy NỀN sau khi commit (không để học viên đợi Gemini lúc nộp bài) — giảng viên chỉ xem
+        // nhận định này sau đó, và FE học viên không dùng aiRiskLevel/aiRiskExplanation.
         if (Boolean.TRUE.equals(attempt.getQuiz().getIsProctored())) {
-            assessRisk(attempt);
+            Long attemptIdForRisk = attempt.getId();
+            if (org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive()) {
+                org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                        new org.springframework.transaction.support.TransactionSynchronization() {
+                            @Override
+                            public void afterCommit() {
+                                java.util.concurrent.CompletableFuture.runAsync(() -> assessRisk(attemptIdForRisk));
+                            }
+                        });
+            } else {
+                java.util.concurrent.CompletableFuture.runAsync(() -> assessRisk(attemptIdForRisk));
+            }
         }
 
         return new QuizAttemptDto.SubmitRes(attemptId, score, correctCount, attempt.getTotalQuestions(), details, isArchived,
@@ -729,8 +743,12 @@ public class QuizService {
     );
 
     /** Xem docblock ở lời gọi trong {@link #submitAttempt}. */
-    private void assessRisk(QuizAttempt attempt) {
+    private void assessRisk(Long attemptId) {
         try {
+            QuizAttempt attempt = quizAttemptRepository.findById(attemptId).orElse(null);
+            if (attempt == null) {
+                return;
+            }
             List<QuizAttemptViolation> violations = quizAttemptViolationRepository.findByAttempt_IdOrderByCreatedAtAsc(attempt.getId());
             Map<String, Long> violationCounts = violations.stream()
                     .collect(Collectors.groupingBy(
@@ -755,6 +773,7 @@ public class QuizService {
             }
         } catch (Exception e) {
             // Fail-open — xem docblock lời gọi.
+            log.warn("assessRisk thất bại cho attempt {}: {}", attemptId, e.getMessage());
         }
     }
 

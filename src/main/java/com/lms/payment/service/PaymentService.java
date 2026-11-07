@@ -85,10 +85,15 @@ public class PaymentService {
                     "Phương thức thanh toán \"" + req.paymentMethod() + "\" hiện chưa được hỗ trợ. Vui lòng chọn PayOS.");
         }
 
+        // Hủy đơn PENDING cũ của chính học viên cho khóa này (Back từ PayOS rồi thanh toán lại).
+        supersedePendingPayments(user, List.of(course.getId()));
+
         // BR-PAY-02: Lấy giá từ server. UC57 mở rộng (15/09/2026) — áp coupon tốt nhất
         // (autoApply + mã tự nhập nếu có, BR-COUPON-01 không cộng dồn) TRƯỚC khi chốt amount,
         // để BR-PAY-05 (30/70) tính đúng trên giá THỰC THU.
-        CouponService.PricingResult pricing = couponService.resolveBestPrice(course, user, req.couponCode());
+        CouponService.PricingResult pricing = Boolean.TRUE.equals(req.manualCoupon())
+                ? couponService.resolveManualPrice(course, user, req.couponId(), req.couponCode())
+                : couponService.resolveBestPrice(course, user, req.couponCode());
         BigDecimal amount = pricing.finalPrice();
         if (pricing.appliedCoupon() != null) {
             // BUG THẬT (03/10/2026): phải tái kiểm tra hạn mức CÓ LOCK ngay trước khi lưu
@@ -238,6 +243,11 @@ public class PaymentService {
             }
         }
 
+        // Hủy đơn PENDING cũ cho các khóa lẻ trong giỏ (Back từ PayOS rồi thanh toán lại).
+        if (!standaloneCourseIds.isEmpty()) {
+            supersedePendingPayments(user, standaloneCourseIds);
+        }
+
         // Xử lý Standalone Courses
         for (Long courseId : standaloneCourseIds) {
             if (processedCourseIds.contains(courseId)) continue;
@@ -255,7 +265,9 @@ public class PaymentService {
             }
 
             // Coupon CHỈ áp dụng cho khóa lẻ
-            CouponService.PricingResult pricing = couponService.resolveBestPrice(course, user, req.couponCode());
+            CouponService.PricingResult pricing = Boolean.TRUE.equals(req.manualCoupon())
+                ? couponService.resolveManualPrice(course, user, req.couponId(), req.couponCode())
+                : couponService.resolveBestPrice(course, user, req.couponCode());
             if (pricing.appliedCoupon() != null) {
                 // BUG THẬT (03/10/2026): tái kiểm tra hạn mức CÓ LOCK ngay khi quyết định áp
                 // dụng coupon, tránh race condition giống createPayment (xem reserveUsage).
@@ -393,6 +405,87 @@ public class PaymentService {
      * lần gộp thanh toán (luồng giỏ hàng) — thử tìm theo NHÓM trước, không thấy nhóm nào
      * mới rơi về tra theo {@code txnRef} đơn lẻ như trước đây (không đổi hành vi cũ).
      */
+    /**
+     * Học viên bấm Back khỏi trang PayOS rồi thanh toán lại: đơn PENDING cũ của chính họ cho cùng
+     * khóa học vẫn đang "giữ suất" coupon (PENDING tính vào hạn mức) và gây lỗi "hết lượt" khi tạo
+     * đơn mới. Hủy link PayOS cũ rồi đánh dấu FAILED — chỉ khi hủy link THÀNH CÔNG (nếu PayOS báo
+     * lỗi, ví dụ đã thanh toán, thì để nguyên đơn cũ để webhook xử lý đúng).
+     */
+    private void supersedePendingPayments(User user, java.util.Collection<Long> courseIds) {
+        List<Payment> pending = paymentRepository.findByUser_IdAndStatusAndCourse_IdIn(
+                user.getId(), PaymentStatus.PENDING, courseIds);
+        java.util.Set<String> handledRefs = new java.util.HashSet<>();
+        for (Payment p : pending) {
+            String ref = p.getOrderGroupRef() != null ? p.getOrderGroupRef() : p.getTxnRef();
+            if (ref == null || !handledRefs.add(ref)) {
+                continue;
+            }
+            if (!cancelPayosLink(ref)) {
+                continue;
+            }
+            List<Payment> group = p.getOrderGroupRef() != null
+                    ? paymentRepository.findByOrderGroupRef(ref)
+                    : List.of(p);
+            for (Payment g : group) {
+                if (g.getStatus() == PaymentStatus.PENDING) {
+                    g.setStatus(PaymentStatus.FAILED);
+                    paymentRepository.save(g);
+                }
+            }
+        }
+    }
+
+    /**
+     * Hủy link PayOS cũ; trả true nếu link CHẮC CHẮN không thể thanh toán nữa. Nếu lệnh hủy lỗi
+     * (vd link đã hết hạn/đã hủy sẵn bên PayOS) thì tra trạng thái thật — chỉ coi là xong khi
+     * CANCELLED/EXPIRED/FAILED; PAID/PROCESSING/không tra được thì trả false (không đụng đơn cũ).
+     */
+    private boolean cancelPayosLink(String ref) {
+        long orderCode;
+        try {
+            orderCode = Long.parseLong(ref);
+        } catch (NumberFormatException e) {
+            return false;
+        }
+        try {
+            payOS.paymentRequests().cancel(orderCode, "Thay bằng đơn thanh toán mới");
+            return true;
+        } catch (Exception cancelError) {
+            try {
+                var status = payOS.paymentRequests().get(orderCode).getStatus();
+                boolean dead = status == vn.payos.model.v2.paymentRequests.PaymentLinkStatus.CANCELLED
+                        || status == vn.payos.model.v2.paymentRequests.PaymentLinkStatus.EXPIRED
+                        || status == vn.payos.model.v2.paymentRequests.PaymentLinkStatus.FAILED;
+                if (!dead) {
+                    log.warn("Link PayOS {} ở trạng thái {} — giữ nguyên đơn PENDING cũ", ref, status);
+                }
+                return dead;
+            } catch (Exception statusError) {
+                log.warn("Không hủy/tra được link PayOS cũ {} (giữ nguyên đơn PENDING): {}", ref, statusError.getMessage());
+                return false;
+            }
+        }
+    }
+
+    /** Học viên hủy ở trang PayOS (callback `cancel=true`) — chỉ chủ giao dịch, chỉ khi còn PENDING. */
+    @Transactional
+    public void cancelPending(String email, String reference) {
+        List<Payment> group = paymentRepository.findByOrderGroupRef(reference);
+        List<Payment> targets = !group.isEmpty()
+                ? group
+                : List.of(paymentRepository.findByTxnRef(reference)
+                        .orElseThrow(() -> new ResourceNotFoundException("Payment", reference)));
+        for (Payment payment : targets) {
+            if (!payment.getUser().getEmail().equals(email)) {
+                throw new com.lms.common.exception.AccessDeniedDomainException("Bạn không có quyền hủy giao dịch này");
+            }
+            if (payment.getStatus() == PaymentStatus.PENDING) {
+                payment.setStatus(PaymentStatus.FAILED);
+                paymentRepository.save(payment);
+            }
+        }
+    }
+
     @Transactional
     public void processIpn(String reference, String gatewayTxnNo, boolean isSuccess) {
         List<Payment> group = paymentRepository.findByOrderGroupRef(reference);

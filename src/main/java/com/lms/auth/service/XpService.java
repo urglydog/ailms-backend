@@ -4,7 +4,6 @@ import com.lms.auth.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -30,7 +29,15 @@ public class XpService {
 
     private final UserRepository userRepository;
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    /**
+     * BUG THẬT (07/11/2026) — trước đây {@code REQUIRES_NEW}: khi gọi từ trong 1 transaction đã
+     * chạm bảng {@code users} (vd nộp bài thi → StreakService insert {@code user_learning_days}
+     * giữ khoá S lên dòng user qua FK), transaction mới xin khoá X để {@code UPDATE users} và chờ
+     * transaction cha — cha lại đợi con → tự khoá cứng (self-deadlock) tới hết
+     * {@code innodb_lock_wait_timeout} (50s), học viên thấy nút "Đang nộp..." treo gần 1 phút.
+     * Giờ THAM GIA transaction hiện có (cùng connection, không tranh khoá với chính mình).
+     */
+    @Transactional
     public void award(Long userId, long amount, String reason) {
         userRepository.addXp(userId, amount);
         log.info("Cong {} XP cho user {} (ly do: {})", amount, userId, reason);
