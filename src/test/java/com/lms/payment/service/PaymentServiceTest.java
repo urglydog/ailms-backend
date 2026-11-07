@@ -102,15 +102,20 @@ class PaymentServiceTest {
         lenient().when(paymentRepository.save(any(Payment.class))).thenAnswer(inv -> inv.getArgument(0));
         // Coupon (15/09/2026, mở rộng) — mặc định KHÔNG có coupon nào áp dụng, giữ đúng amount
         // = giá gốc cho các test hiện có; có test riêng cho coupon ở CouponServiceTest.
+        lenient().when(payOS.paymentRequests()).thenReturn(paymentRequestsService);
+        lenient().when(paymentRequestsService.create(any())).thenReturn(stubPayosLink());
         lenient().when(couponService.resolveBestPrice(any(Course.class), any(), any())).thenAnswer(inv -> {
             Course c = inv.getArgument(0);
             return new CouponService.PricingResult(c.getPrice(), c.getPrice(), null, true);
         });
+    }
 
-        ReflectionTestUtils.setField(paymentService, "vnpTmnCode", "TEST_TMN");
-        ReflectionTestUtils.setField(paymentService, "vnpHashSecret", "test-secret");
-        ReflectionTestUtils.setField(paymentService, "vnpUrl", "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html");
-        ReflectionTestUtils.setField(paymentService, "vnpReturnUrl", "http://localhost:3000/payments/callback");
+    private static CreatePaymentLinkResponse stubPayosLink() {
+        return CreatePaymentLinkResponse.builder()
+                .bin("970422").accountNumber("0000000000").accountName("LMS TEST").amount(500000L)
+                .description("Thanh toan test").orderCode(123456789L).currency("VND")
+                .paymentLinkId("test-link-id").status(PaymentLinkStatus.PENDING).expiredAt(0L)
+                .checkoutUrl("https://payos.example/checkout/abc").qrCode("test-qr").build();
     }
 
     // ── createBatchPayment ─────────────────────────────────────────────
@@ -182,12 +187,19 @@ class PaymentServiceTest {
     }
 
     @Test
-    void createBatchPayment_vnpay_returnsBuiltUrlForTotalAmount() {
-        var result = paymentService.createBatchPayment(
-                EMAIL, new CreateBatchReq(List.of(10L, 20L), "VNPAY", null, null, null, null, null));
+    void createBatchPayment_nonPayosMethod_isRejectedBeforeSavingAnything() {
+        assertThatThrownBy(() -> paymentService.createBatchPayment(
+                EMAIL, new CreateBatchReq(List.of(10L, 20L), "VNPAY", null, null, null, null, null)))
+                .isInstanceOf(BusinessRuleViolationException.class);
+        verify(paymentRepository, never()).save(any());
+    }
 
-        assertThat(result.paymentUrl()).startsWith("https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?");
-        assertThat(result.paymentUrl()).contains("vnp_Amount=50000000"); // (200000+300000) * 100
+    @Test
+    void createPayment_nonPayosMethod_isRejectedBeforeSavingAnything() {
+        assertThatThrownBy(() -> paymentService.createPayment(
+                EMAIL, new CreateReq(10L, "VNPAY", null, null, null, null, null)))
+                .isInstanceOf(BusinessRuleViolationException.class);
+        verify(paymentRepository, never()).save(any());
     }
 
     // ── processIpn (nhận biết nhóm) ─────────────────────────────────────
@@ -262,7 +274,7 @@ class PaymentServiceTest {
                 .when(courseAccessService).verifyCanEnroll(courseA, EMAIL, "sai-mat-khau");
 
         assertThatThrownBy(() -> paymentService.createPayment(
-                EMAIL, new CreateReq(10L, "VNPAY", null, null, null, "sai-mat-khau", null)))
+                EMAIL, new CreateReq(10L, "PAYOS", null, null, null, "sai-mat-khau", null)))
                 .isInstanceOf(AccessDeniedDomainException.class);
         verify(paymentRepository, never()).save(any());
     }
@@ -284,9 +296,9 @@ class PaymentServiceTest {
     void createPayment_matchingReferralCode_setsInstructorReferralSource() {
         ArgumentCaptor<Payment> captor = ArgumentCaptor.forClass(Payment.class);
 
-        paymentService.createPayment(EMAIL, new CreateReq(10L, "VNPAY", null, null, null, null, "ref-course-a"));
+        paymentService.createPayment(EMAIL, new CreateReq(10L, "PAYOS", null, null, null, null, "ref-course-a"));
 
-        verify(paymentRepository, times(1)).save(captor.capture());
+        verify(paymentRepository, times(2)).save(captor.capture()); // PAYOS lưu 2 lần: tạo đơn rồi gán txnRef
         assertThat(captor.getValue().getRevenueSource()).isEqualTo(com.lms.common.enums.RevenueSource.INSTRUCTOR_REFERRAL);
     }
 
@@ -294,9 +306,9 @@ class PaymentServiceTest {
     void createPayment_mismatchedReferralCode_staysOrganic() {
         ArgumentCaptor<Payment> captor = ArgumentCaptor.forClass(Payment.class);
 
-        paymentService.createPayment(EMAIL, new CreateReq(10L, "VNPAY", null, null, null, null, "khong-khop"));
+        paymentService.createPayment(EMAIL, new CreateReq(10L, "PAYOS", null, null, null, null, "khong-khop"));
 
-        verify(paymentRepository, times(1)).save(captor.capture());
+        verify(paymentRepository, times(2)).save(captor.capture()); // PAYOS lưu 2 lần: tạo đơn rồi gán txnRef
         assertThat(captor.getValue().getRevenueSource()).isEqualTo(com.lms.common.enums.RevenueSource.ORGANIC);
     }
 
@@ -304,9 +316,9 @@ class PaymentServiceTest {
     void createPayment_noReferralCode_defaultsToOrganic() {
         ArgumentCaptor<Payment> captor = ArgumentCaptor.forClass(Payment.class);
 
-        paymentService.createPayment(EMAIL, new CreateReq(10L, "VNPAY", null, null, null, null, null));
+        paymentService.createPayment(EMAIL, new CreateReq(10L, "PAYOS", null, null, null, null, null));
 
-        verify(paymentRepository, times(1)).save(captor.capture());
+        verify(paymentRepository, times(2)).save(captor.capture()); // PAYOS lưu 2 lần: tạo đơn rồi gán txnRef
         assertThat(captor.getValue().getRevenueSource()).isEqualTo(com.lms.common.enums.RevenueSource.ORGANIC);
     }
 
@@ -315,7 +327,7 @@ class PaymentServiceTest {
         ArgumentCaptor<Payment> captor = ArgumentCaptor.forClass(Payment.class);
 
         paymentService.createBatchPayment(EMAIL, new CreateBatchReq(
-                List.of(10L, 20L), "VNPAY", null, null, null,
+                List.of(10L, 20L), "PAYOS", null, null, null,
                 java.util.Map.of(10L, "ref-course-a"), null));
 
         verify(paymentRepository, times(2)).save(captor.capture());

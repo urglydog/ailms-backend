@@ -104,6 +104,8 @@ services:
       # Bat bang APP_DEMO_SEED_ENABLED=true; mat khau chung dat trong .env (khong commit).
       APP_DEMO_SEED_ENABLED: ${APP_DEMO_SEED_ENABLED:-false}
       APP_DEMO_SEED_PASSWORD: ${APP_DEMO_SEED_PASSWORD:-}
+      # Seed du lieu mau dev (4 class Dev*Seeder) — mac dinh tat.
+      DEV_SEED_ENABLED: ${DEV_SEED_ENABLED:-false}
       # Datasource
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-lms_db}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Ho_Chi_Minh&useUnicode=true&characterEncoding=UTF-8
       SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-lms_user}

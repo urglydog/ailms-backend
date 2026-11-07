@@ -40,6 +40,8 @@ import org.springframework.core.annotation.Order;
  */
 @Configuration
 @Profile("dev")
+// Tắt mặc định — bật bằng DEV_SEED_ENABLED=true (xem application-dev.yml).
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "app.dev-seed.enabled", havingValue = "true")
 public class DevCommunicationDataSeeder {
 
     private static final Logger log = LoggerFactory.getLogger(DevCommunicationDataSeeder.class);

@@ -89,7 +89,7 @@ public class Payment extends BaseEntity {
     @Column(name = "revenue_source", nullable = false, length = 20)
     private RevenueSource revenueSource = RevenueSource.ORGANIC;
 
-    /** MOMO / ZALOPAY / VNPAY (đều Sandbox). */
+    /** PAYOS (thật) / MOMO / ZALOPAY (dữ liệu demo). */
     @Column(name = "payment_method", nullable = false, length = 20)
     private String paymentMethod;
 
