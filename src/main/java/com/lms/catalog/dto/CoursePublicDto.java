@@ -12,6 +12,14 @@ import java.util.List;
  */
 public class CoursePublicDto {
 
+    /**
+     * Một "lát" kết quả tìm kiếm (08/11/2026) — thay {@code Page}: Kho khóa học tải dần khi cuộn nên không
+     * cần tổng số (bỏ câu COUNT). Record riêng thay vì {@code SliceImpl} vì kết quả được cache trong Redis
+     * bằng Jackson, mà {@code SliceImpl} không dựng lại được từ JSON. Giữ tên {@code content} để client cũ
+     * (đọc {@code page.content}) vẫn chạy.
+     */
+    public record SearchSliceRes(java.util.List<SummaryRes> content, int page, int size, boolean last) {}
+
     public record SummaryRes(
             Long id,
             String title,
