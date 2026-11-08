@@ -1,8 +1,10 @@
 package com.lms.enrollment.repository;
 
+import com.lms.enrollment.repository.projection.CourseProgressRef;
 import com.lms.enrollment.entity.LessonProgress;
 import java.time.LocalDateTime;
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -52,4 +54,11 @@ public interface LessonProgressRepository extends JpaRepository<LessonProgress, 
     Set<Long> findCompletedLessonIdsByUserIdAndLessonIdIn(
             @Param("userId") Long userId,
             @Param("lessonIds") Collection<Long> lessonIds);
+    /** Mọi bản ghi tiến độ của học viên trong các khóa cho trước (1 truy vấn) — đủ để tính "học tiếp" và "truy cập gần nhất". */
+    @Query("SELECT new com.lms.enrollment.repository.projection.CourseProgressRef(ch.course.id, l.id, lp.lastPositionSec, lp.isCompleted, lp.updatedAt) "
+            + "FROM LessonProgress lp JOIN lp.lesson l JOIN l.chapter ch "
+            + "WHERE lp.user.id = :userId AND ch.course.id IN :courseIds")
+    List<CourseProgressRef> findProgressRefsByUserAndCourseIds(@Param("userId") Long userId,
+                                                               @Param("courseIds") Collection<Long> courseIds);
+
 }

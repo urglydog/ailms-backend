@@ -1,5 +1,6 @@
 package com.lms.enrollment.repository;
 
+import org.springframework.data.jpa.repository.EntityGraph;
 import com.lms.enrollment.entity.Enrollment;
 import java.util.List;
 import java.util.Optional;
@@ -58,5 +59,12 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, Long> {
      * danh ÍT NHẤT 1 khóa của MÌNH, dùng khi không chọn ngữ cảnh khóa cụ thể lúc bắt đầu hội
      * thoại (tránh spam học viên hoàn toàn xa lạ). */
     boolean existsByUser_IdAndCourse_Instructor_Email(Long userId, String instructorEmail);
+
+    /**
+     * "Khóa học của tôi" — nạp sẵn course + category + instructor trong CÙNG 1 truy vấn (tránh N+1 khi
+     * map từng thẻ khóa học). Các số liệu phụ lấy theo lô ở {@code EnrollmentService.getMyEnrollments}.
+     */
+    @EntityGraph(attributePaths = {"course", "course.category", "course.instructor"})
+    List<Enrollment> findWithCourseByUser_Email(String email);
 
 }

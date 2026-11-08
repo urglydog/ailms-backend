@@ -1,5 +1,7 @@
 package com.lms.catalog.repository;
 
+import java.util.Collection;
+import com.lms.enrollment.repository.projection.CourseLessonRef;
 import com.lms.catalog.entity.Lesson;
 import java.util.List;
 import java.util.Optional;
@@ -45,4 +47,9 @@ public interface LessonRepository extends JpaRepository<Lesson, Long> {
      *  để bài chưa gán chapter trả null thay vì bị loại khỏi kết quả. */
     @Query("SELECT l.id, c.title FROM Lesson l LEFT JOIN l.chapter c WHERE l.id IN :ids")
     List<Object[]> findChapterTitlesByLessonIds(@Param("ids") java.util.Collection<Long> ids);
+    /** Mọi bài học của các khóa cho trước, theo thứ tự khóa → chương → bài (1 truy vấn cho cả danh sách). */
+    @Query("SELECT new com.lms.enrollment.repository.projection.CourseLessonRef(ch.course.id, l.id) FROM Lesson l JOIN l.chapter ch "
+            + "WHERE ch.course.id IN :courseIds ORDER BY ch.course.id, ch.displayOrder, l.displayOrder")
+    List<CourseLessonRef> findLessonRefsByCourseIds(@Param("courseIds") Collection<Long> courseIds);
+
 }

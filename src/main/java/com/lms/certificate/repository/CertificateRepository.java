@@ -1,5 +1,9 @@
 package com.lms.certificate.repository;
 
+import java.util.Collection;
+import org.springframework.data.repository.query.Param;
+import org.springframework.data.jpa.repository.Query;
+import com.lms.enrollment.repository.projection.CourseCertificateRef;
 import com.lms.certificate.entity.Certificate;
 import java.util.List;
 import java.util.Optional;
@@ -24,4 +28,10 @@ public interface CertificateRepository extends JpaRepository<Certificate, Long> 
 
     /** Trang hồ sơ công khai — chỉ hiển thị chứng chỉ còn hiệu lực (BR-CERT-07), REVOKED bị ẩn. */
     List<Certificate> findByStudent_IdAndStatusOrderByIssuedAtDesc(Long studentId, com.lms.common.enums.CertificateStatus status);
+    /** Mã chứng chỉ của học viên cho các khóa cho trước (1 truy vấn). */
+    @Query("SELECT new com.lms.enrollment.repository.projection.CourseCertificateRef(c.course.id, c.certificateCode) FROM Certificate c "
+            + "WHERE c.student.id = :studentId AND c.course.id IN :courseIds")
+    List<CourseCertificateRef> findCertificateRefsByStudentAndCourseIds(@Param("studentId") Long studentId,
+                                                                        @Param("courseIds") Collection<Long> courseIds);
+
 }
