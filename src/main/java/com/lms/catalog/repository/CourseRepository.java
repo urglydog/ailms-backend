@@ -1,5 +1,6 @@
 package com.lms.catalog.repository;
 
+import org.springframework.data.jpa.repository.EntityGraph;
 import com.lms.catalog.entity.Course;
 import com.lms.common.enums.CourseStatus;
 import java.util.Optional;
@@ -56,11 +57,17 @@ public interface CourseRepository extends JpaRepository<Course, Long> {
             + "AND (:maxDurationSec IS NULL OR "
             + "     (SELECT COALESCE(SUM(l.durationSec), 0) FROM Lesson l WHERE l.chapter.course = c) <= :maxDurationSec) ";
 
+    /*
+     * (08/11/2026, hiệu năng đợt 2) Cả 3 truy vấn tìm kiếm nạp sẵn category + instructor bằng @EntityGraph:
+     * thẻ khóa học hiển thị tên danh mục và giảng viên, trước đây mỗi khóa nạp thêm 2 câu riêng (N+1).
+     */
+
     /**
      * Sắp xếp theo cột có sẵn (Mới nhất, Đánh giá cao) — thứ tự lấy từ {@code pageable.getSort()}.
      * Trả {@link Slice} (08/11/2026): Kho khóa học tải dần khi cuộn, chỉ cần biết "còn trang sau không",
      * nên BỎ câu {@code COUNT(*)} mà {@code Page} luôn chạy kèm — đỡ một truy vấn nặng mỗi lần lọc.
      */
+    @EntityGraph(attributePaths = {"category", "instructor"})
     @Query("SELECT c " + PUBLIC_SEARCH_WHERE)
     Slice<Course> searchPublic(
             @Param("keyword") String keyword,
@@ -73,6 +80,7 @@ public interface CourseRepository extends JpaRepository<Course, Long> {
             Pageable pageable);
 
     /** "Đánh giá nhiều": số đánh giá không lưu sẵn trên Course nên ORDER BY subquery đếm (bỏ đánh giá đã ẩn). */
+    @EntityGraph(attributePaths = {"category", "instructor"})
     @Query("SELECT c " + PUBLIC_SEARCH_WHERE
             + "ORDER BY (SELECT COUNT(r) FROM CourseReview r WHERE r.course = c AND r.isHidden = false) DESC, "
             + "c.createdAt DESC, c.id DESC")
@@ -90,6 +98,7 @@ public interface CourseRepository extends JpaRepository<Course, Long> {
      * "Phù hợp nhất" (chỉ khi có từ khóa): tiêu đề BẮT ĐẦU bằng từ khóa xếp trước tiêu đề chỉ CHỨA từ
      * khóa, cùng hạng xếp theo tên. Trước đây sắp lại trong từng trang ở Java — sai thứ tự giữa các trang.
      */
+    @EntityGraph(attributePaths = {"category", "instructor"})
     @Query("SELECT c " + PUBLIC_SEARCH_WHERE
             + "ORDER BY CASE WHEN LOWER(c.title) LIKE LOWER(CONCAT(:keyword, '%')) THEN 0 ELSE 1 END, c.title ASC, c.id ASC")
     Slice<Course> searchPublicByRelevance(

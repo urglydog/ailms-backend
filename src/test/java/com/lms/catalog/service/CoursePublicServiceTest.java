@@ -1,5 +1,9 @@
 package com.lms.catalog.service;
 
+import java.util.Map;
+import com.lms.coupon.dto.CouponDto;
+import com.lms.catalog.repository.projection.CourseReviewCount;
+import com.lms.catalog.repository.projection.CourseLessonStats;
 import com.lms.catalog.dto.CoursePublicDto.DetailRes;
 import com.lms.catalog.dto.CoursePublicDto.PlayerRes;
 import com.lms.catalog.entity.Category;
@@ -409,4 +413,44 @@ class CoursePublicServiceTest {
         lesson.setDurationSec(300);
         return lesson;
     }
+    /** Hiệu năng (đợt 2): số liệu của cả trang lấy theo lô — không truy vấn riêng cho từng khóa. */
+    @Test
+    void search_loadsCountsAndPricesOncePerPage() {
+        Course a = courseWithRatingAndTitle(1L, "Khoa A", 4.0);
+        Course b = courseWithRatingAndTitle(2L, "Khoa B", 4.5);
+        b.setPrice(new BigDecimal("300000"));
+        b.setIsFree(false);
+        when(courseRepository.searchPublic(any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new SliceImpl<>(List.of(a, b)));
+        when(courseReviewRepository.countVisibleByCourseIds(List.of(1L, 2L)))
+                .thenReturn(List.of(new CourseReviewCount(2L, 7L)));
+        when(lessonRepository.findLessonStatsByCourseIds(List.of(1L, 2L)))
+                .thenReturn(List.of(new CourseLessonStats(1L, 12L, 3600L), new CourseLessonStats(2L, 5L, 900L)));
+        when(couponService.getDisplayPrices(any())).thenReturn(Map.of(
+                2L, new CouponDto.PriceRes(new BigDecimal("300000"), new BigDecimal("240000"), 20, "SALE", true)));
+
+        var result = coursePublicService.search(null, null, null, null, null, null, null, PageRequest.of(0, 24));
+
+        assertThat(result.content()).extracting("reviewCount").containsExactly(0L, 7L);
+        assertThat(result.content()).extracting("totalLessons").containsExactly(12, 5);
+        assertThat(result.content()).extracting("totalDurationSec").containsExactly(3600, 900);
+        assertThat(result.content().get(1).finalPrice()).isEqualByComparingTo("240000");
+        assertThat(result.content().get(1).discountPercent()).isEqualTo(20);
+        verify(courseReviewRepository, never()).countByCourse_IdAndIsHiddenFalse(any());
+        verify(lessonRepository, never()).countByChapter_CourseId(any());
+        verify(lessonRepository, never()).sumDurationSecByCourseId(any());
+        verify(couponService, never()).getDisplayPrice(any());
+    }
+
+    @Test
+    void search_emptyPage_skipsBatchQueries() {
+        when(courseRepository.searchPublic(any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new SliceImpl<>(List.of()));
+
+        coursePublicService.search(null, null, null, null, null, null, null, PageRequest.of(0, 24));
+
+        verify(lessonRepository, never()).findLessonStatsByCourseIds(any());
+        verify(courseReviewRepository, never()).countVisibleByCourseIds(any());
+    }
+
 }

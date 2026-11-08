@@ -1,5 +1,10 @@
 package com.lms.coupon.service;
 
+import java.util.stream.Collectors;
+import java.util.Set;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.Collection;
 import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
 import com.lms.catalog.entity.Course;
@@ -152,6 +157,67 @@ public class CouponService {
     public PriceRes getDisplayPrice(Course course) {
         PricingResult result = resolveBestPrice(course, null, null);
         return toPriceRes(result);
+    }
+
+    /**
+     * Giá hiển thị của NHIỀU khóa cùng lúc (trang kết quả tìm kiếm) — cùng quy tắc với
+     * {@link #getDisplayPrice} (BR-COUPON-01/02/04, chỉ xét coupon autoApply, không có người dùng), nhưng
+     * đọc danh sách coupon, số lượt đã dùng và phạm vi khóa của từng coupon MỘT lần cho cả trang thay vì
+     * lặp lại với từng khóa (hiệu năng đợt 2: trước đây 24 khóa = 24 lần đọc lại coupon + kiểm tra từng cái).
+     */
+    @Transactional(readOnly = true)
+    public Map<Long, PriceRes> getDisplayPrices(Collection<Course> courses) {
+        Map<Long, PriceRes> result = new HashMap<>();
+        List<Course> paid = new ArrayList<>();
+        for (Course course : courses) {
+            if (Boolean.TRUE.equals(course.getIsFree())) {
+                result.put(course.getId(), new PriceRes(course.getPrice(), course.getPrice(), null, null, true));
+            } else {
+                paid.add(course);
+            }
+        }
+        if (paid.isEmpty()) {
+            return result;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        // Điều kiện không phụ thuộc khóa (đang bật, trong thời hạn, chưa hết lượt) — kiểm 1 lần mỗi coupon.
+        List<Coupon> usable = new ArrayList<>();
+        Map<Long, Set<Long>> scopedCourseIds = new HashMap<>();
+        for (Coupon coupon : couponRepository.findByAutoApplyTrueAndIsActiveTrue()) {
+            if (!Boolean.TRUE.equals(coupon.getIsActive())) continue;
+            if (now.isBefore(coupon.getStartAt()) || now.isAfter(coupon.getEndAt())) continue;
+            if (coupon.getMaxUsageCount() != null
+                    && paymentRepository.countByCoupon_IdAndStatus(coupon.getId(), PaymentStatus.PAID) >= coupon.getMaxUsageCount()) {
+                continue;
+            }
+            if (coupon.getScopeType() != CouponScopeType.ALL_COURSES) {
+                scopedCourseIds.put(coupon.getId(), couponCourseRepository.findByCoupon_Id(coupon.getId()).stream()
+                        .map(cc -> cc.getCourse().getId())
+                        .collect(Collectors.toSet()));
+            }
+            usable.add(coupon);
+        }
+        for (Course course : paid) {
+            BigDecimal originalPrice = course.getPrice();
+            Coupon best = null;
+            BigDecimal bestPrice = originalPrice;
+            for (Coupon coupon : usable) {
+                boolean inScope = coupon.getScopeType() == CouponScopeType.ALL_COURSES
+                        ? coupon.getCreatedBy().getRole() == Role.ADMIN
+                                || coupon.getCreatedBy().getId().equals(course.getInstructor().getId())
+                        : scopedCourseIds.getOrDefault(coupon.getId(), Set.of()).contains(course.getId());
+                if (!inScope) continue;
+                BigDecimal price = computeDiscountedPrice(coupon, originalPrice);
+                if (best == null || price.compareTo(bestPrice) < 0) {
+                    best = coupon;
+                    bestPrice = price;
+                }
+            }
+            result.put(course.getId(), toPriceRes(best == null
+                    ? new PricingResult(originalPrice, originalPrice, null, true)
+                    : new PricingResult(originalPrice, bestPrice, best, true)));
+        }
+        return result;
     }
 
     /** Dùng lúc thanh toán — xét CẢ coupon autoApply LẪN mã học viên tự nhập (BR-COUPON-01: không cộng dồn, chọn mức giảm cao nhất). */

@@ -1,5 +1,9 @@
 package com.lms.catalog.service;
 
+import java.util.Map;
+import java.util.HashMap;
+import java.util.ArrayList;
+import com.lms.catalog.repository.projection.CourseLessonStats;
 import com.lms.catalog.dto.CoursePublicDto.*;
 import com.lms.catalog.entity.Chapter;
 import com.lms.catalog.entity.Course;
@@ -95,7 +99,7 @@ public class CoursePublicService {
                     durationRange.minSec(), durationRange.maxSec(),
                     PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), order));
         }
-        List<SummaryRes> content = slice.getContent().stream().map(this::mapToSummaryRes).collect(Collectors.toList());
+        List<SummaryRes> content = mapSummaries(slice.getContent());
         return new SearchSliceRes(content, slice.getNumber(), slice.getSize(), !slice.hasNext());
     }
 
@@ -203,26 +207,45 @@ public class CoursePublicService {
         );
     }
 
-    private SummaryRes mapToSummaryRes(Course course) {
-        PriceRes price = resolveDisplayPrice(course);
-        return new SummaryRes(
-                course.getId(),
-                course.getTitle(),
-                course.getSlug(),
-                course.getInstructor().getFullName(),
-                course.getThumbnailUrl(),
-                course.getLevel(),
-                course.getPrice(),
-                course.getIsFree(),
-                course.getAvgRating(),
-                courseReviewRepository.countByCourse_IdAndIsHiddenFalse(course.getId()),
-                (int) lessonRepository.countByChapter_CourseId(course.getId()),
-                lessonRepository.sumDurationSecByCourseId(course.getId()),
-                course.getCategory().getSlug(),
-                course.getCategory().getName(),
-                price.finalPrice(),
-                price.discountPercent()
-        );
+    /**
+     * Map một trang khóa học (hiệu năng đợt 2, PLAN_HieuNang_HeThong.md): category + instructor đã nạp sẵn
+     * bằng @EntityGraph; số đánh giá, số bài + tổng thời lượng và giá sau coupon lấy THEO LÔ cho cả trang
+     * (vài truy vấn cố định) thay vì 5–6 truy vấn cho MỖI khóa như trước.
+     */
+    private List<SummaryRes> mapSummaries(List<Course> courses) {
+        if (courses.isEmpty()) {
+            return List.of();
+        }
+        List<Long> ids = courses.stream().map(Course::getId).toList();
+        Map<Long, Long> reviewCounts = new HashMap<>();
+        courseReviewRepository.countVisibleByCourseIds(ids).forEach(r -> reviewCounts.put(r.courseId(), r.count()));
+        Map<Long, CourseLessonStats> lessonStats = new HashMap<>();
+        lessonRepository.findLessonStatsByCourseIds(ids).forEach(st -> lessonStats.put(st.courseId(), st));
+        Map<Long, PriceRes> prices = couponService.getDisplayPrices(courses);
+
+        List<SummaryRes> out = new ArrayList<>(courses.size());
+        for (Course course : courses) {
+            CourseLessonStats st = lessonStats.get(course.getId());
+            PriceRes price = prices.get(course.getId());
+            out.add(new SummaryRes(
+                    course.getId(),
+                    course.getTitle(),
+                    course.getSlug(),
+                    course.getInstructor().getFullName(),
+                    course.getThumbnailUrl(),
+                    course.getLevel(),
+                    course.getPrice(),
+                    course.getIsFree(),
+                    course.getAvgRating(),
+                    reviewCounts.getOrDefault(course.getId(), 0L),
+                    st == null ? 0 : st.lessonCount().intValue(),
+                    st == null ? 0 : st.totalDurationSec().intValue(),
+                    course.getCategory().getSlug(),
+                    course.getCategory().getName(),
+                    price == null ? course.getPrice() : price.finalPrice(),
+                    price == null ? null : price.discountPercent()));
+        }
+        return out;
     }
 
     /** UC57 mở rộng (15/09/2026) — khóa miễn phí bỏ qua tính coupon (giảm giá trên 0đ vô nghĩa). */
