@@ -6,5 +6,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 public interface UserLearningDayRepository extends JpaRepository<UserLearningDay, Long> {
+    boolean existsByUser_IdAndActivityDate(Long userId, LocalDate activityDate);
+
     List<UserLearningDay> findByUser_IdAndActivityDateBetweenOrderByActivityDateDesc(Long userId, LocalDate startDate, LocalDate endDate);
 }

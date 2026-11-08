@@ -68,7 +68,23 @@ public class CouponDto {
      * nhập mã nào (không có gì để báo lỗi).
      */
     /** Xem trước giá sau khi nhập mã ở giỏ hàng/thanh toán — không tạo giao dịch nào. */
-    public record PreviewReq(@NotNull Long courseId, String code) {}
+    public record PreviewReq(@NotNull Long courseId, String code, Long couponId, Boolean manualCoupon) {
+        public PreviewReq(Long courseId, String code) {
+            this(courseId, code, null, null);
+        }
+    }
+
+    /** Coupon khả dụng ở trang thanh toán (học viên tự chọn) — {@code savings} là tổng tiền giảm
+     * được trên các khóa đang thanh toán, dùng để sắp xếp giảm dần. */
+    public record AvailableRes(
+            Long id,
+            DiscountType discountType,
+            BigDecimal discountValue,
+            CouponScopeType scopeType,
+            LocalDateTime endAt,
+            BigDecimal savings,
+            List<Long> applicableCourseIds
+    ) {}
 
     public record PriceRes(
             BigDecimal originalPrice,

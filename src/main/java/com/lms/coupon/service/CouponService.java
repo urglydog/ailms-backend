@@ -12,6 +12,7 @@ import com.lms.common.exception.AccessDeniedDomainException;
 import com.lms.common.exception.BusinessRuleViolationException;
 import com.lms.common.exception.InvalidRequestException;
 import com.lms.common.exception.ResourceNotFoundException;
+import com.lms.coupon.dto.CouponDto.AvailableRes;
 import com.lms.coupon.dto.CouponDto.CourseRef;
 import com.lms.coupon.dto.CouponDto.CreateReq;
 import com.lms.coupon.dto.CouponDto.PriceRes;
@@ -206,6 +207,78 @@ public class CouponService {
                 .orElseThrow();
         BigDecimal finalPrice = computeDiscountedPrice(best, originalPrice);
         return new PricingResult(originalPrice, finalPrice, best, enteredCodeValid);
+    }
+
+    /**
+     * Chế độ học viên TỰ CHỌN coupon ở trang thanh toán: KHÔNG tự gom coupon autoApply. Chỉ xét
+     * coupon {@code couponId} (nếu có) và mã {@code enteredCode} (nếu có), chọn mức giá thấp nhất.
+     */
+    @Transactional(readOnly = true)
+    public PricingResult resolveManualPrice(Course course, User user, Long couponId, String enteredCode) {
+        BigDecimal originalPrice = course.getPrice();
+        LocalDateTime now = LocalDateTime.now();
+        List<Coupon> candidates = new ArrayList<>();
+        boolean enteredCodeValid = true;
+
+        if (couponId != null) {
+            Coupon chosen = couponRepository.findById(couponId).orElse(null);
+            if (chosen != null && isCouponUsable(chosen, course, user, now)) {
+                candidates.add(chosen);
+            }
+        }
+        if (enteredCode != null && !enteredCode.isBlank()) {
+            Coupon entered = couponRepository.findByCodeIgnoreCaseAndIsActiveTrue(enteredCode.trim()).orElse(null);
+            if (entered != null && isCouponUsable(entered, course, user, now)) {
+                candidates.add(entered);
+            } else {
+                enteredCodeValid = false;
+            }
+        }
+        if (candidates.isEmpty()) {
+            return new PricingResult(originalPrice, originalPrice, null, enteredCodeValid);
+        }
+        Coupon best = candidates.stream()
+                .min(Comparator.comparing(c -> computeDiscountedPrice(c, originalPrice)))
+                .orElseThrow();
+        return new PricingResult(originalPrice, computeDiscountedPrice(best, originalPrice), best, enteredCodeValid);
+    }
+
+    /** Xem trước giá ở chế độ chọn thủ công — không tạo giao dịch nào. */
+    @Transactional(readOnly = true)
+    public PriceRes previewManualPrice(String email, Long courseId, Long couponId, String enteredCode) {
+        User user = requireUser(email);
+        Course course = courseRepository.findById(courseId)
+                .orElseThrow(() -> new ResourceNotFoundException("Course", courseId));
+        return toPriceRes(resolveManualPrice(course, user, couponId, enteredCode));
+    }
+
+    /** Danh sách coupon (autoApply, đang hợp lệ) học viên có thể chọn cho các khóa đang thanh
+     * toán, sắp xếp theo số tiền giảm được giảm dần. Coupon có mã riêng không liệt kê (nhập tay). */
+    @Transactional(readOnly = true)
+    public List<AvailableRes> listAvailable(String email, List<Long> courseIds) {
+        User user = requireUser(email);
+        List<Course> courses = courseRepository.findAllById(courseIds);
+        LocalDateTime now = LocalDateTime.now();
+        List<AvailableRes> result = new ArrayList<>();
+        for (Coupon coupon : couponRepository.findByAutoApplyTrueAndIsActiveTrue()) {
+            BigDecimal savings = BigDecimal.ZERO;
+            List<Long> applicable = new ArrayList<>();
+            for (Course course : courses) {
+                if (isCouponUsable(coupon, course, user, now)) {
+                    BigDecimal saved = course.getPrice().subtract(computeDiscountedPrice(coupon, course.getPrice()));
+                    if (saved.signum() > 0) {
+                        savings = savings.add(saved);
+                        applicable.add(course.getId());
+                    }
+                }
+            }
+            if (!applicable.isEmpty()) {
+                result.add(new AvailableRes(coupon.getId(), coupon.getDiscountType(), coupon.getDiscountValue(),
+                        coupon.getScopeType(), coupon.getEndAt(), savings, applicable));
+            }
+        }
+        result.sort(Comparator.comparing(AvailableRes::savings).reversed());
+        return result;
     }
 
     /** Các trạng thái Payment được tính là "đang giữ suất" coupon — PENDING cũng phải tính vì

@@ -29,6 +29,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 import vn.payos.PayOS;
 import vn.payos.model.v2.paymentRequests.CreatePaymentLinkResponse;
+import vn.payos.model.v2.paymentRequests.PaymentLink;
 import vn.payos.model.v2.paymentRequests.PaymentLinkStatus;
 import vn.payos.service.blocking.v2.paymentRequests.PaymentRequestsService;
 
@@ -349,6 +350,88 @@ class PaymentServiceTest {
 
         assertThat(payment.getPlatformFee()).isEqualByComparingTo("6000");
         assertThat(payment.getInstructorEarning()).isEqualByComparingTo("194000");
+    }
+
+    // ── Thay đơn PENDING cũ khi thanh toán lại (Back từ PayOS) ───────────
+
+    @Test
+    void createPayment_oldPendingPaymentForSameCourse_isCancelledAndMarkedFailed() {
+        Payment old = pendingPayment("111222333", null, courseA, new BigDecimal("200000"));
+        when(paymentRepository.findByUser_IdAndStatusAndCourse_IdIn(1L, PaymentStatus.PENDING, List.of(10L)))
+                .thenReturn(List.of(old));
+
+        paymentService.createPayment(EMAIL, new CreateReq(10L, "PAYOS", null, null, null, null, null));
+
+        verify(paymentRequestsService).cancel(111222333L, "Thay bằng đơn thanh toán mới");
+        assertThat(old.getStatus()).isEqualTo(PaymentStatus.FAILED);
+    }
+
+    @Test
+    void createPayment_cancelOldLinkFails_keepsOldPaymentPending() {
+        Payment old = pendingPayment("111222333", null, courseA, new BigDecimal("200000"));
+        when(paymentRepository.findByUser_IdAndStatusAndCourse_IdIn(1L, PaymentStatus.PENDING, List.of(10L)))
+                .thenReturn(List.of(old));
+        when(paymentRequestsService.cancel(any(Long.class), any(String.class))).thenThrow(new RuntimeException("da thanh toan"));
+
+        paymentService.createPayment(EMAIL, new CreateReq(10L, "PAYOS", null, null, null, null, null));
+
+        assertThat(old.getStatus()).isEqualTo(PaymentStatus.PENDING);
+    }
+
+    @Test
+    void createPayment_cancelFailsButLinkAlreadyExpired_marksOldPaymentFailed() {
+        Payment old = pendingPayment("111222333", null, courseA, new BigDecimal("200000"));
+        when(paymentRepository.findByUser_IdAndStatusAndCourse_IdIn(1L, PaymentStatus.PENDING, List.of(10L)))
+                .thenReturn(List.of(old));
+        when(paymentRequestsService.cancel(any(Long.class), any(String.class))).thenThrow(new RuntimeException("het han"));
+        PaymentLink expiredLink = org.mockito.Mockito.mock(PaymentLink.class);
+        when(expiredLink.getStatus()).thenReturn(PaymentLinkStatus.EXPIRED);
+        when(paymentRequestsService.get(any(Long.class))).thenReturn(expiredLink);
+
+        paymentService.createPayment(EMAIL, new CreateReq(10L, "PAYOS", null, null, null, null, null));
+
+        assertThat(old.getStatus()).isEqualTo(PaymentStatus.FAILED);
+    }
+
+    // ── cancelPending (học viên hủy ở PayOS) ────────────────────────────
+
+    @Test
+    void cancelPending_ownerPendingPayment_becomesFailed() {
+        Payment payment = pendingPayment("txn-1", null, courseA, new BigDecimal("200000"));
+        payment.setUser(user);
+        when(paymentRepository.findByOrderGroupRef("txn-1")).thenReturn(List.of());
+        when(paymentRepository.findByTxnRef("txn-1")).thenReturn(Optional.of(payment));
+
+        paymentService.cancelPending(EMAIL, "txn-1");
+
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.FAILED);
+    }
+
+    @Test
+    void cancelPending_otherUsersPayment_isRejectedAndUntouched() {
+        Payment payment = pendingPayment("txn-1", null, courseA, new BigDecimal("200000"));
+        User other = new User();
+        other.setEmail("khac@example.com");
+        payment.setUser(other);
+        when(paymentRepository.findByOrderGroupRef("txn-1")).thenReturn(List.of());
+        when(paymentRepository.findByTxnRef("txn-1")).thenReturn(Optional.of(payment));
+
+        assertThatThrownBy(() -> paymentService.cancelPending(EMAIL, "txn-1"))
+                .isInstanceOf(AccessDeniedDomainException.class);
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PENDING);
+    }
+
+    @Test
+    void cancelPending_alreadyPaid_isNotDowngraded() {
+        Payment payment = pendingPayment("txn-1", null, courseA, new BigDecimal("200000"));
+        payment.setUser(user);
+        payment.setStatus(PaymentStatus.PAID);
+        when(paymentRepository.findByOrderGroupRef("txn-1")).thenReturn(List.of());
+        when(paymentRepository.findByTxnRef("txn-1")).thenReturn(Optional.of(payment));
+
+        paymentService.cancelPending(EMAIL, "txn-1");
+
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PAID);
     }
 
     private Payment pendingPayment(String txnRef, String orderGroupRef, Course course, BigDecimal amount) {
