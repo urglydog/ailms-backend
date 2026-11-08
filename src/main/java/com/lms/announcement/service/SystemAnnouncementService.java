@@ -1,5 +1,7 @@
 package com.lms.announcement.service;
 
+import org.springframework.data.domain.Slice;
+import org.springframework.data.domain.PageRequest;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lms.announcement.dto.SystemAnnouncementDto.BannerRes;
@@ -36,6 +38,9 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class SystemAnnouncementService {
+
+    /** Số người nhận đọc mỗi lô khi phát tán thông báo hệ thống. */
+    private static final int RECIPIENT_BATCH = 500;
 
     private static final int MAX_JOBS_PER_TICK = 5;
 
@@ -133,33 +138,49 @@ public class SystemAnnouncementService {
         announcement.setDispatchStatus(AnnouncementDispatchStatus.PROCESSING);
         announcementRepository.save(announcement);
 
-        List<User> recipients = resolveRecipients(announcement);
-        announcement.setTotalRecipients(recipients.size());
-
         String notifyType = "SYSTEM_" + announcement.getSeverity();
         int sent = 0;
-        for (User user : recipients) {
-            try {
-                notificationService.notify(user.getId(), notifyType, announcement.getTitle(), announcement.getContent(), null);
-                sent++;
-            } catch (Exception e) {
-                log.error("Khong gui duoc thong bao he thong {} cho user {}", announcementId, user.getId(), e);
-            }
+        int total;
+        if (announcement.getAudience() == AnnouncementAudience.SPECIFIC_USER) {
+            List<Long> ids = userRepository.findById(announcement.getTargetUserId())
+                    .map(u -> List.of(u.getId())).orElse(List.of());
+            total = ids.size();
+            sent += notifyAll(ids, notifyType, announcement, announcementId);
+        } else {
+            // Hiệu năng đợt 3: đọc ID người nhận theo lô RECIPIENT_BATCH — không nạp toàn bộ entity
+            // người dùng vào bộ nhớ khi gửi cho "Tất cả" (trước đây userRepository.findAll()).
+            Role role = switch (announcement.getAudience()) {
+                case INSTRUCTOR -> Role.INSTRUCTOR;
+                case STUDENT -> Role.STUDENT;
+                default -> null;
+            };
+            total = (int) userRepository.countForAudience(role);
+            int page = 0;
+            Slice<Long> slice;
+            do {
+                slice = userRepository.findIdsForAudience(role, PageRequest.of(page++, RECIPIENT_BATCH));
+                sent += notifyAll(slice.getContent(), notifyType, announcement, announcementId);
+            } while (slice.hasNext());
         }
+        announcement.setTotalRecipients(total);
 
         announcement.setSentCount(sent);
         announcement.setDispatchStatus(AnnouncementDispatchStatus.DONE);
         announcementRepository.save(announcement);
-        log.info("Da phat tan xong thong bao he thong {} ({}/{} nguoi nhan)", announcementId, sent, recipients.size());
+        log.info("Da phat tan xong thong bao he thong {} ({}/{} nguoi nhan)", announcementId, sent, total);
     }
 
-    private List<User> resolveRecipients(SystemAnnouncement announcement) {
-        return switch (announcement.getAudience()) {
-            case ALL -> userRepository.findAll();
-            case INSTRUCTOR -> userRepository.findByRole(Role.INSTRUCTOR);
-            case STUDENT -> userRepository.findByRole(Role.STUDENT);
-            case SPECIFIC_USER -> userRepository.findById(announcement.getTargetUserId()).map(List::of).orElse(List.of());
-        };
+    private int notifyAll(List<Long> userIds, String notifyType, SystemAnnouncement announcement, Long announcementId) {
+        int sent = 0;
+        for (Long userId : userIds) {
+            try {
+                notificationService.notify(userId, notifyType, announcement.getTitle(), announcement.getContent(), null);
+                sent++;
+            } catch (Exception e) {
+                log.error("Khong gui duoc thong bao he thong {} cho user {}", announcementId, userId, e);
+            }
+        }
+        return sent;
     }
 
     private Res toRes(SystemAnnouncement a) {

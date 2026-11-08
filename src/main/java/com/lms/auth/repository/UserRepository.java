@@ -1,5 +1,7 @@
 package com.lms.auth.repository;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Slice;
 import com.lms.auth.entity.User;
 import com.lms.common.enums.Role;
 import org.springframework.data.domain.Pageable;
@@ -40,4 +42,31 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     /** Hạng của 1 user = số người có nhiều XP hơn + 1 — không cần tải cả bảng. */
     long countByTotalXpGreaterThan(Long totalXp);
+    /** ID người nhận thông báo hệ thống theo lô ({@code role} null = mọi người dùng) — không nạp entity (hiệu năng đợt 3). */
+    @Query("SELECT u.id FROM User u WHERE (:role IS NULL OR u.role = :role) ORDER BY u.id")
+    Slice<Long> findIdsForAudience(@Param("role") Role role, Pageable pageable);
+
+    @Query("SELECT COUNT(u) FROM User u WHERE (:role IS NULL OR u.role = :role)")
+    long countForAudience(@Param("role") Role role);
+
+    /**
+     * Trang Quản lý người dùng (Admin) — tìm theo tên/email, lọc vai trò/bị khóa/bị gắn cờ spam, sắp xếp và
+     * phân trang NGAY TRONG DB (hiệu năng đợt 3; trước đây tải toàn bộ người dùng về trình duyệt).
+     * {@code q} đã chuẩn hóa thành {@code %từ khóa%} (chữ thường) hoặc null.
+     */
+    @Query("SELECT u FROM User u WHERE (:q IS NULL OR LOWER(u.fullName) LIKE :q OR LOWER(u.email) LIKE :q) "
+            + "AND (:role IS NULL OR u.role = :role) "
+            + "AND (:lockedOnly = false OR u.isActive = false) "
+            + "AND (:spamOnly = false OR u.isSpamFlagged = true)")
+    Page<User> searchForAdmin(@Param("q") String q, @Param("role") Role role, @Param("lockedOnly") boolean lockedOnly,
+                              @Param("spamOnly") boolean spamOnly, Pageable pageable);
+
+    /** Số người dùng theo vai trò — mỗi dòng là [Role, Long]. */
+    @Query("SELECT u.role, COUNT(u) FROM User u GROUP BY u.role")
+    java.util.List<Object[]> countGroupedByRole();
+
+    long countByIsActiveFalse();
+
+    long countByIsSpamFlaggedTrue();
+
 }

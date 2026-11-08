@@ -50,6 +50,54 @@ public class UserService {
     private final AccountLockRegistry accountLockRegistry;
     private final Tika tika = new Tika();
 
+    private static final java.util.Set<String> ADMIN_SORTABLE = java.util.Set.of("id", "fullName", "email", "role", "createdAt");
+    private static final int ADMIN_MAX_PAGE_SIZE = 100;
+
+    /**
+     * Trang Quản lý người dùng (Admin): tìm/lọc/sắp xếp/phân trang phía server (hiệu năng đợt 3).
+     * {@code filter}: ALL | STUDENT | INSTRUCTOR | ADMIN | LOCKED | SPAM. {@code page} đếm từ 1 như giao diện.
+     * Cột sắp xếp chỉ nhận danh sách cho phép; kích thước trang tối đa {@value #ADMIN_MAX_PAGE_SIZE}.
+     */
+    @Transactional(readOnly = true)
+    public org.springframework.data.domain.Page<UserRes> searchUsers(String query, String filter, String sortField,
+                                                                       String sortOrder, int page, int size) {
+        String q = (query == null || query.isBlank()) ? null : "%" + query.trim().toLowerCase(java.util.Locale.ROOT) + "%";
+        String f = filter == null ? "ALL" : filter.toUpperCase(java.util.Locale.ROOT);
+        com.lms.common.enums.Role role = switch (f) {
+            case "STUDENT" -> com.lms.common.enums.Role.STUDENT;
+            case "INSTRUCTOR" -> com.lms.common.enums.Role.INSTRUCTOR;
+            case "ADMIN" -> com.lms.common.enums.Role.ADMIN;
+            default -> null;
+        };
+        // Set.of(...).contains(null) ném NPE — cột rỗng coi như không chọn.
+        boolean sortable = sortField != null && ADMIN_SORTABLE.contains(sortField);
+        String field = sortable ? sortField : "createdAt";
+        org.springframework.data.domain.Sort.Direction dir = "asc".equalsIgnoreCase(sortOrder) && sortable
+                ? org.springframework.data.domain.Sort.Direction.ASC
+                : org.springframework.data.domain.Sort.Direction.DESC;
+        var pageable = org.springframework.data.domain.PageRequest.of(Math.max(0, page - 1),
+                Math.min(Math.max(1, size), ADMIN_MAX_PAGE_SIZE),
+                org.springframework.data.domain.Sort.by(dir, field).and(org.springframework.data.domain.Sort.by("id")));
+        return userRepository.searchForAdmin(q, role, "LOCKED".equals(f), "SPAM".equals(f), pageable).map(this::mapToRes);
+    }
+
+    /** Số người dùng cho các tab lọc của trang Quản lý người dùng — 3 truy vấn đếm, không tải danh sách. */
+    @Transactional(readOnly = true)
+    public java.util.Map<String, Long> countUsers() {
+        java.util.Map<String, Long> counts = new java.util.LinkedHashMap<>();
+        long all = 0;
+        for (String key : List.of("STUDENT", "INSTRUCTOR", "ADMIN")) counts.put(key, 0L);
+        for (Object[] row : userRepository.countGroupedByRole()) {
+            long n = ((Number) row[1]).longValue();
+            counts.put(String.valueOf(row[0]), n);
+            all += n;
+        }
+        counts.put("ALL", all);
+        counts.put("LOCKED", userRepository.countByIsActiveFalse());
+        counts.put("SPAM", userRepository.countByIsSpamFlaggedTrue());
+        return counts;
+    }
+
     @Transactional(readOnly = true)
     public List<UserRes> getAllUsers() {
         return userRepository.findAll().stream()

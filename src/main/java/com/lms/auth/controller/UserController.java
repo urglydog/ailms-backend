@@ -38,6 +38,29 @@ public class UserController {
     }
 
     /**
+     * Trang Quản lý người dùng (Admin) — tìm/lọc/sắp xếp/phân trang phía server (hiệu năng đợt 3).
+     * Thay cho {@code GET /api/v1/users} (trả toàn bộ người dùng) ở giao diện admin.
+     */
+    @GetMapping("/admin")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<org.springframework.data.domain.Page<UserRes>> searchUsers(
+            @RequestParam(required = false) String q,
+            @RequestParam(defaultValue = "ALL") String filter,
+            @RequestParam(defaultValue = "createdAt") String sort,
+            @RequestParam(defaultValue = "desc") String order,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(userService.searchUsers(q, filter, sort, order, page, size));
+    }
+
+    /** Số người dùng cho các tab lọc (Tất cả, Học viên, Giảng viên, Admin, Bị khóa, Spam). */
+    @GetMapping("/admin/counts")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<java.util.Map<String, Long>> countUsers() {
+        return ResponseEntity.ok(userService.countUsers());
+    }
+
+    /**
      * Lấy thông tin cá nhân của người đang đăng nhập (Tất cả Role đều gọi được).
      */
     @GetMapping("/me")

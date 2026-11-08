@@ -1,5 +1,7 @@
 package com.lms.auth.service;
 
+import org.springframework.data.domain.Slice;
+import org.springframework.data.domain.PageRequest;
 import com.lms.auth.entity.UserStreak;
 import com.lms.auth.repository.UserStreakRepository;
 import com.lms.common.service.NotificationService;
@@ -31,6 +33,7 @@ import java.util.List;
 public class StreakReminderJob {
 
     private static final int REMINDER_HOUR_LOCAL = 20;
+    private static final int BATCH_SIZE = 500;
 
     private final UserStreakRepository userStreakRepository;
     private final NotificationService notificationService;
@@ -38,19 +41,26 @@ public class StreakReminderJob {
     @Scheduled(cron = "0 0 * * * ?")
     @Transactional
     public void sendReminders() {
-        List<UserStreak> streaks = userStreakRepository.findAll();
+        // Hiệu năng đợt 3: chỉ đọc streak còn chuỗi và học trong 2 ngày gần đây (mọi múi giờ đều nằm trong
+        // khoảng này), theo lô BATCH_SIZE — không nạp cả bảng user_streaks mỗi giờ như trước.
+        LocalDate minActivityDate = LocalDate.now(ZoneId.of("UTC")).minusDays(2);
         int sent = 0;
-        for (UserStreak streak : streaks) {
-            try {
-                if (shouldRemind(streak)) {
-                    notifyAndMark(streak);
-                    sent++;
+        int page = 0;
+        Slice<UserStreak> slice;
+        do {
+            slice = userStreakRepository.findReminderCandidates(minActivityDate, PageRequest.of(page++, BATCH_SIZE));
+            for (UserStreak streak : slice.getContent()) {
+                try {
+                    if (shouldRemind(streak)) {
+                        notifyAndMark(streak);
+                        sent++;
+                    }
+                } catch (Exception e) {
+                    // Best-effort — 1 user lỗi (vd timezone hỏng) không được chặn các user khác.
+                    log.error("Loi gui streak reminder cho user {}", streak.getUserId(), e);
                 }
-            } catch (Exception e) {
-                // Best-effort — 1 user lỗi (vd timezone hỏng) không được chặn các user khác.
-                log.error("Loi gui streak reminder cho user {}", streak.getUserId(), e);
             }
-        }
+        } while (slice.hasNext());
         if (sent > 0) {
             log.info("Da gui {} streak reminder", sent);
         }
