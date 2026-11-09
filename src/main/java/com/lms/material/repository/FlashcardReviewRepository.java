@@ -24,8 +24,8 @@ public interface FlashcardReviewRepository extends JpaRepository<FlashcardReview
      * Số thẻ đến hạn ôn (nextReviewAt ≤ now) theo từng học viên — đếm và gom nhóm NGAY TRONG DB.
      * Trước đây job nạp TOÀN BỘ bảng flashcard_reviews rồi lọc bằng Java (hiệu năng đợt 3).
      */
-    @Query("SELECT new com.lms.material.repository.projection.FlashcardDueCount(r.user.email, COUNT(r)) "
-            + "FROM FlashcardReview r WHERE r.nextReviewAt <= :now GROUP BY r.user.email")
+    @Query("SELECT new com.lms.material.repository.projection.FlashcardDueCount(r.user.id, COUNT(r)) "
+            + "FROM FlashcardReview r WHERE r.nextReviewAt <= :now GROUP BY r.user.id")
     java.util.List<FlashcardDueCount> countDueByUser(@Param("now") java.time.LocalDateTime now);
 
 }
