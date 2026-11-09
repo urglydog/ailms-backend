@@ -10,6 +10,12 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface ConversationRepository extends JpaRepository<Conversation, Long> {
 
+    /** Kiểm quyền subscribe WebSocket {@code /topic/conversations/{id}} — chỉ 2 người trong hội thoại. */
+    @org.springframework.data.jpa.repository.Query("select count(c) > 0 from Conversation c where c.id = :id"
+            + " and (c.student.id = :userId or c.instructor.id = :userId)")
+    boolean isParticipant(@org.springframework.data.repository.query.Param("id") Long id,
+                          @org.springframework.data.repository.query.Param("userId") Long userId);
+
     Optional<Conversation> findByStudent_IdAndInstructor_Id(Long studentId, Long instructorId);
 
     @EntityGraph(attributePaths = {"student", "course"})
