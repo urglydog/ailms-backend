@@ -1,5 +1,9 @@
 package com.lms.enrollment.repository;
 
+import com.lms.catalog.repository.projection.CourseReviewCount;
+import java.util.List;
+import java.util.Collection;
+import com.lms.enrollment.repository.projection.CourseReviewRef;
 import com.lms.enrollment.entity.CourseReview;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
@@ -61,4 +65,15 @@ public interface CourseReviewRepository extends JpaRepository<CourseReview, Long
                                           @Param("instructorEmail") String instructorEmail,
                                           @Param("status") String status,
                                           Pageable pageable);
+    /** Đánh giá của học viên cho các khóa cho trước (1 truy vấn). */
+    @Query("SELECT new com.lms.enrollment.repository.projection.CourseReviewRef(r.course.id, r.rating) FROM CourseReview r "
+            + "WHERE r.user.id = :userId AND r.course.id IN :courseIds")
+    List<CourseReviewRef> findReviewRefsByUserAndCourseIds(@Param("userId") Long userId,
+                                                           @Param("courseIds") Collection<Long> courseIds);
+
+    /** Số đánh giá chưa ẩn của nhiều khóa trong 1 truy vấn (trang kết quả tìm kiếm). */
+    @Query("SELECT new com.lms.catalog.repository.projection.CourseReviewCount(r.course.id, COUNT(r)) FROM CourseReview r "
+            + "WHERE r.isHidden = false AND r.course.id IN :courseIds GROUP BY r.course.id")
+    List<CourseReviewCount> countVisibleByCourseIds(@Param("courseIds") Collection<Long> courseIds);
+
 }

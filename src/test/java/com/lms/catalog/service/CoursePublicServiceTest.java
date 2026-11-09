@@ -1,5 +1,9 @@
 package com.lms.catalog.service;
 
+import java.util.Map;
+import com.lms.coupon.dto.CouponDto;
+import com.lms.catalog.repository.projection.CourseReviewCount;
+import com.lms.catalog.repository.projection.CourseLessonStats;
 import com.lms.catalog.dto.CoursePublicDto.DetailRes;
 import com.lms.catalog.dto.CoursePublicDto.PlayerRes;
 import com.lms.catalog.entity.Category;
@@ -28,6 +32,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.SliceImpl;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.domain.Pageable;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -36,6 +42,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -188,7 +195,7 @@ class CoursePublicServiceTest {
     @Test
     void search_mapsPriceTypeFreeToIsFreeTrue() {
         when(courseRepository.searchPublic(any(), any(), any(), any(), any(), any(), any(), any()))
-                .thenReturn(org.springframework.data.domain.Page.empty());
+                .thenReturn(new SliceImpl<>(List.of()));
 
         coursePublicService.search(null, null, null, "free", null, null, null, PageRequest.of(0, 10));
 
@@ -201,7 +208,7 @@ class CoursePublicServiceTest {
     @Test
     void search_mapsPriceTypePaidToIsFreeFalse() {
         when(courseRepository.searchPublic(any(), any(), any(), any(), any(), any(), any(), any()))
-                .thenReturn(org.springframework.data.domain.Page.empty());
+                .thenReturn(new SliceImpl<>(List.of()));
 
         coursePublicService.search(null, null, null, "paid", null, null, null, PageRequest.of(0, 10));
 
@@ -214,7 +221,7 @@ class CoursePublicServiceTest {
     @Test
     void search_mapsPriceTypeAllToNullIsFree() {
         when(courseRepository.searchPublic(any(), any(), any(), any(), any(), any(), any(), any()))
-                .thenReturn(org.springframework.data.domain.Page.empty());
+                .thenReturn(new SliceImpl<>(List.of()));
 
         coursePublicService.search("react", "lap-trinh-web", "beginner", "all", null, null, null, PageRequest.of(0, 10));
 
@@ -225,7 +232,7 @@ class CoursePublicServiceTest {
     @Test
     void search_mapsMinRating_toBigDecimal() {
         when(courseRepository.searchPublic(any(), any(), any(), any(), any(), any(), any(), any()))
-                .thenReturn(org.springframework.data.domain.Page.empty());
+                .thenReturn(new SliceImpl<>(List.of()));
 
         coursePublicService.search(null, null, null, null, 4.5, null, null, PageRequest.of(0, 10));
 
@@ -238,7 +245,7 @@ class CoursePublicServiceTest {
     @Test
     void search_mapsDurationBucket_toSecondsRange() {
         when(courseRepository.searchPublic(any(), any(), any(), any(), any(), any(), any(), any()))
-                .thenReturn(org.springframework.data.domain.Page.empty());
+                .thenReturn(new SliceImpl<>(List.of()));
 
         coursePublicService.search(null, null, null, null, null, "1-3", null, PageRequest.of(0, 10));
 
@@ -264,41 +271,73 @@ class CoursePublicServiceTest {
     }
 
     @Test
-    void search_sortByRating_ordersHighestFirst() {
-        Course low = courseWithRatingAndTitle(1L, "Khoa A", 3.0);
-        Course high = courseWithRatingAndTitle(2L, "Khoa B", 4.8);
+    void search_sortByRating_sortsInQueryByAvgRatingThenNewest() {
         when(courseRepository.searchPublic(any(), any(), any(), any(), any(), any(), any(), any()))
-                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(low, high)));
+                .thenReturn(new SliceImpl<>(List.of()));
 
-        var result = coursePublicService.search(null, null, null, null, null, null, "rating", PageRequest.of(0, 10));
+        coursePublicService.search(null, null, null, null, null, null, "rating", PageRequest.of(2, 24));
 
-        assertThat(result.getContent()).extracting("id").containsExactly(2L, 1L);
+        ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+        verify(courseRepository).searchPublic(any(), any(), any(), any(), any(), any(), any(), pageable.capture());
+        assertThat(pageable.getValue().getPageNumber()).isEqualTo(2);
+        assertThat(pageable.getValue().getSort().getOrderFor("avgRating").getDirection()).isEqualTo(Sort.Direction.DESC);
+        assertThat(pageable.getValue().getSort().getOrderFor("createdAt")).isNotNull();
     }
 
     @Test
-    void search_sortByReviews_ordersMostReviewedFirst() {
-        Course fewReviews = courseWithRatingAndTitle(1L, "Khoa A", 4.0);
-        Course manyReviews = courseWithRatingAndTitle(2L, "Khoa B", 4.0);
+    void search_defaultSort_isNewestFirst() {
         when(courseRepository.searchPublic(any(), any(), any(), any(), any(), any(), any(), any()))
-                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(fewReviews, manyReviews)));
-        lenient().when(courseReviewRepository.countByCourse_IdAndIsHiddenFalse(1L)).thenReturn(1L);
-        lenient().when(courseReviewRepository.countByCourse_IdAndIsHiddenFalse(2L)).thenReturn(9L);
+                .thenReturn(new SliceImpl<>(List.of()));
 
-        var result = coursePublicService.search(null, null, null, null, null, null, "reviews", PageRequest.of(0, 10));
+        coursePublicService.search(null, null, null, null, null, null, null, PageRequest.of(0, 24));
 
-        assertThat(result.getContent()).extracting("id").containsExactly(2L, 1L);
+        ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+        verify(courseRepository).searchPublic(any(), any(), any(), any(), any(), any(), any(), pageable.capture());
+        assertThat(pageable.getValue().getSort().getOrderFor("createdAt").getDirection()).isEqualTo(Sort.Direction.DESC);
     }
 
     @Test
-    void search_sortByRelevance_prefixMatchRanksAboveMiddleMatch() {
-        Course middleMatch = courseWithRatingAndTitle(1L, "Nhap mon React co ban", 4.0);
-        Course prefixMatch = courseWithRatingAndTitle(2L, "React nang cao", 4.0);
+    void search_sortByReviews_usesReviewCountQuery() {
+        when(courseRepository.searchPublicByReviews(any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new SliceImpl<>(List.of()));
+
+        coursePublicService.search(null, null, null, null, null, null, "reviews", PageRequest.of(1, 24));
+
+        verify(courseRepository).searchPublicByReviews(any(), any(), any(), any(), any(), any(), any(), any(Pageable.class));
+        verify(courseRepository, never()).searchPublic(any(), any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void search_sortByRelevance_withKeyword_usesRelevanceQuery() {
+        when(courseRepository.searchPublicByRelevance(any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new SliceImpl<>(List.of()));
+
+        coursePublicService.search("react", null, null, null, null, null, "relevance", PageRequest.of(0, 24));
+
+        verify(courseRepository).searchPublicByRelevance(eq("react"), any(), any(), any(), any(), any(), any(), any(Pageable.class));
+    }
+
+    @Test
+    void search_sortByRelevance_withoutKeyword_fallsBackToNewest() {
         when(courseRepository.searchPublic(any(), any(), any(), any(), any(), any(), any(), any()))
-                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(middleMatch, prefixMatch)));
+                .thenReturn(new SliceImpl<>(List.of()));
 
-        var result = coursePublicService.search("react", null, null, null, null, null, "relevance", PageRequest.of(0, 10));
+        coursePublicService.search(null, null, null, null, null, null, "relevance", PageRequest.of(0, 24));
 
-        assertThat(result.getContent()).extracting("id").containsExactly(2L, 1L);
+        verify(courseRepository).searchPublic(any(), any(), any(), any(), any(), any(), any(), any(Pageable.class));
+    }
+
+    @Test
+    void search_returnsSliceWithoutTotal_lastFlagFromRepository() {
+        Course a = courseWithRatingAndTitle(1L, "Khoa A", 4.0);
+        when(courseRepository.searchPublic(any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new SliceImpl<>(List.of(a), PageRequest.of(0, 24), true));
+
+        var result = coursePublicService.search(null, null, null, null, null, null, null, PageRequest.of(0, 24));
+
+        assertThat(result.content()).extracting("id").containsExactly(1L);
+        assertThat(result.last()).isFalse();
+        assertThat(result.page()).isZero();
     }
 
     /** UC11 — Học thử Preview (BR-ENROLL-02): Guest/Student chưa sở hữu chỉ xem được bài Preview. */
@@ -374,4 +413,44 @@ class CoursePublicServiceTest {
         lesson.setDurationSec(300);
         return lesson;
     }
+    /** Hiệu năng (đợt 2): số liệu của cả trang lấy theo lô — không truy vấn riêng cho từng khóa. */
+    @Test
+    void search_loadsCountsAndPricesOncePerPage() {
+        Course a = courseWithRatingAndTitle(1L, "Khoa A", 4.0);
+        Course b = courseWithRatingAndTitle(2L, "Khoa B", 4.5);
+        b.setPrice(new BigDecimal("300000"));
+        b.setIsFree(false);
+        when(courseRepository.searchPublic(any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new SliceImpl<>(List.of(a, b)));
+        when(courseReviewRepository.countVisibleByCourseIds(List.of(1L, 2L)))
+                .thenReturn(List.of(new CourseReviewCount(2L, 7L)));
+        when(lessonRepository.findLessonStatsByCourseIds(List.of(1L, 2L)))
+                .thenReturn(List.of(new CourseLessonStats(1L, 12L, 3600L), new CourseLessonStats(2L, 5L, 900L)));
+        when(couponService.getDisplayPrices(any())).thenReturn(Map.of(
+                2L, new CouponDto.PriceRes(new BigDecimal("300000"), new BigDecimal("240000"), 20, "SALE", true)));
+
+        var result = coursePublicService.search(null, null, null, null, null, null, null, PageRequest.of(0, 24));
+
+        assertThat(result.content()).extracting("reviewCount").containsExactly(0L, 7L);
+        assertThat(result.content()).extracting("totalLessons").containsExactly(12, 5);
+        assertThat(result.content()).extracting("totalDurationSec").containsExactly(3600, 900);
+        assertThat(result.content().get(1).finalPrice()).isEqualByComparingTo("240000");
+        assertThat(result.content().get(1).discountPercent()).isEqualTo(20);
+        verify(courseReviewRepository, never()).countByCourse_IdAndIsHiddenFalse(any());
+        verify(lessonRepository, never()).countByChapter_CourseId(any());
+        verify(lessonRepository, never()).sumDurationSecByCourseId(any());
+        verify(couponService, never()).getDisplayPrice(any());
+    }
+
+    @Test
+    void search_emptyPage_skipsBatchQueries() {
+        when(courseRepository.searchPublic(any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new SliceImpl<>(List.of()));
+
+        coursePublicService.search(null, null, null, null, null, null, null, PageRequest.of(0, 24));
+
+        verify(lessonRepository, never()).findLessonStatsByCourseIds(any());
+        verify(courseReviewRepository, never()).countVisibleByCourseIds(any());
+    }
+
 }

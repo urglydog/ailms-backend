@@ -1,5 +1,8 @@
 package com.lms.announcement.service;
 
+import org.springframework.data.domain.SliceImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.PageRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lms.announcement.dto.SystemAnnouncementDto.BannerRes;
 import com.lms.announcement.dto.SystemAnnouncementDto.CreateReq;
@@ -130,11 +133,9 @@ class SystemAnnouncementServiceTest {
         announcement.setAudience(AnnouncementAudience.INSTRUCTOR);
         when(announcementRepository.findById(1L)).thenReturn(Optional.of(announcement));
 
-        User instructor1 = new User();
-        instructor1.setId(10L);
-        User instructor2 = new User();
-        instructor2.setId(11L);
-        when(userRepository.findByRole(Role.INSTRUCTOR)).thenReturn(List.of(instructor1, instructor2));
+        when(userRepository.countForAudience(Role.INSTRUCTOR)).thenReturn(2L);
+        when(userRepository.findIdsForAudience(eq(Role.INSTRUCTOR), any(Pageable.class)))
+                .thenReturn(new SliceImpl<>(List.of(10L, 11L)));
 
         service.dispatch(1L);
 
@@ -143,6 +144,30 @@ class SystemAnnouncementServiceTest {
         assertThat(announcement.getDispatchStatus()).isEqualTo(AnnouncementDispatchStatus.DONE);
         assertThat(announcement.getSentCount()).isEqualTo(2);
         assertThat(announcement.getTotalRecipients()).isEqualTo(2);
+    }
+
+    /** Hiệu năng đợt 3: gửi "Tất cả" đọc ID người nhận theo từng lô, không nạp toàn bộ entity người dùng. */
+    @Test
+    void dispatch_audienceAll_walksRecipientIdsPageByPage() {
+        SystemAnnouncement announcement = new SystemAnnouncement();
+        announcement.setId(3L);
+        announcement.setTitle("Bảo trì");
+        announcement.setContent("Nội dung");
+        announcement.setSeverity(AnnouncementSeverity.HIGH);
+        announcement.setAudience(AnnouncementAudience.ALL);
+        when(announcementRepository.findById(3L)).thenReturn(Optional.of(announcement));
+        when(userRepository.countForAudience(null)).thenReturn(3L);
+        when(userRepository.findIdsForAudience(isNull(), eq(PageRequest.of(0, 500))))
+                .thenReturn(new SliceImpl<>(List.of(1L, 2L), PageRequest.of(0, 500), true));
+        when(userRepository.findIdsForAudience(isNull(), eq(PageRequest.of(1, 500))))
+                .thenReturn(new SliceImpl<>(List.of(3L), PageRequest.of(1, 500), false));
+
+        service.dispatch(3L);
+
+        verify(notificationService, times(3)).notify(any(), eq("SYSTEM_HIGH"), anyString(), anyString(), isNull());
+        verify(userRepository, never()).findAll();
+        assertThat(announcement.getTotalRecipients()).isEqualTo(3);
+        assertThat(announcement.getSentCount()).isEqualTo(3);
     }
 
     @Test

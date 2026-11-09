@@ -1,5 +1,11 @@
 package com.lms.coupon.service;
 
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.ArgumentMatchers.eq;
+import com.lms.coupon.dto.CouponDto;
+import java.util.Map;
+import com.lms.coupon.entity.CouponCourse;
 import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
 import com.lms.catalog.entity.Category;
@@ -364,4 +370,56 @@ class CouponServiceTest {
         assertThat(result.appliedCoupon()).isEqualTo(codeCoupon);
         assertThat(result.finalPrice()).isEqualByComparingTo("170000.00");
     }
+    // ==================== getDisplayPrices (hiệu năng đợt 2) ====================
+
+    @Test
+    void getDisplayPrices_matchesSinglePriceLogic_forEveryCourse() {
+        Coupon instructorOnly = activeAutoApplyCoupon(instructor, CouponScopeType.ALL_COURSES, DiscountType.PERCENTAGE, new BigDecimal("25"));
+        when(couponRepository.findByAutoApplyTrueAndIsActiveTrue()).thenReturn(List.of(instructorOnly));
+        Course free = new Course();
+        free.setId(300L);
+        free.setPrice(BigDecimal.ZERO);
+        free.setIsFree(true);
+        free.setInstructor(instructor);
+
+        Map<Long, CouponDto.PriceRes> prices = couponService.getDisplayPrices(List.of(ownCourse, otherCourse, free));
+
+        // Coupon "toàn bộ khóa" của giảng viên chỉ áp cho khóa CỦA CHÍNH họ (BR-COUPON-02).
+        assertThat(prices.get(100L).finalPrice()).isEqualByComparingTo("150000");
+        assertThat(prices.get(100L).discountPercent()).isEqualTo(25);
+        assertThat(prices.get(200L).finalPrice()).isEqualByComparingTo("200000");
+        assertThat(prices.get(200L).discountPercent()).isNull();
+        assertThat(prices.get(300L).finalPrice()).isEqualByComparingTo("0");
+        assertThat(prices.get(100L)).isEqualTo(couponService.getDisplayPrice(ownCourse));
+    }
+
+    @Test
+    void getDisplayPrices_specificCourseCoupon_appliesOnlyToListedCourse() {
+        Coupon specific = activeAutoApplyCoupon(admin, CouponScopeType.SPECIFIC_COURSES, DiscountType.FIXED_AMOUNT, new BigDecimal("50000"));
+        when(couponRepository.findByAutoApplyTrueAndIsActiveTrue()).thenReturn(List.of(specific));
+        CouponCourse link = new CouponCourse();
+        link.setCoupon(specific);
+        link.setCourse(otherCourse);
+        when(couponCourseRepository.findByCoupon_Id(900L)).thenReturn(List.of(link));
+
+        Map<Long, CouponDto.PriceRes> prices = couponService.getDisplayPrices(List.of(ownCourse, otherCourse));
+
+        assertThat(prices.get(100L).finalPrice()).isEqualByComparingTo("200000");
+        assertThat(prices.get(200L).finalPrice()).isEqualByComparingTo("150000");
+    }
+
+    @Test
+    void getDisplayPrices_exhaustedCoupon_isIgnored_andLoadsCouponsOnce() {
+        Coupon limited = activeAutoApplyCoupon(admin, CouponScopeType.ALL_COURSES, DiscountType.PERCENTAGE, new BigDecimal("50"));
+        limited.setMaxUsageCount(10);
+        when(couponRepository.findByAutoApplyTrueAndIsActiveTrue()).thenReturn(List.of(limited));
+        when(paymentRepository.countByCoupon_IdAndStatus(eq(900L), any())).thenReturn(10L);
+
+        Map<Long, CouponDto.PriceRes> prices = couponService.getDisplayPrices(List.of(ownCourse, otherCourse));
+
+        assertThat(prices.get(100L).finalPrice()).isEqualByComparingTo("200000");
+        verify(couponRepository, times(1)).findByAutoApplyTrueAndIsActiveTrue();
+        verify(paymentRepository, times(1)).countByCoupon_IdAndStatus(eq(900L), any());
+    }
+
 }

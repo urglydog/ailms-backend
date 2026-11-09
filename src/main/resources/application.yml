@@ -12,9 +12,14 @@ spring:
     password: ${SPRING_DATASOURCE_PASSWORD:lms_pass}
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
-      maximum-pool-size: 20
+      # Hiệu năng đợt 4: pool 20 đủ cho ~500 req/s đã đo (truy vấn ngắn sau đợt 1-3). Chờ kết nối tối đa 5s
+      # rồi báo lỗi thay vì treo 30s; đóng kết nối nhàn rỗi/già trước timeout của MySQL; cảnh báo rò kết nối.
+      maximum-pool-size: ${DB_POOL_MAX:20}
       minimum-idle: 5
-      connection-timeout: 30000
+      connection-timeout: 5000
+      idle-timeout: 300000
+      max-lifetime: 1500000
+      leak-detection-threshold: 20000
 
   jpa:
     # validate: Hibernate ĐỐI CHIẾU 31 entity với schema do Flyway tạo.
@@ -235,4 +240,5 @@ payment:
 logging:
   level:
     root: INFO
-    com.lms: DEBUG
+    # DEBUG chỉ bật ở profile dev (application-dev.yml) — production log INFO (hiệu năng đợt 4)
+    com.lms: INFO

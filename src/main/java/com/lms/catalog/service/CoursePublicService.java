@@ -1,5 +1,9 @@
 package com.lms.catalog.service;
 
+import java.util.Map;
+import java.util.HashMap;
+import java.util.ArrayList;
+import com.lms.catalog.repository.projection.CourseLessonStats;
 import com.lms.catalog.dto.CoursePublicDto.*;
 import com.lms.catalog.entity.Chapter;
 import com.lms.catalog.entity.Course;
@@ -16,16 +20,16 @@ import com.lms.coupon.service.CouponService;
 import com.lms.dubbing.repository.AudioTrackRepository;
 import com.lms.enrollment.repository.CourseReviewRepository;
 import com.lms.enrollment.repository.EnrollmentRepository;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.domain.Slice;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -60,7 +64,7 @@ public class CoursePublicService {
 
     @Cacheable(value = "publicCourseSearch", condition = "#keyword == null and #pageable.pageNumber == 0")
     @Transactional(readOnly = true)
-    public Page<SummaryRes> search(
+    public SearchSliceRes search(
             String keyword, String categorySlug, String level, String priceType, Double minRating,
             String durationBucket, String sortBy, Pageable pageable) {
         Boolean isFree = switch (priceType == null ? "" : priceType) {
@@ -73,23 +77,34 @@ public class CoursePublicService {
         java.math.BigDecimal minRatingDecimal = minRating == null ? null : java.math.BigDecimal.valueOf(minRating);
         DurationRange durationRange = resolveDurationRange(durationBucket);
 
-        // `pageable` vẫn giữ nguyên sort mặc định (createdAt DESC, xem @PageableDefault ở
-        // Controller) — đúng cho "Mới nhất". 3 lựa chọn còn lại (rating/reviews/relevance) không
-        // ứng với 1 cột duy nhất (reviewCount không lưu sẵn, relevance cần so khớp từ khóa) nên
-        // được sắp lại bằng Comparator ngay trên trang đã fetch. Chỉ đúng ở quy mô hiện tại (fetch
-        // 1 trang lớn duy nhất, chưa có phân trang thật) — cần viết lại bằng subquery SQL nếu
-        // catalog lớn tới mức cần phân trang thật.
-        Page<Course> page = courseRepository.searchPublic(
-                normalizedKeyword, categorySlug, normalizedLevel, isFree, minRatingDecimal,
-                durationRange.minSec(), durationRange.maxSec(), pageable);
-        List<SummaryRes> content = page.getContent().stream().map(this::mapToSummaryRes).collect(Collectors.toList());
-
-        Comparator<SummaryRes> comparator = resolveComparator(sortBy, normalizedKeyword);
-        if (comparator != null) {
-            content.sort(comparator);
+        // (08/11/2026) Sắp xếp nằm TRONG câu truy vấn — trước đây sắp lại bằng Comparator trên từng trang đã
+        // fetch, đúng khi chỉ có 1 trang lớn nhưng sai thứ tự giữa các trang khi tải dần. Sort do client gửi
+        // lên bị bỏ qua: chỉ nhận đúng 4 lựa chọn ở dưới (tránh sắp theo cột tùy ý).
+        String sort = sortBy == null ? "" : sortBy;
+        Slice<Course> slice;
+        if ("reviews".equals(sort)) {
+            slice = courseRepository.searchPublicByReviews(
+                    normalizedKeyword, categorySlug, normalizedLevel, isFree, minRatingDecimal,
+                    durationRange.minSec(), durationRange.maxSec(), unsorted(pageable));
+        } else if ("relevance".equals(sort) && normalizedKeyword != null) {
+            slice = courseRepository.searchPublicByRelevance(
+                    normalizedKeyword, categorySlug, normalizedLevel, isFree, minRatingDecimal,
+                    durationRange.minSec(), durationRange.maxSec(), unsorted(pageable));
+        } else {
+            Sort order = "rating".equals(sort)
+                    ? Sort.by(Sort.Order.desc("avgRating"), Sort.Order.desc("createdAt"), Sort.Order.desc("id"))
+                    : Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id"));
+            slice = courseRepository.searchPublic(
+                    normalizedKeyword, categorySlug, normalizedLevel, isFree, minRatingDecimal,
+                    durationRange.minSec(), durationRange.maxSec(),
+                    PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), order));
         }
+        List<SummaryRes> content = mapSummaries(slice.getContent());
+        return new SearchSliceRes(content, slice.getNumber(), slice.getSize(), !slice.hasNext());
+    }
 
-        return new PageImpl<>(content, pageable, page.getTotalElements());
+    private static Pageable unsorted(Pageable pageable) {
+        return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
     }
 
     private record DurationRange(Integer minSec, Integer maxSec) {}
@@ -107,32 +122,6 @@ public class CoursePublicService {
             case "17+" -> new DurationRange(61200, null);
             default -> new DurationRange(null, null);
         };
-    }
-
-    /** {@code null} = giữ nguyên thứ tự DB đã trả (mặc định "Mới nhất"). */
-    private Comparator<SummaryRes> resolveComparator(String sortBy, String keyword) {
-        return switch (sortBy == null ? "" : sortBy) {
-            case "rating" -> Comparator.comparing(SummaryRes::avgRating).reversed();
-            case "reviews" -> Comparator.comparing(SummaryRes::reviewCount).reversed();
-            case "relevance" -> relevanceComparator(keyword);
-            default -> null;
-        };
-    }
-
-    /**
-     * "Phù hợp nhất": chưa có hạ tầng tìm kiếm full-text (Elasticsearch, MySQL FULLTEXT) nên dùng
-     * bản đơn giản — tiêu đề BẮT ĐẦU bằng từ khóa xếp trước tiêu đề chỉ CHỨA từ khóa ở giữa, cùng
-     * hạng thì xếp alphabet. Không có từ khóa thì không có gì để so khớp — giữ nguyên thứ tự mặc
-     * định (Mới nhất).
-     */
-    private Comparator<SummaryRes> relevanceComparator(String keyword) {
-        if (keyword == null) {
-            return null;
-        }
-        String lowerKeyword = keyword.toLowerCase(Locale.ROOT);
-        Comparator<SummaryRes> byPrefixMatch = Comparator.comparing(
-                (SummaryRes r) -> r.title().toLowerCase(Locale.ROOT).startsWith(lowerKeyword) ? 0 : 1);
-        return byPrefixMatch.thenComparing(SummaryRes::title, String.CASE_INSENSITIVE_ORDER);
     }
 
     /**
@@ -218,26 +207,45 @@ public class CoursePublicService {
         );
     }
 
-    private SummaryRes mapToSummaryRes(Course course) {
-        PriceRes price = resolveDisplayPrice(course);
-        return new SummaryRes(
-                course.getId(),
-                course.getTitle(),
-                course.getSlug(),
-                course.getInstructor().getFullName(),
-                course.getThumbnailUrl(),
-                course.getLevel(),
-                course.getPrice(),
-                course.getIsFree(),
-                course.getAvgRating(),
-                courseReviewRepository.countByCourse_IdAndIsHiddenFalse(course.getId()),
-                (int) lessonRepository.countByChapter_CourseId(course.getId()),
-                lessonRepository.sumDurationSecByCourseId(course.getId()),
-                course.getCategory().getSlug(),
-                course.getCategory().getName(),
-                price.finalPrice(),
-                price.discountPercent()
-        );
+    /**
+     * Map một trang khóa học (hiệu năng đợt 2, PLAN_HieuNang_HeThong.md): category + instructor đã nạp sẵn
+     * bằng @EntityGraph; số đánh giá, số bài + tổng thời lượng và giá sau coupon lấy THEO LÔ cho cả trang
+     * (vài truy vấn cố định) thay vì 5–6 truy vấn cho MỖI khóa như trước.
+     */
+    private List<SummaryRes> mapSummaries(List<Course> courses) {
+        if (courses.isEmpty()) {
+            return List.of();
+        }
+        List<Long> ids = courses.stream().map(Course::getId).toList();
+        Map<Long, Long> reviewCounts = new HashMap<>();
+        courseReviewRepository.countVisibleByCourseIds(ids).forEach(r -> reviewCounts.put(r.courseId(), r.count()));
+        Map<Long, CourseLessonStats> lessonStats = new HashMap<>();
+        lessonRepository.findLessonStatsByCourseIds(ids).forEach(st -> lessonStats.put(st.courseId(), st));
+        Map<Long, PriceRes> prices = couponService.getDisplayPrices(courses);
+
+        List<SummaryRes> out = new ArrayList<>(courses.size());
+        for (Course course : courses) {
+            CourseLessonStats st = lessonStats.get(course.getId());
+            PriceRes price = prices.get(course.getId());
+            out.add(new SummaryRes(
+                    course.getId(),
+                    course.getTitle(),
+                    course.getSlug(),
+                    course.getInstructor().getFullName(),
+                    course.getThumbnailUrl(),
+                    course.getLevel(),
+                    course.getPrice(),
+                    course.getIsFree(),
+                    course.getAvgRating(),
+                    reviewCounts.getOrDefault(course.getId(), 0L),
+                    st == null ? 0 : st.lessonCount().intValue(),
+                    st == null ? 0 : st.totalDurationSec().intValue(),
+                    course.getCategory().getSlug(),
+                    course.getCategory().getName(),
+                    price == null ? course.getPrice() : price.finalPrice(),
+                    price == null ? null : price.discountPercent()));
+        }
+        return out;
     }
 
     /** UC57 mở rộng (15/09/2026) — khóa miễn phí bỏ qua tính coupon (giảm giá trên 0đ vô nghĩa). */

@@ -4,7 +4,6 @@ import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
 import com.lms.catalog.entity.Category;
 import com.lms.catalog.entity.Course;
-import com.lms.catalog.entity.Lesson;
 import com.lms.catalog.repository.CourseRepository;
 import com.lms.catalog.repository.LessonRepository;
 import com.lms.catalog.service.CourseAccessService;
@@ -15,12 +14,16 @@ import com.lms.common.exception.AccessDeniedDomainException;
 import com.lms.common.exception.BusinessRuleViolationException;
 import com.lms.enrollment.dto.EnrollmentDto;
 import com.lms.enrollment.entity.Enrollment;
-import com.lms.enrollment.entity.LessonProgress;
 import com.lms.enrollment.repository.CourseReviewRepository;
 import com.lms.enrollment.repository.EnrollmentRepository;
 import com.lms.enrollment.repository.LessonProgressRepository;
+import com.lms.enrollment.repository.projection.CourseCertificateRef;
+import com.lms.enrollment.repository.projection.CourseLessonRef;
+import com.lms.enrollment.repository.projection.CourseProgressRef;
+import com.lms.enrollment.repository.projection.CourseReviewRef;
 import com.lms.payment.repository.CartItemRepository;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -84,47 +87,111 @@ class EnrollmentServiceTest {
     @Test
     void getMyEnrollments_withUnfinishedLesson_returnsResumeLessonAndPosition() {
         Enrollment enrollment = enrolledInCourseWithLessons();
-        Lesson lesson12 = lessonWithId(12L);
-        LessonProgress progress = new LessonProgress();
-        progress.setLesson(lesson12);
-        progress.setLastPositionSec(245);
-        progress.setIsCompleted(false);
-        when(enrollmentRepository.findByUser_Email(EMAIL)).thenReturn(List.of(enrollment));
-        when(lessonRepository.findByChapter_CourseIdOrderByChapter_DisplayOrderAscDisplayOrderAsc(10L))
-                .thenReturn(List.of(lessonWithId(11L), lesson12, lessonWithId(13L)));
-        when(lessonProgressRepository.findFirstByUser_IdAndLesson_Chapter_Course_IdOrderByUpdatedAtDesc(1L, 10L))
-                .thenReturn(Optional.of(progress));
+        LocalDateTime at = LocalDateTime.of(2026, 11, 1, 9, 0);
+        when(enrollmentRepository.findWithCourseByUser_Email(EMAIL)).thenReturn(List.of(enrollment));
+        when(lessonRepository.findLessonRefsByCourseIds(List.of(10L)))
+                .thenReturn(List.of(new CourseLessonRef(10L, 11L), new CourseLessonRef(10L, 12L), new CourseLessonRef(10L, 13L)));
+        when(lessonProgressRepository.findProgressRefsByUserAndCourseIds(1L, List.of(10L)))
+                .thenReturn(List.of(
+                        new CourseProgressRef(10L, 11L, 600, true, at.minusDays(1)),
+                        new CourseProgressRef(10L, 12L, 245, false, at)));
 
         EnrollmentDto.Res res = enrollmentService.getMyEnrollments(EMAIL).get(0);
 
         assertThat(res.resumeLessonId()).isEqualTo(12L);
         assertThat(res.resumePositionSec()).isEqualTo(245);
+        assertThat(res.firstLessonId()).isEqualTo(11L);
+        assertThat(res.lastAccessedAt()).isEqualTo(at);
     }
 
     @Test
     void getMyEnrollments_withoutProgress_resumesAtFirstLessonFromStart() {
         Enrollment enrollment = enrolledInCourseWithLessons();
-        when(enrollmentRepository.findByUser_Email(EMAIL)).thenReturn(List.of(enrollment));
-        when(lessonRepository.findByChapter_CourseIdOrderByChapter_DisplayOrderAscDisplayOrderAsc(10L))
-                .thenReturn(List.of(lessonWithId(11L), lessonWithId(12L)));
+        when(enrollmentRepository.findWithCourseByUser_Email(EMAIL)).thenReturn(List.of(enrollment));
+        when(lessonRepository.findLessonRefsByCourseIds(List.of(10L)))
+                .thenReturn(List.of(new CourseLessonRef(10L, 11L), new CourseLessonRef(10L, 12L)));
 
         EnrollmentDto.Res res = enrollmentService.getMyEnrollments(EMAIL).get(0);
 
         assertThat(res.resumeLessonId()).isEqualTo(11L);
         assertThat(res.resumePositionSec()).isZero();
+        assertThat(res.lastAccessedAt()).isNull();
     }
 
     @Test
     void getMyEnrollments_courseWithoutLessons_hasNoResumeLesson() {
         Enrollment enrollment = enrolledInCourseWithLessons();
-        when(enrollmentRepository.findByUser_Email(EMAIL)).thenReturn(List.of(enrollment));
-        when(lessonRepository.findByChapter_CourseIdOrderByChapter_DisplayOrderAscDisplayOrderAsc(10L))
-                .thenReturn(List.of());
+        when(enrollmentRepository.findWithCourseByUser_Email(EMAIL)).thenReturn(List.of(enrollment));
 
         EnrollmentDto.Res res = enrollmentService.getMyEnrollments(EMAIL).get(0);
 
         assertThat(res.resumeLessonId()).isNull();
+        assertThat(res.firstLessonId()).isNull();
         assertThat(res.resumePositionSec()).isZero();
+    }
+
+    @Test
+    void getMyEnrollments_mapsReviewAndCertificatePerCourse() {
+        Enrollment first = enrolledInCourseWithLessons();
+        Enrollment second = enrollmentInCourse(20L, "Python");
+        when(enrollmentRepository.findWithCourseByUser_Email(EMAIL)).thenReturn(List.of(first, second));
+        when(courseReviewRepository.findReviewRefsByUserAndCourseIds(1L, List.of(10L, 20L)))
+                .thenReturn(List.of(new CourseReviewRef(20L, 4)));
+        when(certificateRepository.findCertificateRefsByStudentAndCourseIds(1L, List.of(10L, 20L)))
+                .thenReturn(List.of(new CourseCertificateRef(10L, "LL-ABC")));
+
+        List<EnrollmentDto.Res> res = enrollmentService.getMyEnrollments(EMAIL);
+
+        assertThat(res.get(0).alreadyReviewed()).isFalse();
+        assertThat(res.get(0).myRating()).isNull();
+        assertThat(res.get(0).certificateCode()).isEqualTo("LL-ABC");
+        assertThat(res.get(1).alreadyReviewed()).isTrue();
+        assertThat(res.get(1).myRating()).isEqualTo(4);
+        assertThat(res.get(1).certificateCode()).isNull();
+    }
+
+    /** Hiệu năng (đợt 1): số truy vấn KHÔNG tăng theo số khóa đã ghi danh — mỗi loại dữ liệu lấy 1 lần cho cả danh sách. */
+    @Test
+    void getMyEnrollments_loadsSideDataOnceForAllCourses() {
+        when(enrollmentRepository.findWithCourseByUser_Email(EMAIL)).thenReturn(List.of(
+                enrolledInCourseWithLessons(), enrollmentInCourse(20L, "Python"), enrollmentInCourse(30L, "Java")));
+
+        enrollmentService.getMyEnrollments(EMAIL);
+
+        List<Long> ids = List.of(10L, 20L, 30L);
+        verify(lessonRepository).findLessonRefsByCourseIds(ids);
+        verify(lessonProgressRepository).findProgressRefsByUserAndCourseIds(1L, ids);
+        verify(courseReviewRepository).findReviewRefsByUserAndCourseIds(1L, ids);
+        verify(certificateRepository).findCertificateRefsByStudentAndCourseIds(1L, ids);
+        verify(courseReviewRepository, never()).existsByUser_IdAndCourse_Id(any(), any());
+        verify(lessonRepository, never()).findByChapter_CourseIdOrderByChapter_DisplayOrderAscDisplayOrderAsc(any());
+        verify(certificateRepository, never()).findByStudent_IdAndCourse_Id(any(), any());
+    }
+
+    @Test
+    void getMyEnrollments_noEnrollments_skipsSideQueries() {
+        when(enrollmentRepository.findWithCourseByUser_Email(EMAIL)).thenReturn(List.of());
+
+        assertThat(enrollmentService.getMyEnrollments(EMAIL)).isEmpty();
+        verify(lessonRepository, never()).findLessonRefsByCourseIds(any());
+    }
+
+    private Enrollment enrollmentInCourse(Long courseId, String title) {
+        Category category = new Category();
+        category.setName("Lập trình");
+        User instructor = new User();
+        instructor.setFullName("GV");
+        Course course = new Course();
+        course.setId(courseId);
+        course.setTitle(title);
+        course.setSlug(title.toLowerCase());
+        course.setCategory(category);
+        course.setInstructor(instructor);
+        Enrollment enrollment = new Enrollment();
+        enrollment.setUser(student);
+        enrollment.setCourse(course);
+        enrollment.setProgressPct(BigDecimal.ZERO);
+        return enrollment;
     }
 
     private Enrollment enrolledInCourseWithLessons() {
@@ -143,11 +210,6 @@ class EnrollmentServiceTest {
         return enrollment;
     }
 
-    private static Lesson lessonWithId(Long id) {
-        Lesson lesson = new Lesson();
-        lesson.setId(id);
-        return lesson;
-    }
 
     @Test
     void enrollFreeCourse_publicFreeCourse_savesEnrollment() {

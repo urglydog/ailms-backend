@@ -4,7 +4,6 @@ import com.lms.catalog.dto.CoursePublicDto.*;
 import com.lms.catalog.service.CoursePublicService;
 import java.security.Principal;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
@@ -28,7 +27,7 @@ public class CoursePublicController {
     private final CoursePublicService coursePublicService;
 
     @GetMapping
-    public ResponseEntity<Page<SummaryRes>> search(
+    public ResponseEntity<SearchSliceRes> search(
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String categorySlug,
             @RequestParam(required = false) String level,

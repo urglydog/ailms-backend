@@ -1,5 +1,9 @@
 package com.lms.enrollment.service;
 
+import java.util.Map;
+import java.util.HashMap;
+import java.util.ArrayList;
+import com.lms.enrollment.repository.projection.CourseProgressRef;
 import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
 import com.lms.catalog.entity.Course;
@@ -46,68 +50,81 @@ public class EnrollmentService {
     private final CourseAccessService courseAccessService;
     private final CertificateRepository certificateRepository;
 
+    /**
+     * "Khóa học của tôi". Hiệu năng (08/11/2026, đợt 1 — PLAN_HieuNang_HeThong.md): trước đây mỗi khóa đã ghi
+     * danh chạy ~10 truy vấn riêng (đánh giá ×2, bài đầu, lần truy cập cuối, chứng chỉ, TOÀN BỘ bài học để tính
+     * "học tiếp", tiến độ gần nhất, giảng viên, danh mục) → 45 khóa = 476 câu SQL. Giờ: 1 truy vấn nạp
+     * enrollment + course/category/instructor, rồi mỗi loại dữ liệu phụ lấy MỘT lần cho cả danh sách
+     * ({@code WHERE course_id IN (...)}) và ghép bằng Map — số truy vấn không tăng theo số khóa.
+     */
     @Transactional(readOnly = true)
     public List<Res> getMyEnrollments(String email) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("User", email));
-        return enrollmentRepository.findByUser_Email(email).stream()
-                .map(enrollment -> mapToRes(user, enrollment))
-                .toList();
+        List<Enrollment> enrollments = enrollmentRepository.findWithCourseByUser_Email(email);
+        if (enrollments.isEmpty()) {
+            return List.of();
+        }
+        List<Long> courseIds = enrollments.stream().map(e -> e.getCourse().getId()).toList();
+        Long userId = user.getId();
+
+        Map<Long, Integer> ratingByCourse = new HashMap<>();
+        courseReviewRepository.findReviewRefsByUserAndCourseIds(userId, courseIds)
+                .forEach(r -> ratingByCourse.put(r.courseId(), r.rating()));
+        Map<Long, String> certificateByCourse = new HashMap<>();
+        certificateRepository.findCertificateRefsByStudentAndCourseIds(userId, courseIds)
+                .forEach(c -> certificateByCourse.put(c.courseId(), c.certificateCode()));
+        // Truy vấn đã sắp đúng thứ tự khóa → chương → bài, nên giữ thứ tự khi gom theo khóa.
+        Map<Long, List<Long>> lessonsByCourse = new HashMap<>();
+        lessonRepository.findLessonRefsByCourseIds(courseIds)
+                .forEach(l -> lessonsByCourse.computeIfAbsent(l.courseId(), k -> new ArrayList<>()).add(l.lessonId()));
+        // Bản ghi tiến độ mới nhất của từng khóa: dùng cho cả "học tiếp" và "truy cập gần nhất".
+        Map<Long, CourseProgressRef> latestByCourse = new HashMap<>();
+        for (CourseProgressRef p : lessonProgressRepository.findProgressRefsByUserAndCourseIds(userId, courseIds)) {
+            latestByCourse.merge(p.courseId(), p, (x, y) -> isAfter(y.updatedAt(), x.updatedAt()) ? y : x);
+        }
+
+        return enrollments.stream().map(enrollment -> {
+            Course course = enrollment.getCourse();
+            Long courseId = course.getId();
+            List<Long> orderedLessonIds = lessonsByCourse.getOrDefault(courseId, List.of());
+            CourseProgressRef latest = latestByCourse.get(courseId);
+            ResumePoint resume = ResumePointResolver.resolve(orderedLessonIds, latest == null ? null
+                    : new LatestProgress(latest.lessonId(),
+                            latest.lastPositionSec() == null ? 0 : latest.lastPositionSec(),
+                            Boolean.TRUE.equals(latest.completed())));
+            Integer myRating = ratingByCourse.get(courseId);
+            return new Res(
+                    courseId,
+                    course.getTitle(),
+                    course.getSlug(),
+                    course.getThumbnailUrl(),
+                    course.getCategory().getName(),
+                    course.getIsFree(),
+                    course.getPrice(),
+                    ratingByCourse.containsKey(courseId),
+                    enrollment.getProgressPct(),
+                    enrollment.getCompletedAt(),
+                    // BR-PROGRESS-04: Quiz thật làm ở Giai đoạn 7 — để null an toàn ở đây.
+                    null,
+                    // "Học ngay" vào thẳng bài đầu tiên theo thứ tự chương/bài (BR-COURSE-01: khóa đã publish có ≥1 bài).
+                    orderedLessonIds.isEmpty() ? null : orderedLessonIds.get(0),
+                    course.getInstructor().getFullName(),
+                    myRating,
+                    enrollment.getEnrolledAt(),
+                    latest == null ? null : latest.updatedAt(),
+                    certificateByCourse.get(courseId),
+                    resume.lessonId(),
+                    resume.positionSec()
+            );
+        }).toList();
     }
 
-    private Res mapToRes(User user, Enrollment enrollment) {
-        Course course = enrollment.getCourse();
-        boolean alreadyReviewed = courseReviewRepository.existsByUser_IdAndCourse_Id(user.getId(), course.getId());
-        Integer myRating = courseReviewRepository.findByUser_IdAndCourse_Id(user.getId(), course.getId())
-                .map(review -> review.getRating())
-                .orElse(null);
-        // "Học ngay" phải vào thẳng bài học, không phải trang chi tiết khoá — bấm vào bài đầu
-        // tiên theo đúng thứ tự chương/bài (BR-COURSE-01 đảm bảo khoá đã publish có ≥1 bài).
-        Long firstLessonId = lessonRepository
-                .findFirstByChapter_CourseIdOrderByChapter_DisplayOrderAscDisplayOrderAsc(course.getId())
-                .map(lesson -> lesson.getId())
-                .orElse(null);
-        LocalDateTime lastAccessedAt = lessonProgressRepository
-                .findLastAccessedAtByUserIdAndCourseId(user.getId(), course.getId());
-        ResumePoint resume = resolveResumePoint(user.getId(), course.getId());
-        return new Res(
-                course.getId(),
-                course.getTitle(),
-                course.getSlug(),
-                course.getThumbnailUrl(),
-                course.getCategory().getName(),
-                course.getIsFree(),
-                course.getPrice(),
-                alreadyReviewed,
-                enrollment.getProgressPct(),
-                enrollment.getCompletedAt(),
-                // BR-PROGRESS-04: Quiz thật làm ở Giai đoạn 7 — để null an toàn ở đây.
-                null,
-                firstLessonId,
-                course.getInstructor().getFullName(),
-                myRating,
-                enrollment.getEnrolledAt(),
-                lastAccessedAt,
-                certificateRepository.findByStudent_IdAndCourse_Id(user.getId(), course.getId())
-                        .map(cert -> cert.getCertificateCode())
-                        .orElse(null),
-                resume.lessonId(),
-                resume.positionSec()
-        );
-    }
-
-    /** "Học tiếp": bài đang học dở (hoặc bài kế tiếp) và vị trí đã lưu — quy tắc ở {@link ResumePointResolver}. */
-    private ResumePoint resolveResumePoint(Long userId, Long courseId) {
-        List<Long> orderedLessonIds = lessonRepository
-                .findByChapter_CourseIdOrderByChapter_DisplayOrderAscDisplayOrderAsc(courseId).stream()
-                .map(Lesson::getId)
-                .toList();
-        LatestProgress latest = lessonProgressRepository
-                .findFirstByUser_IdAndLesson_Chapter_Course_IdOrderByUpdatedAtDesc(userId, courseId)
-                .map(lp -> new LatestProgress(lp.getLesson().getId(), lp.getLastPositionSec(),
-                        Boolean.TRUE.equals(lp.getIsCompleted())))
-                .orElse(null);
-        return ResumePointResolver.resolve(orderedLessonIds, latest);
+    private static boolean isAfter(LocalDateTime a, LocalDateTime b) {
+        if (a == null) {
+            return false;
+        }
+        return b == null || a.isAfter(b);
     }
 
     @Transactional

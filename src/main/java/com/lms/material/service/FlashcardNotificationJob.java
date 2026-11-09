@@ -1,7 +1,6 @@
 package com.lms.material.service;
 
-import com.lms.auth.entity.User;
-import com.lms.material.entity.FlashcardReview;
+import com.lms.material.repository.projection.FlashcardDueCount;
 import com.lms.material.repository.FlashcardReviewRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -13,7 +12,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -33,21 +31,18 @@ public class FlashcardNotificationJob {
         log.info("Starting SRS Notification Job...");
         LocalDateTime now = LocalDateTime.now();
         
-        // Tìm tất cả các review cần ôn tập hôm nay (hoặc đã quá hạn)
-        List<FlashcardReview> dueReviews = reviewRepository.findAll().stream()
-                .filter(r -> r.getNextReviewAt() != null && !r.getNextReviewAt().isAfter(now))
-                .toList();
-
-        // Nhóm theo người dùng
-        Map<User, Long> userDueCount = dueReviews.stream()
-                .collect(Collectors.groupingBy(FlashcardReview::getUser, Collectors.counting()));
+        // Đếm thẻ đến hạn (hoặc quá hạn) theo từng học viên NGAY TRONG DB — trước đây nạp toàn bộ bảng
+        // flashcard_reviews rồi lọc/gom nhóm bằng Java (hiệu năng đợt 3). Có sẵn index (user_id, next_review_at).
+        List<FlashcardDueCount> dueByUser = reviewRepository.countDueByUser(now);
 
         // Gửi qua WebSocket
-        userDueCount.forEach((user, count) -> {
+        dueByUser.forEach(due -> {
+            String email = due.email();
+            long count = due.count();
             String message = String.format("Bạn có %d thẻ Flashcard cần ôn tập hôm nay để duy trì chuỗi nhớ!", count);
             // Gửi tới topic của user
             messagingTemplate.convertAndSend(
-                    "/topic/notifications/" + user.getEmail(),
+                    "/topic/notifications/" + email,
                     Map.of(
                             "type", "SRS_REMINDER",
                             "message", message,
@@ -55,9 +50,9 @@ public class FlashcardNotificationJob {
                             "timestamp", System.currentTimeMillis()
                     )
             );
-            log.debug("Sent SRS notification to {}: {}", user.getEmail(), message);
+            log.debug("Sent SRS notification to {}: {}", email, message);
         });
         
-        log.info("SRS Notification Job completed. Notified {} users.", userDueCount.size());
+        log.info("SRS Notification Job completed. Notified {} users.", dueByUser.size());
     }
 }
