@@ -124,6 +124,10 @@ services:
       SPRING_MAIL_SMTP_AUTH: ${SPRING_MAIL_SMTP_AUTH:-false}
       SPRING_MAIL_SMTP_STARTTLS: ${SPRING_MAIL_SMTP_STARTTLS:-false}
       MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-noreply@lms.local}
+      # Domain FE dùng cho link trong email/reset-password và link xác minh chứng chỉ. PHẢI liệt kê
+      # ở đây — service này không có env_file nên biến chỉ có trong .env sẽ KHÔNG vào container.
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:3000}
+      CERTIFICATE_VERIFY_BASE_URL: ${CERTIFICATE_VERIFY_BASE_URL:-http://localhost:3000/verify}
       # JWT — thời hạn theo BR-AUTH-04
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET chua duoc dat trong .env}
       JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
@@ -265,7 +269,10 @@ services:
       context: ../fe
       dockerfile: Dockerfile.dev
     container_name: lms_frontend_dev
-    restart: unless-stopped
+    # Tắt auto-restart (30/10/2026) — FE thật chạy qua Vercel, container này chỉ để debug local
+    # trên server khi cần, không nên tự bật lại và chiếm RAM (từng gây OOM 23/10). Muốn chạy lại
+    # thủ công: docker compose up -d frontend
+    restart: "no"
     ports:
       - "127.0.0.1:${FRONTEND_PORT:-3000}:3000"
     # Biến riêng của frontend (NEXT_PUBLIC_*) đọc từ project/fe/.env — tách khỏi
@@ -303,6 +310,9 @@ services:
       - "443:443"
       - "8443:443"
     command: caddy reverse-proxy --from 46.224.175.90.nip.io --to backend:8080
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
     depends_on:
       backend:
         condition: service_started
@@ -314,6 +324,8 @@ volumes:
   frontend_node_modules:
   frontend_next_cache:
   ai_tmp_storage:
+  caddy_data:
+  caddy_config:
 
 networks:
   default:
