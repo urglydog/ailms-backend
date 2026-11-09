@@ -20,6 +20,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
+import com.lms.common.ratelimit.RateLimitFilter;
 import com.lms.auth.security.JwtAuthenticationFilter;
 import com.lms.auth.security.CustomUserDetailsService;
 import com.lms.common.security.InternalApiTokenFilter;
@@ -53,6 +54,7 @@ public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final CustomUserDetailsService customUserDetailsService;
     private final InternalApiTokenFilter internalApiTokenFilter;
+    private final RateLimitFilter rateLimitFilter;
 
     /**
      * Danh sách endpoint public — khớp mục "Nhóm endpoint public" trong
@@ -139,6 +141,14 @@ public class SecurityConfig {
         return registration;
     }
 
+    /** Rate limit chỉ chạy trong chuỗi security (sau CORS) — tắt đăng ký servlet tự động để không chạy 2 lần. */
+    @Bean
+    public FilterRegistrationBean<RateLimitFilter> disableRateLimitAutoRegistration(RateLimitFilter filter) {
+        FilterRegistrationBean<RateLimitFilter> registration = new FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
+    }
+
     /**
      * Chuỗi RIÊNG cho {@code /api/internal/**} — AI Worker gọi callback (F5.2) bằng
      * secret {@code X-Internal-Token}, không phải JWT nên phải tách khỏi
@@ -171,6 +181,7 @@ public class SecurityConfig {
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(authenticationProvider())
+                .addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 // (23/10/2026, sửa bug thật) — mặc định Spring Security trả response RỖNG (không
                 // phải JSON) khi chặn ở tầng filter (vd user bị AccountLockRegistry chặn giữa
