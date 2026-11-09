@@ -123,6 +123,49 @@
             <version>2.9.2</version>
         </dependency>
 
+        <!-- ── Task 4: Import CSV hàng loạt cho Quiz/Flashcard phía giảng viên ── -->
+        <dependency>
+            <groupId>com.opencsv</groupId>
+            <artifactId>opencsv</artifactId>
+            <version>5.9</version>
+        </dependency>
+
+        <!-- ── UpComming_Plan.md A1: sinh PDF chứng chỉ hoàn thành + A5 đề trắng Quiz (dùng chung) ── -->
+        <dependency>
+            <groupId>com.github.librepdf</groupId>
+            <artifactId>openpdf</artifactId>
+            <version>1.3.42</version>
+        </dependency>
+
+        <!-- ── doc/DacTa_ChucNangChungChi.md, BR-CERT-10: QR code THẬT (encode verifyUrl) in trên
+             chứng chỉ PDF — javase kèm MatrixToImageWriter để xuất BufferedImage nhúng vào OpenPDF. ── -->
+        <dependency>
+            <groupId>com.google.zxing</groupId>
+            <artifactId>core</artifactId>
+            <version>3.5.3</version>
+        </dependency>
+        <dependency>
+            <groupId>com.google.zxing</groupId>
+            <artifactId>javase</artifactId>
+            <version>3.5.3</version>
+        </dependency>
+
+        <!-- ── Giai đoạn 3: Tích hợp cổng thanh toán PayOS ── -->
+        <dependency>
+            <groupId>vn.payos</groupId>
+            <artifactId>payos-java</artifactId>
+            <version>2.0.1</version>
+        </dependency>
+
+        <!-- ── Giai đoạn 11: LiveKit Server SDK — sinh AccessToken (JWT) cho phòng live,
+             xác thực webhook (BR-LIVE-09). Viết bằng Kotlin nhưng dùng trực tiếp từ Java được
+             (interop chuẩn), kéo theo kotlin-stdlib làm transitive dependency. ── -->
+        <dependency>
+            <groupId>io.livekit</groupId>
+            <artifactId>livekit-server</artifactId>
+            <version>0.15.1</version>
+        </dependency>
+
         <!-- ── Dev: hot reload trong container ────────────── -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -137,7 +180,8 @@
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
-            <optional>true</optional>
+            <version>1.18.30</version>
+            <scope>provided</scope>
         </dependency>
 
         <!-- ── Test ────────────────────────────────────────── -->
@@ -191,6 +235,7 @@
                         <path>
                             <groupId>org.projectlombok</groupId>
                             <artifactId>lombok</artifactId>
+                            <version>1.18.30</version>
                         </path>
                     </annotationProcessorPaths>
                 </configuration>

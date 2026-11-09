@@ -20,16 +20,28 @@ public class EnrollmentController {
 
     private final EnrollmentService enrollmentService;
 
+    /** (20/09/2026, sửa lỗi) — trước đây chỉ `hasRole('STUDENT')`, khiến tài khoản đã nâng lên
+     * Giảng viên KHÔNG còn xem được các khóa đã mua từ lúc còn là Học viên. Trở thành Giảng
+     * viên không tước quyền sở hữu nội dung đã mua trước đó — 1 tài khoản có thể vừa dạy vừa
+     * học, xem `InstructorService.becomeInstructor` (chỉ đổi role, không đụng Enrollment). */
     @GetMapping("/mine")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     public ResponseEntity<List<Res>> getMine(Principal principal) {
         return ResponseEntity.ok(enrollmentService.getMyEnrollments(principal.getName()));
     }
 
     @PostMapping("/free/{courseId}")
-    @PreAuthorize("hasRole('STUDENT')")
-    public ResponseEntity<Void> enrollFreeCourse(Principal principal, @org.springframework.web.bind.annotation.PathVariable Long courseId) {
-        enrollmentService.enrollFreeCourse(principal.getName(), courseId);
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
+    public ResponseEntity<Void> enrollFreeCourse(
+            Principal principal,
+            @org.springframework.web.bind.annotation.PathVariable Long courseId,
+            @org.springframework.web.bind.annotation.RequestParam(required = false) String password) {
+        enrollmentService.enrollFreeCourse(principal.getName(), courseId, password);
         return ResponseEntity.ok().build();
     }
+
+    // Endpoint tải chứng chỉ cũ (UpComming_Plan.md A1) đã chuyển hẳn sang
+    // CertificateController#getPdf (GET /api/v1/certificates/{certificateCode}/pdf) — xem
+    // doc/DacTa_ChucNangChungChi.md. EnrollmentDto.Res.certificateCode là cầu nối cho FE điều
+    // hướng từ danh sách "Khóa học của tôi" sang endpoint mới.
 }

@@ -7,7 +7,10 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.net.URI;
 
 @Slf4j
 @RestController
@@ -63,10 +66,38 @@ public class AuthController {
         return authService.resetPassword(req.email(), req.otp(), req.newPassword());
     }
 
+    /** Consume link do Admin gửi thủ công qua {@code POST /api/v1/admin/users/{id}/send-reset-link}. */
+    @PostMapping("/reset-password-by-token")
+    @ResponseStatus(HttpStatus.OK)
+    public MessageRes resetPasswordByToken(@Valid @RequestBody ResetPasswordByTokenReq req) {
+        authService.resetPasswordByToken(req.token(), req.newPassword());
+        return new MessageRes("Đặt lại mật khẩu thành công. Vui lòng đăng nhập lại.");
+    }
+
     @PostMapping("/oauth/google/callback")
     @ResponseStatus(HttpStatus.OK)
     public TokenRes loginWithGoogle(@Valid @RequestBody GoogleOAuthCallbackReq req) throws Exception {
         log.info("Google OAuth login callback received");
         return authService.loginWithGoogle(req.idToken());
+    }
+
+    /**
+     * Luồng Google OAuth cho app mobile (Expo Go) — Google redirect về đây sau khi user đăng
+     * nhập. BE đổi {@code code} lấy id_token, tái dùng {@code loginWithGoogle}, rồi 302 về app
+     * kèm 1 mã dùng-1-lần (không bao giờ đặt JWT thật trực tiếp lên URL). Public endpoint vì
+     * Google gọi trực tiếp từ trình duyệt, không có Bearer token nào ở bước này.
+     */
+    @GetMapping("/oauth/google/mobile-callback")
+    public ResponseEntity<Void> googleMobileCallback(
+            @RequestParam String code,
+            @RequestParam(required = false) String state) throws Exception {
+        String appRedirectUrl = authService.handleGoogleMobileCallback(code, state);
+        return ResponseEntity.status(HttpStatus.FOUND).location(URI.create(appRedirectUrl)).build();
+    }
+
+    @PostMapping("/oauth/google/mobile-exchange")
+    @ResponseStatus(HttpStatus.OK)
+    public TokenRes exchangeGoogleMobileCode(@Valid @RequestBody GoogleMobileExchangeReq req) {
+        return authService.exchangeGoogleMobileCode(req.code());
     }
 }

@@ -1,0 +1,2 @@
+ALTER TABLE quiz_attempts ADD COLUMN status VARCHAR(20) DEFAULT 'IN_PROGRESS' NOT NULL;
+UPDATE quiz_attempts SET status = 'COMPLETED';

@@ -10,9 +10,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.security.authorization.AuthorizationDeniedException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 /**
@@ -48,7 +50,7 @@ public class GlobalExceptionHandler {
                 .forEach(err -> fieldErrors.putIfAbsent(err.getField(), err.getDefaultMessage()));
 
         ProblemDetail problem = build(HttpStatus.BAD_REQUEST,
-                "Du lieu gui len khong hop le", "VALIDATION_FAILED", request);
+                "Du lieu gui len khong hop le: " + fieldErrors.toString(), "VALIDATION_FAILED", request);
         problem.setProperty("fieldErrors", fieldErrors);
         return problem;
     }
@@ -62,11 +64,30 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.FORBIDDEN, "Ban khong co quyen thuc hien hanh dong nay", "ACCESS_DENIED", request);
     }
 
+    /**
+     * (23/10/2026, sửa bug thật) — bắt mọi {@link AuthenticationException} của Spring Security
+     * ném ra TRONG {@code AuthService.login} (không phải trong filter chain, nên
+     * {@code ExceptionTranslationFilter} không tự xử lý được): {@code LockedException} khi tài
+     * khoản bị Admin khóa ({@code isActive=false}) HOẶC khi sai mật khẩu 5 lần liên tiếp —
+     * trước đây không có handler nào bắt, rơi xuống {@link #handleUnexpected} thành lỗi 500
+     * chung chung, FE hiện thông báo vô nghĩa thay vì lý do thật.
+     */
+    @ExceptionHandler(AuthenticationException.class)
+    public ProblemDetail handleAuthentication(AuthenticationException ex, HttpServletRequest request) {
+        return build(HttpStatus.UNAUTHORIZED, ex.getMessage(), "AUTHENTICATION_FAILED", request);
+    }
+
     /** Vượt dung lượng upload — BR-CHUNK-01 (video 2 GB), BR-UPLOAD-01 (tài liệu 50 MB). */
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ProblemDetail handleUploadTooLarge(MaxUploadSizeExceededException ex, HttpServletRequest request) {
         return build(HttpStatus.PAYLOAD_TOO_LARGE,
                 "File vuot qua dung luong cho phep", "FILE_TOO_LARGE", request);
+    }
+
+    /** Path Variable type mismatch (e.g. string passed to Long id) */
+    @ExceptionHandler({MethodArgumentTypeMismatchException.class, org.springframework.beans.TypeMismatchException.class})
+    public ProblemDetail handleTypeMismatch(Exception ex, HttpServletRequest request) {
+        return build(HttpStatus.BAD_REQUEST, "Sai kieu du lieu tham so", "TYPE_MISMATCH", request);
     }
 
     /**

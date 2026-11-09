@@ -5,6 +5,7 @@ import com.lms.catalog.service.CourseService;
 import com.lms.common.enums.CourseStatus;
 import jakarta.validation.Valid;
 import java.security.Principal;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -29,15 +30,16 @@ import org.springframework.web.multipart.MultipartFile;
 public class CourseController {
 
     private final CourseService courseService;
+    private final com.lms.catalog.service.CourseActivityLogService activityLogService;
 
     @PostMapping
-    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     public ResponseEntity<DetailRes> create(Principal principal, @Valid @RequestBody CreateReq req) {
         return ResponseEntity.ok(courseService.create(principal.getName(), req));
     }
 
     @GetMapping("/mine")
-    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     public ResponseEntity<Page<SummaryRes>> getMine(
             Principal principal,
             @RequestParam(required = false) CourseStatus status,
@@ -46,13 +48,13 @@ public class CourseController {
     }
 
     @GetMapping("/mine/{id}")
-    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     public ResponseEntity<DetailRes> getMineDetail(Principal principal, @PathVariable Long id) {
         return ResponseEntity.ok(courseService.getMineDetail(principal.getName(), id));
     }
 
     @PutMapping("/mine/{id}")
-    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     public ResponseEntity<DetailRes> update(
             Principal principal, @PathVariable Long id, @Valid @RequestBody UpdateReq req) {
         return ResponseEntity.ok(courseService.update(principal.getName(), id, req));
@@ -60,22 +62,66 @@ public class CourseController {
 
     /** Giai đoạn 4 — upload ảnh bìa thật lên B2, thay ô nhập URL text tạm thời của F2.1. */
     @PostMapping(value = "/mine/{id}/thumbnail", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     public ResponseEntity<DetailRes> uploadThumbnail(
             Principal principal, @PathVariable Long id, @RequestPart("file") MultipartFile file) {
         return ResponseEntity.ok(courseService.uploadThumbnail(principal.getName(), id, file));
     }
 
     @PostMapping("/mine/{id}/submit")
-    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     public ResponseEntity<DetailRes> submit(Principal principal, @PathVariable Long id) {
         return ResponseEntity.ok(courseService.submitForReview(principal.getName(), id));
     }
 
     @DeleteMapping("/mine/{id}")
-    @PreAuthorize("hasRole('INSTRUCTOR')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     public ResponseEntity<Void> delete(Principal principal, @PathVariable Long id) {
         courseService.delete(principal.getName(), id);
+        return ResponseEntity.noContent().build();
+    }
+
+    /** "Kích hoạt lại" (19/09/2026, tính năng mới) — khôi phục khóa đang ở trạng thái lưu trữ. */
+    @PostMapping("/mine/{id}/reactivate")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
+    public ResponseEntity<DetailRes> reactivate(Principal principal, @PathVariable Long id) {
+        return ResponseEntity.ok(courseService.reactivate(principal.getName(), id));
+    }
+
+    // ==================== "Đăng ký (Quyền riêng tư)" — Cài đặt khóa học (19/09/2026) ====================
+
+    @PutMapping("/mine/{id}/visibility")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
+    public ResponseEntity<DetailRes> updateVisibility(
+            Principal principal, @PathVariable Long id, @Valid @RequestBody VisibilityUpdateReq req) {
+        return ResponseEntity.ok(courseService.updateVisibility(principal.getName(), id, req));
+    }
+
+    @GetMapping("/mine/{id}/activities")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
+    public ResponseEntity<List<java.util.Map<String, Object>>> getActivities(
+            Principal principal, @PathVariable Long id, @RequestParam(defaultValue = "50") int limit) {
+        courseService.getMineDetail(principal.getName(), id); // xác thực quyền sở hữu, ném lỗi nếu không phải giảng viên của khóa này
+        return ResponseEntity.ok(activityLogService.getRecent(id, Math.min(limit, 200)));
+    }
+
+    @GetMapping("/mine/{id}/invites")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
+    public ResponseEntity<List<String>> listInvites(Principal principal, @PathVariable Long id) {
+        return ResponseEntity.ok(courseService.listInvites(principal.getName(), id));
+    }
+
+    @PostMapping("/mine/{id}/invites")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
+    public ResponseEntity<Void> addInvite(Principal principal, @PathVariable Long id, @Valid @RequestBody InviteReq req) {
+        courseService.addInvite(principal.getName(), id, req.email());
+        return ResponseEntity.ok().build();
+    }
+
+    @DeleteMapping("/mine/{id}/invites/{email}")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
+    public ResponseEntity<Void> removeInvite(Principal principal, @PathVariable Long id, @PathVariable String email) {
+        courseService.removeInvite(principal.getName(), id, email);
         return ResponseEntity.noContent().build();
     }
 

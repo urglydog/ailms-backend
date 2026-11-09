@@ -12,7 +12,7 @@
 -- =====================================================================
 
 -- ── Danh mục môn học (BR-COURSE-05: chỉ Admin quản lý, cấu trúc phẳng) ──
-INSERT INTO categories (name, slug, created_at) VALUES
+INSERT IGNORE INTO categories (name, slug, created_at) VALUES
     ('Lập trình Web',        'lap-trinh-web',        NOW()),
     ('Khoa học dữ liệu',     'khoa-hoc-du-lieu',     NOW()),
     ('Trí tuệ nhân tạo',     'tri-tue-nhan-tao',     NOW()),
@@ -23,7 +23,7 @@ INSERT INTO categories (name, slug, created_at) VALUES
 -- Đây là NGUỒN DUY NHẤT quyết định ngôn ngữ lồng tiếng khả dụng.
 -- Học viên chỉ chọn được bản ghi is_active = TRUE.
 -- Tên giọng theo danh sách của Edge-TTS.
-INSERT INTO voice_mappings (language, voice_name, gender, is_default, is_active, created_at) VALUES
+INSERT IGNORE INTO voice_mappings (language, voice_name, gender, is_default, is_active, created_at) VALUES
     -- Tiếng Việt
     ('vi-VN', 'vi-VN-HoaiMyNeural',   'FEMALE', TRUE,  TRUE, NOW()),
     ('vi-VN', 'vi-VN-NamMinhNeural',  'MALE',   FALSE, TRUE, NOW()),

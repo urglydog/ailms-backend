@@ -61,6 +61,16 @@ public class AuthRequestDto {
             String newPassword
     ) {}
 
+    /** Consume link reset do Admin gửi thủ công (xem {@code AdminController.sendResetLink}). */
+    public record ResetPasswordByTokenReq(
+            @NotBlank(message = "Token không được để trống")
+            String token,
+
+            @NotBlank(message = "Mật khẩu không được để trống")
+            @Size(min = 8, message = "Mật khẩu phải ≥ 8 ký tự")
+            String newPassword
+    ) {}
+
     public record ChangePasswordReq(
             @NotBlank(message = "Mật khẩu hiện tại không được để trống")
             String currentPassword,
@@ -73,5 +83,11 @@ public class AuthRequestDto {
     public record GoogleOAuthCallbackReq(
             @NotBlank(message = "Google ID Token không được để trống")
             String idToken
+    ) {}
+
+    /** Luồng mobile: app đổi mã dùng-1-lần (từ bước redirect `/oauth/google/mobile-callback`) lấy JWT thật. */
+    public record GoogleMobileExchangeReq(
+            @NotBlank(message = "Mã xác thực không được để trống")
+            String code
     ) {}
 }

@@ -1,0 +1,11 @@
+# Dùng cho pre-commit framework (tuỳ chọn, không bắt buộc) — cơ chế chặn CHÍNH
+# vẫn là scripts/pre-push-check.sh chạy qua git hook pre-push (xem README).
+# File này chỉ để ai muốn cài thêm `pre-commit` (pip) dùng gitleaks bản chuẩn,
+# chạy sớm hơn ở bước commit thay vì đợi tới lúc push.
+#
+# Cài: pip install pre-commit && pre-commit install --hook-type pre-commit
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1  # đã xác nhận tồn tại (git ls-remote --tags) ngày 2026-10-26
+    hooks:
+      - id: gitleaks

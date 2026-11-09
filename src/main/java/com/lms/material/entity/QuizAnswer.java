@@ -17,9 +17,13 @@ public class QuizAnswer extends BaseEntity {
     @Column(name = "is_correct", nullable = false)
     private Boolean isCorrect = false;
 
-    /** Phuong an hoc vien da chon. NULL neu bo trong cau nay. */
+    @Column(name = "selected_option_ids")
+    private String selectedOptionIds;
+
+    /** Phuong an hoc vien da chon. NULL neu bo trong cau nay. (Deprecated in favor of selectedOptionIds) */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "selected_option_id")
+    @Deprecated
     private QuizOption selectedOption;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)

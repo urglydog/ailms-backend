@@ -11,16 +11,67 @@ import org.springframework.stereotype.Repository;
  * dung den, kem {@code @EntityGraph} khi can nap quan he de tranh N+1.
  */
 import com.lms.common.enums.PaymentStatus;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 @Repository
 public interface PaymentRepository extends JpaRepository<Payment, Long> {
     Optional<Payment> findByTxnRef(String txnRef);
     List<Payment> findByUser_EmailOrderByCreatedAtDesc(String email);
     List<Payment> findByStatusAndCreatedAtBefore(PaymentStatus status, LocalDateTime before);
-    
+
+    /** Giỏ hàng (06/09/2026) — các Payment tạo cùng 1 lần gộp thanh toán chia sẻ chung giá
+     * trị này, xem {@code Payment.orderGroupRef}. */
+    List<Payment> findByOrderGroupRef(String orderGroupRef);
+
+    List<Payment> findByUser_IdAndStatusAndCourse_IdIn(Long userId, PaymentStatus status, java.util.Collection<Long> courseIds);
+
     @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"user", "course"})
     List<Payment> findAllByOrderByCreatedAtDesc();
+
+    /** Hạn mức coupon (15/09/2026, mở rộng) — chỉ đếm giao dịch đã THÀNH CÔNG, tránh giỏ hàng
+     * bỏ dở/thất bại chiếm suất dùng của người khác. */
+    long countByCoupon_IdAndStatus(Long couponId, PaymentStatus status);
+
+    long countByCoupon_IdAndUser_IdAndStatus(Long couponId, Long userId, PaymentStatus status);
+
+    /** BUG THẬT (03/10/2026) — dùng khi tái kiểm tra hạn mức coupon có LOCK (xem
+     * {@code CouponRepository.lockForUpdate}): phải đếm luôn cả PENDING (không chỉ PAID) vì
+     * mục đích là "giữ suất" ngay khi tạo đơn, tránh 2 đơn PENDING song song cùng vượt hạn mức
+     * trước khi cả 2 kịp PAID. */
+    long countByCoupon_IdAndStatusIn(Long couponId, List<PaymentStatus> statuses);
+
+    long countByCoupon_IdAndUser_IdAndStatusIn(Long couponId, Long userId, List<PaymentStatus> statuses);
+
+    /** Dashboard Giảng viên (15/09/2026, sửa lỗi) — doanh thu THỰC NHẬN (đã trừ phí nền tảng
+     * BR-PAY-05) từ đầu tháng tới nay, thay số "15400000" gắn cứng cũ (đang chờ module Payment
+     * — module đã có thật). */
+    @Query("SELECT COALESCE(SUM(p.instructorEarning), 0) FROM Payment p "
+            + "WHERE p.course.instructor.email = :email AND p.status = com.lms.common.enums.PaymentStatus.PAID "
+            + "AND p.paidAt >= :monthStart")
+    BigDecimal sumInstructorEarningSince(@Param("email") String email, @Param("monthStart") LocalDateTime monthStart);
+
+    /** Dashboard Admin (29/09/2026, sửa lỗi) — doanh thu GỘP toàn nền tảng (mọi giảng viên),
+     * thay số "15400000" gắn cứng cũ với TODO "chờ module Payment" — module đã có thật từ lâu. */
+    @Query("SELECT COALESCE(SUM(p.amount), 0) FROM Payment p WHERE p.status = com.lms.common.enums.PaymentStatus.PAID")
+    BigDecimal sumTotalRevenue();
+
+    /** Sprint 3 mục 10 — Báo cáo doanh thu gộp/phí nền tảng/thực nhận theo khoảng thời gian cho 1
+     * giảng viên. `start`/`end` là khoảng NỬA-MỞ [start, end) — tầng Service phải tự quy đổi
+     * LocalDate sang LocalDateTime (BUG THẬT nếu truyền thẳng LocalDate: bị ép kiểu ngầm thành
+     * `end 00:00:00`, mất trọn giao dịch trong ngày `end`). Trả 1 dòng duy nhất: [gross, platformFee, net, count]. */
+    @Query("SELECT COALESCE(SUM(p.amount), 0), COALESCE(SUM(p.platformFee), 0), COALESCE(SUM(p.instructorEarning), 0), COUNT(p) "
+            + "FROM Payment p WHERE p.course.instructor.email = :email AND p.status = com.lms.common.enums.PaymentStatus.PAID "
+            + "AND p.paidAt >= :start AND p.paidAt < :end")
+    List<Object[]> sumRevenueSummaryBetween(@Param("email") String email, @Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
+
+    /** Trang "Hiệu suất" > Doanh thu (19/09/2026, mở rộng) — danh sách giao dịch THÀNH CÔNG
+     * trong khoảng thời gian chọn, trên mọi khóa của giảng viên. */
+    @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"course", "coupon"})
+    List<Payment> findByCourse_Instructor_EmailAndStatusAndPaidAtAfterOrderByPaidAtDesc(
+            String email, PaymentStatus status, LocalDateTime after);
 }

@@ -8,8 +8,10 @@ import com.lms.catalog.repository.ChapterRepository;
 import com.lms.catalog.repository.CourseRepository;
 import com.lms.catalog.repository.LessonRepository;
 import com.lms.common.exception.AccessDeniedDomainException;
+import com.lms.common.exception.BusinessRuleViolationException;
 import com.lms.common.exception.InvalidRequestException;
 import com.lms.common.exception.ResourceNotFoundException;
+import com.lms.common.util.CacheEvictionHelper;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,6 +31,8 @@ public class ChapterService {
     private final CourseRepository courseRepository;
     private final LessonRepository lessonRepository;
     private final LessonService lessonService;
+    private final CourseEmbeddingService courseEmbeddingService;
+    private final CacheEvictionHelper cacheEvictionHelper;
 
     @Transactional
     public Res create(String instructorEmail, Long courseId, CreateReq req) {
@@ -39,14 +43,21 @@ public class ChapterService {
         chapter.setCourse(course);
         chapter.setDisplayOrder((int) chapterRepository.countByCourseId(courseId));
 
-        return mapToRes(chapterRepository.save(chapter));
+        Res res = mapToRes(chapterRepository.save(chapter));
+        courseEmbeddingService.requestEmbedding(course); // UC49 nâng cấp — tên chương ảnh hưởng semantic search
+        cacheEvictionHelper.evictCourseCacheAfterCommit(course.getSlug());
+        return res;
     }
 
     @Transactional
     public Res update(String instructorEmail, Long chapterId, UpdateReq req) {
         Chapter chapter = loadOwnedChapter(chapterId, instructorEmail);
         chapter.setTitle(req.title());
-        return mapToRes(chapterRepository.save(chapter));
+        chapter.setDescription(req.description());
+        Res res = mapToRes(chapterRepository.save(chapter));
+        courseEmbeddingService.requestEmbedding(chapter.getCourse());
+        cacheEvictionHelper.evictCourseCacheAfterCommit(chapter.getCourse().getSlug());
+        return res;
     }
 
     /**
@@ -59,6 +70,7 @@ public class ChapterService {
         Chapter chapter = loadOwnedChapter(chapterId, instructorEmail);
         lessonRepository.findByChapterIdOrderByDisplayOrderAsc(chapterId).forEach(lessonService::deleteCascade);
         chapterRepository.delete(chapter);
+        cacheEvictionHelper.evictCourseCacheAfterCommit(chapter.getCourse().getSlug());
     }
 
     @Transactional
@@ -77,6 +89,10 @@ public class ChapterService {
             chapter.setDisplayOrder(i);
             chapterRepository.save(chapter);
         }
+        Course course = byId.values().stream().findFirst().map(Chapter::getCourse).orElse(null);
+        if (course != null) {
+            cacheEvictionHelper.evictCourseCacheAfterCommit(course.getSlug());
+        }
     }
 
     private Course loadOwnedCourse(Long courseId, String instructorEmail) {
@@ -84,6 +100,9 @@ public class ChapterService {
                 .orElseThrow(() -> new ResourceNotFoundException("Course", courseId));
         if (!course.getInstructor().getEmail().equals(instructorEmail)) {
             throw new AccessDeniedDomainException("Bạn không có quyền thao tác trên khóa học này");
+        }
+        if (course.getStatus() == com.lms.common.enums.CourseStatus.PENDING || course.getStatus() == com.lms.common.enums.CourseStatus.PUBLISHED) {
+            throw new BusinessRuleViolationException("Khóa học đang ở trạng thái không thể chỉnh sửa");
         }
         return course;
     }
@@ -93,6 +112,9 @@ public class ChapterService {
                 .orElseThrow(() -> new ResourceNotFoundException("Chapter", chapterId));
         if (!chapter.getCourse().getInstructor().getEmail().equals(instructorEmail)) {
             throw new AccessDeniedDomainException("Bạn không có quyền thao tác trên chương này");
+        }
+        if (chapter.getCourse().getStatus() == com.lms.common.enums.CourseStatus.PENDING || chapter.getCourse().getStatus() == com.lms.common.enums.CourseStatus.PUBLISHED) {
+            throw new BusinessRuleViolationException("Khóa học đang ở trạng thái không thể chỉnh sửa");
         }
         return chapter;
     }
@@ -109,9 +131,10 @@ public class ChapterService {
                         lesson.getVideoSource(),
                         lesson.getVideoUrl(),
                         lesson.getYoutubeId(),
-                        lesson.getDurationSec()
+                        lesson.getDurationSec(),
+                        lesson.getDescription()
                 ))
                 .toList();
-        return new Res(chapter.getId(), chapter.getTitle(), chapter.getDisplayOrder(), lessons);
+        return new Res(chapter.getId(), chapter.getTitle(), chapter.getDisplayOrder(), lessons, chapter.getDescription());
     }
 }

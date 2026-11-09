@@ -10,16 +10,22 @@ import com.lms.catalog.entity.Chapter;
 import com.lms.catalog.entity.Course;
 import com.lms.catalog.repository.CategoryRepository;
 import com.lms.catalog.repository.ChapterRepository;
+import com.lms.catalog.entity.CourseInvite;
+import com.lms.catalog.repository.CourseInviteRepository;
 import com.lms.catalog.repository.CourseRepository;
 import com.lms.catalog.repository.LessonRepository;
 import com.lms.catalog.util.SlugGenerator;
 import com.lms.common.enums.CourseStatus;
+import com.lms.common.enums.CourseVisibility;
 import com.lms.common.exception.AccessDeniedDomainException;
 import com.lms.common.exception.BusinessRuleViolationException;
 import com.lms.common.exception.InvalidRequestException;
 import com.lms.common.exception.ResourceNotFoundException;
 import com.lms.common.storage.StorageService;
-import com.lms.enrollment.repository.EnrollmentRepository;
+import com.lms.common.util.CacheEvictionHelper;
+import com.lms.instructor.repository.InstructorVerificationRepository;
+import org.springframework.security.crypto.password.PasswordEncoder;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigDecimal;
@@ -49,22 +55,33 @@ public class CourseService {
     private static final Set<String> ALLOWED_LEVELS = Set.of("BEGINNER", "INTERMEDIATE", "ADVANCED");
     private static final int MAX_RESUBMIT_COUNT = 5;
     private static final int MIN_CHAPTERS_TO_SUBMIT = 1;
-    private static final int MIN_LESSONS_TO_SUBMIT = 3;
+    private static final int MIN_LESSONS_TO_SUBMIT = 1;
 
     private final CourseRepository courseRepository;
     private final CategoryRepository categoryRepository;
     private final ChapterRepository chapterRepository;
     private final LessonRepository lessonRepository;
-    private final EnrollmentRepository enrollmentRepository;
     private final UserRepository userRepository;
     private final StorageService storageService;
-    private final LessonService lessonService;
+    private final InstructorVerificationRepository instructorVerificationRepository;
+    private final CourseInviteRepository courseInviteRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final CourseActivityLogService activityLogService;
+    private final CourseEmbeddingService courseEmbeddingService;
+    private final com.lms.wishlist.service.WishlistPriceDropService wishlistPriceDropService;
+    private final CacheEvictionHelper cacheEvictionHelper;
     private final Tika tika = new Tika();
 
     @Transactional
     public DetailRes create(String instructorEmail, CreateReq req) {
         User instructor = userRepository.findByEmail(instructorEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("User", instructorEmail));
+
+        if (instructor.getHeadline() == null || instructor.getHeadline().trim().isEmpty() 
+            || instructor.getBio() == null || instructor.getBio().trim().length() < 20) {
+            throw new BusinessRuleViolationException("PROFILE_INCOMPLETE", "Vui lòng hoàn thiện chức danh và tiểu sử giảng viên (tối thiểu 20 ký tự).");
+        }
+
         Category category = categoryRepository.findById(req.categoryId())
                 .orElseThrow(() -> new ResourceNotFoundException("Category", req.categoryId()));
 
@@ -78,8 +95,17 @@ public class CourseService {
         course.setCategory(category);
         course.setInstructor(instructor);
         course.setStatus(CourseStatus.DRAFT);
+        course.setReferralCode(generateReferralCode());
 
-        return mapToDetailRes(courseRepository.save(course));
+        Course saved = courseRepository.save(course);
+        courseEmbeddingService.requestEmbedding(saved); // UC49 nâng cấp — index semantic search
+        return mapToDetailRes(saved);
+    }
+
+    /** Chia doanh thu 2 mức (20/09/2026) — mã liên kết giới thiệu, sinh 1 LẦN duy nhất lúc
+     * tạo khóa, không đổi sau đó. 10 ký tự hex (40 bit) đủ chống trùng cho quy mô đồ án. */
+    private String generateReferralCode() {
+        return UUID.randomUUID().toString().replace("-", "").substring(0, 10);
     }
 
     @Transactional(readOnly = true)
@@ -102,6 +128,16 @@ public class CourseService {
         Category category = categoryRepository.findById(req.categoryId())
                 .orElseThrow(() -> new ResourceNotFoundException("Category", req.categoryId()));
 
+        // Ghi log các thay đổi trước khi ghi đè — mô tả cụ thể cho panel "Hoạt động gần đây".
+        BigDecimal oldPrice = course.getPrice();
+        List<String> changes = new java.util.ArrayList<>();
+        if (!java.util.Objects.equals(course.getTitle(), req.title())) changes.add("tiêu đề");
+        if (!java.util.Objects.equals(course.getDescription(), req.description())) changes.add("mô tả");
+        if (oldPrice == null || oldPrice.compareTo(req.price()) != 0) changes.add("giá");
+        if (!changes.isEmpty()) {
+            activityLogService.log(course, instructorEmail, "Đã cập nhật " + String.join(", ", changes) + " của khóa học");
+        }
+
         // BR-COURSE-02: sửa metadata không cần duyệt lại, kể cả khi đã PUBLISHED.
         // Không tự đổi status khi đang REJECTED — instructor chủ động bấm gửi duyệt lại.
         course.setTitle(req.title());
@@ -112,7 +148,25 @@ public class CourseService {
         course.setIsFree(req.price().compareTo(BigDecimal.ZERO) == 0);
         course.setCategory(category);
 
-        return mapToDetailRes(courseRepository.save(course));
+        Course saved = courseRepository.save(course);
+        // UC49 nâng cấp — chỉ re-embed khi tiêu đề/mô tả thực sự đổi, tránh gọi Gemini thừa
+        // cho các lần sửa giá/thumbnail không ảnh hưởng nội dung tìm kiếm ngữ nghĩa.
+        if (changes.contains("tiêu đề") || changes.contains("mô tả")) {
+            courseEmbeddingService.requestEmbedding(saved);
+        }
+        // (26/09/2026, tính năng mới) — chỉ báo GIẢM giá thật sự (oldPrice != null, tránh báo
+        // giảm giá "ảo" ngay lần đầu set giá lúc tạo khóa), đẩy qua Redis xử lý nền, không gửi
+        // email/thông báo đồng bộ ngay trong request này (xem WishlistPriceDropService).
+        if (oldPrice != null && oldPrice.compareTo(req.price()) > 0) {
+            wishlistPriceDropService.enqueuePriceDrop(saved, oldPrice, req.price());
+        }
+        
+        cacheEvictionHelper.evictCourseCacheAfterCommit(course.getSlug());
+        if (!java.util.Objects.equals(course.getSlug(), saved.getSlug())) {
+            cacheEvictionHelper.evictCourseCacheAfterCommit(saved.getSlug());
+        }
+        
+        return mapToDetailRes(saved);
     }
 
     @Transactional
@@ -139,36 +193,46 @@ public class CourseService {
         }
 
         course.setStatus(CourseStatus.PENDING);
-        return mapToDetailRes(courseRepository.save(course));
+        Course saved = courseRepository.save(course);
+        cacheEvictionHelper.evictCourseCacheAfterCommit(saved.getSlug());
+        return mapToDetailRes(saved);
     }
 
     /**
-     * Không có {@code ON DELETE CASCADE} ở tầng DB nên xoá cứng phải tự dọn chương → bài học
-     * (kèm video/tài liệu trên B2 qua {@link LessonService#deleteCascade}) → ảnh bìa trên B2 →
-     * cuối cùng mới xoá bản ghi khóa học, nếu không sẽ vỡ ràng buộc khoá ngoại.
+     * "Gỡ bỏ khóa học" (19/09/2026, sửa lại theo yêu cầu nghiệp vụ) — KHÔNG BAO GIỜ xoá cứng
+     * dữ liệu nữa (trước đây khóa DRAFT chưa có học viên bị xoá thật, dọn cả chương/bài/video
+     * trên B2) — đúng nghiệp vụ LMS: dữ liệu khóa học của Giảng viên không được phép mất. Luôn
+     * chuyển sang {@code ARCHIVED}: học viên MỚI không tìm/ghi danh được nữa, học viên ĐÃ ghi
+     * danh vẫn giữ nguyên quyền truy cập (BR-ENROLL-03). Lưu lại {@code previousStatus} để
+     * {@link #reactivate} khôi phục đúng trạng thái trước đó.
      */
     @Transactional
-    public void delete(String instructorEmail, Long id) {
+    public DetailRes delete(String instructorEmail, Long id) {
         Course course = loadOwnedCourse(id, instructorEmail);
-
-        boolean canHardDelete = course.getStatus() == CourseStatus.DRAFT
-                && !enrollmentRepository.existsByCourseId(id);
-
-        if (canHardDelete) {
-            List<Chapter> chapters = chapterRepository.findByCourseIdOrderByDisplayOrderAsc(id);
-            for (Chapter chapter : chapters) {
-                lessonRepository.findByChapterIdOrderByDisplayOrderAsc(chapter.getId())
-                        .forEach(lessonService::deleteCascade);
-            }
-            chapterRepository.deleteAll(chapters);
-            if (course.getThumbnailUrl() != null) {
-                storageService.delete(StorageService.extractKeyFromUrl(course.getThumbnailUrl()));
-            }
-            courseRepository.delete(course);
-        } else {
-            course.setStatus(CourseStatus.ARCHIVED);
-            courseRepository.save(course);
+        if (course.getStatus() == CourseStatus.ARCHIVED) {
+            throw new BusinessRuleViolationException("Khóa học đã được lưu trữ từ trước");
         }
+        course.setPreviousStatus(course.getStatus());
+        course.setStatus(CourseStatus.ARCHIVED);
+        Course saved = courseRepository.save(course);
+        cacheEvictionHelper.evictCourseCacheAfterCommit(saved.getSlug());
+        return mapToDetailRes(saved);
+    }
+
+    /** "Kích hoạt lại" (19/09/2026, tính năng mới) — khôi phục đúng trạng thái TRƯỚC khi bị lưu
+     * trữ (DRAFT nếu chưa từng xuất bản, PUBLISHED nếu đã từng — không cần Admin duyệt lại vì
+     * bản thân nội dung không đổi trong lúc lưu trữ). */
+    @Transactional
+    public DetailRes reactivate(String instructorEmail, Long id) {
+        Course course = loadOwnedCourse(id, instructorEmail);
+        if (course.getStatus() != CourseStatus.ARCHIVED) {
+            throw new BusinessRuleViolationException("Chỉ có thể kích hoạt lại khóa học đang ở trạng thái lưu trữ");
+        }
+        course.setStatus(course.getPreviousStatus() != null ? course.getPreviousStatus() : CourseStatus.DRAFT);
+        course.setPreviousStatus(null);
+        Course saved = courseRepository.save(course);
+        cacheEvictionHelper.evictCourseCacheAfterCommit(saved.getSlug());
+        return mapToDetailRes(saved);
     }
 
     @Transactional(readOnly = true)
@@ -192,7 +256,9 @@ public class CourseService {
             throw new BusinessRuleViolationException("Chỉ có thể duyệt khóa học đang ở trạng thái Chờ duyệt");
         }
         course.setStatus(CourseStatus.PUBLISHED);
-        return mapToDetailRes(courseRepository.save(course));
+        Course saved = courseRepository.save(course);
+        cacheEvictionHelper.evictCourseCacheAfterCommit(saved.getSlug());
+        return mapToDetailRes(saved);
     }
 
     @Transactional
@@ -204,7 +270,9 @@ public class CourseService {
         }
         course.setStatus(CourseStatus.REJECTED);
         course.setRejectReason(req.reason());
-        return mapToDetailRes(courseRepository.save(course));
+        Course saved = courseRepository.save(course);
+        cacheEvictionHelper.evictCourseCacheAfterCommit(saved.getSlug());
+        return mapToDetailRes(saved);
     }
 
     // ---- helpers ----
@@ -251,6 +319,57 @@ public class CourseService {
         return mapToDetailRes(courseRepository.save(course));
     }
 
+    /**
+     * "Đăng ký (Quyền riêng tư)" kiểu Udemy (19/09/2026) — {@code password} rỗng khi chuyển
+     * sang PRIVATE_PASSWORD nghĩa là GIỮ NGUYÊN mật khẩu cũ (không bắt nhập lại mỗi lần đổi
+     * field khác); bắt buộc nhập nếu đây là LẦN ĐẦU đặt (chưa có hash nào).
+     */
+    @Transactional
+    public DetailRes updateVisibility(String instructorEmail, Long id, VisibilityUpdateReq req) {
+        Course course = loadOwnedCourse(id, instructorEmail);
+        course.setVisibility(req.visibility());
+
+        if (req.visibility() == CourseVisibility.PRIVATE_PASSWORD) {
+            if (req.password() != null && !req.password().isBlank()) {
+                course.setEnrollPasswordHash(passwordEncoder.encode(req.password()));
+            } else if (course.getEnrollPasswordHash() == null) {
+                throw new InvalidRequestException(
+                        "Cần đặt mật khẩu đăng ký khi chọn chế độ Riêng tư (mật khẩu)");
+            }
+        } else {
+            course.setEnrollPasswordHash(null);
+        }
+
+        return mapToDetailRes(courseRepository.save(course));
+    }
+
+    @Transactional(readOnly = true)
+    public List<String> listInvites(String instructorEmail, Long id) {
+        loadOwnedCourse(id, instructorEmail);
+        return courseInviteRepository.findByCourse_IdOrderByCreatedAtDesc(id).stream()
+                .map(CourseInvite::getEmail)
+                .toList();
+    }
+
+    @Transactional
+    public void addInvite(String instructorEmail, Long id, String email) {
+        Course course = loadOwnedCourse(id, instructorEmail);
+        String normalized = email.trim().toLowerCase();
+        if (courseInviteRepository.existsByCourse_IdAndEmail(id, normalized)) {
+            return; // idempotent, giống BR-CART-02: mời lại người đã mời không báo lỗi.
+        }
+        CourseInvite invite = new CourseInvite();
+        invite.setCourse(course);
+        invite.setEmail(normalized);
+        courseInviteRepository.save(invite);
+    }
+
+    @Transactional
+    public void removeInvite(String instructorEmail, Long id, String email) {
+        loadOwnedCourse(id, instructorEmail);
+        courseInviteRepository.deleteByCourse_IdAndEmail(id, email.trim().toLowerCase());
+    }
+
     private Course loadOwnedCourse(Long id, String instructorEmail) {
         Course course = courseRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Course", id));
@@ -289,9 +408,21 @@ public class CourseService {
         return candidate;
     }
 
-    /** BR-COURSE-01: điều kiện gửi duyệt — trả về danh sách điều kiện CHƯA đạt (rỗng = đủ điều kiện). */
+    /**
+     * BR-COURSE-01: điều kiện gửi duyệt — trả về danh sách điều kiện CHƯA đạt (rỗng = đủ điều kiện).
+     * Gộp cả BR-VERIFY-01 (15/09/2026) vào đây thay vì chặn riêng ở {@link #submitForReview} —
+     * để FE hiện được ngay trong checklist "Điều kiện gửi duyệt" (component có sẵn, xem
+     * {@code SubmitChecklist.tsx}) thay vì instructor chỉ biết lúc bấm nút và nhận lỗi bất ngờ.
+     */
     private List<String> computeMissingConditions(Course course) {
         List<String> missing = new ArrayList<>();
+
+        // BR-VERIFY-01 (19/09/2026, khôi phục — bị mất trong lúc merge PR #132): chặn 1 LẦN DUY
+        // NHẤT/tài khoản — kiểm tra "đã có bản ghi xác minh chưa" thay vì đếm số khóa học trước
+        // đó, nên 1 khi đã xác minh thì mọi khóa (kể cả khóa đầu tiên tiếp theo) đều qua được.
+        if (!instructorVerificationRepository.existsByUser_Id(course.getInstructor().getId())) {
+            missing.add("Chưa hoàn tất xác minh thông tin định danh (BR-VERIFY-01)");
+        }
         if (course.getTitle() == null || course.getTitle().isBlank()) {
             missing.add("Chưa có tiêu đề");
         }
@@ -326,18 +457,31 @@ public class CourseService {
                 course.getIsFree(),
                 course.getAvgRating(),
                 course.getTotalLessons(),
-                course.getCreatedAt()
+                course.getCreatedAt(),
+                computeCompletionPercent(course)
         );
     }
 
+    /** Xem docblock {@code SummaryRes.completionPercent}. */
+    private int computeCompletionPercent(Course course) {
+        int total = 5;
+        int met = 0;
+        if (course.getTitle() != null && !course.getTitle().isBlank()) met++;
+        if (course.getDescription() != null && !course.getDescription().isBlank()) met++;
+        if (course.getThumbnailUrl() != null && !course.getThumbnailUrl().isBlank()) met++;
+        if (chapterRepository.countByCourseId(course.getId()) >= MIN_CHAPTERS_TO_SUBMIT) met++;
+        if (lessonRepository.countByChapter_CourseIdAndStatus(course.getId(), "READY") >= MIN_LESSONS_TO_SUBMIT) met++;
+        return Math.round(met * 100f / total);
+    }
+
     private DetailRes mapToDetailRes(Course course) {
-        List<Chapter> chapters = chapterRepository.findByCourseIdOrderByDisplayOrderAsc(course.getId());
+        List<Chapter> chapters = chapterRepository.findChaptersWithLessonsByCourseId(course.getId());
         List<ChapterDto.Res> chapterResList = chapters.stream()
                 .map(chapter -> new ChapterDto.Res(
                         chapter.getId(),
                         chapter.getTitle(),
                         chapter.getDisplayOrder(),
-                        lessonRepository.findByChapterIdOrderByDisplayOrderAsc(chapter.getId()).stream()
+                        chapter.getLessons() == null ? java.util.Collections.emptyList() : chapter.getLessons().stream()
                                 .map(lesson -> new LessonDto.Res(
                                         lesson.getId(),
                                         lesson.getTitle(),
@@ -347,9 +491,11 @@ public class CourseService {
                                         lesson.getVideoSource(),
                                         lesson.getVideoUrl(),
                                         lesson.getYoutubeId(),
-                                        lesson.getDurationSec()
+                                        lesson.getDurationSec(),
+                                        lesson.getDescription()
                                 ))
-                                .toList()
+                                .toList(),
+                        chapter.getDescription()
                 ))
                 .toList();
 
@@ -373,7 +519,10 @@ public class CourseService {
                 course.getInstructor().getFullName(),
                 chapterResList,
                 missingConditions,
-                missingConditions.isEmpty()
+                missingConditions.isEmpty(),
+                course.getVisibility(),
+                course.getEnrollPasswordHash() != null,
+                course.getReferralCode()
         );
     }
 }

@@ -2,8 +2,8 @@ package com.lms.catalog.controller;
 
 import com.lms.catalog.dto.CoursePublicDto.*;
 import com.lms.catalog.service.CoursePublicService;
+import java.security.Principal;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
@@ -27,24 +27,31 @@ public class CoursePublicController {
     private final CoursePublicService coursePublicService;
 
     @GetMapping
-    public ResponseEntity<Page<SummaryRes>> search(
+    public ResponseEntity<SearchSliceRes> search(
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String categorySlug,
             @RequestParam(required = false) String level,
             @RequestParam(required = false) String priceType,
+            @RequestParam(required = false) Double minRating,
+            @RequestParam(required = false) String durationBucket,
             @RequestParam(required = false) String sortBy,
             @PageableDefault(size = 24, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
-        return ResponseEntity.ok(coursePublicService.search(keyword, categorySlug, level, priceType, sortBy, pageable));
+        return ResponseEntity.ok(coursePublicService.search(
+                keyword, categorySlug, level, priceType, minRating, durationBucket, sortBy, pageable));
     }
 
+    /** {@code principal} có thể null (Guest chưa đăng nhập) — vẫn được phép vì route này
+     * permitAll; khi có JWT hợp lệ, Spring vẫn điền {@code Principal} dù endpoint không bắt
+     * buộc đăng nhập, dùng để kiểm khóa "Riêng tư mời" (xem {@code CoursePublicService}). */
     @GetMapping("/{slug}")
-    public ResponseEntity<DetailRes> getBySlug(@PathVariable String slug) {
-        return ResponseEntity.ok(coursePublicService.getBySlug(slug));
+    public ResponseEntity<DetailRes> getBySlug(@PathVariable String slug, Principal principal) {
+        return ResponseEntity.ok(coursePublicService.getBySlug(slug, principal == null ? null : principal.getName()));
     }
 
     /** UC11 — Học thử Preview: phát video của bài học đánh dấu Preview, không cần đăng nhập. */
     @GetMapping("/lessons/{lessonId}/player")
-    public ResponseEntity<PlayerRes> getLessonPlayer(@PathVariable Long lessonId) {
-        return ResponseEntity.ok(coursePublicService.getLessonForPlayback(lessonId));
+    public ResponseEntity<PlayerRes> getLessonPlayer(@PathVariable Long lessonId, Principal principal) {
+        return ResponseEntity.ok(
+                coursePublicService.getLessonForPlayback(lessonId, principal == null ? null : principal.getName()));
     }
 }

@@ -28,7 +28,14 @@ public class EnrollmentSecurity {
         if (email == null) return false;
         Course course = courseRepository.findById(courseId)
                 .orElseThrow(() -> new ResourceNotFoundException("Course", courseId));
-        
+
+        // Giảng viên sở hữu khóa học -> luôn xem được, kể cả DRAFT/PENDING (19/09/2026 — nút
+        // "Xem trước > Với tư cách là Giảng viên" ở trang chỉnh sửa khóa học cần truy cập được
+        // NGAY khi vừa tạo, không cần đợi xuất bản/ghi danh).
+        if (course.getInstructor() != null && course.getInstructor().getEmail().equals(email)) {
+            return true;
+        }
+
         // Học viên đã mua -> truy cập bất kể PUBLISHED hay ARCHIVED (BR-ENROLL-03)
         boolean hasEnrolled = enrollmentRepository.existsByUser_EmailAndCourse_Id(email, courseId);
         if (hasEnrolled) {
@@ -48,26 +55,32 @@ public class EnrollmentSecurity {
         if (email == null) return false;
         Lesson lesson = lessonRepository.findById(lessonId)
                 .orElseThrow(() -> new ResourceNotFoundException("Lesson", lessonId));
-        
-        Long courseId = lesson.getChapter().getCourse().getId();
-        
+
+        Course course = lesson.getChapter().getCourse();
+        Long courseId = course.getId();
+
+        // Giảng viên sở hữu khóa học -> luôn xem được mọi bài học của khóa mình (cùng lý do với
+        // `canAccessCourse` ở trên).
+        if (course.getInstructor() != null && course.getInstructor().getEmail().equals(email)) {
+            return true;
+        }
+
         // Đã ghi danh -> luôn cho truy cập (ARCHIVED vẫn xem được - BR-ENROLL-03)
         boolean hasEnrolled = enrollmentRepository.existsByUser_EmailAndCourse_Id(email, courseId);
         if (hasEnrolled) {
             return true;
         }
-        
+
         // Chưa ghi danh, khoá đang PUBLISHED
-        Course course = lesson.getChapter().getCourse();
         if (course.getStatus() != CourseStatus.PUBLISHED) {
             return false;
         }
-        
+
         // Xử lý logic Preview (BR-ENROLL-02)
         if (allowPreview && Boolean.TRUE.equals(lesson.getIsPreview())) {
             return true;
         }
-        
+
         return false;
     }
 }

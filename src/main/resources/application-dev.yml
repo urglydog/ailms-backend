@@ -2,6 +2,12 @@
 # Profile `dev` — chỉ dùng khi phát triển local qua docker-compose.
 # KHÔNG bật profile này ở môi trường thật.
 # =====================================================================
+# Seed dữ liệu mẫu dev (DevDataSeeder/DevCourseDataSeeder/DevExtraCourseSeeder/DevCommunicationDataSeeder).
+# Mặc định TẮT; đặt DEV_SEED_ENABLED=true để bật lại. Không ảnh hưởng V100/V101 (dữ liệu tham chiếu).
+app:
+  dev-seed:
+    enabled: ${DEV_SEED_ENABLED:false}
+
 spring:
   jpa:
     show-sql: true

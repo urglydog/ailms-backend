@@ -3,6 +3,8 @@ package com.lms.material.entity;
 import com.lms.common.entity.BaseEntity;
 import com.lms.auth.entity.User;
 import com.lms.catalog.entity.Course;
+import com.lms.catalog.entity.Lesson;
+import com.lms.catalog.entity.Chapter;
 import com.lms.common.enums.DifficultyLevel;
 import com.lms.common.enums.GenStatus;
 import com.lms.common.enums.MaterialType;
@@ -48,6 +50,10 @@ public class MaterialGeneration extends BaseEntity {
     @Column(name = "scope_ref_id")
     private Long scopeRefId;
 
+    /** Danh sach cac id bai hoc tuy chon khi scopeType = CUSTOM_LESSONS. (chuoi phan cach boi dau phay) */
+    @Column(name = "custom_lesson_ids", columnDefinition = "TEXT")
+    private String customLessonIds;
+
     /** Chi co gia tri khi materialType thuoc {QUIZ, FLASHCARD} (BR-MAT-05). */
     @Enumerated(EnumType.STRING)
     @Column(name = "quantity_level", length = 20)
@@ -75,18 +81,54 @@ public class MaterialGeneration extends BaseEntity {
     @Column(name = "error_message", columnDefinition = "TEXT")
     private String errorMessage;
 
+    @Column(name = "is_deleted", nullable = false)
+    private Boolean isDeleted = false;
+
+    @Column(name = "deleted_at")
+    private java.time.LocalDateTime deletedAt;
+
     /** Nguoi yeu cau tao - bo hoc lieu chi thuoc ve nguoi nay. */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    /** Hoc lieu o CAP KHOA HOC, khong phai cap bai hoc (BR-MAT-01). */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "course_id", nullable = false)
     private Course course;
 
-    /** BR-MAT-01: luon false voi nguoi khac - moi bo thuoc dung 1 hoc vien. */
+    /** Nếu được đính kèm vào cấp Chương, tham chiếu tới Chapter. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "chapter_id")
+    private Chapter chapter;
+
+    /** Nếu khác null, học liệu này được đính kèm vào tab Resource của Bài học này. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "lesson_id")
+    private Lesson lesson;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "folder_id")
+    private MaterialFolder folder;
+
+    @Column(name = "is_archived", nullable = false)
+    private Boolean isArchived = false;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_generation_id")
+    private MaterialGeneration parentGeneration;
+
+    /** Id của bản gốc (V1) trong cùng dòng version; bản gốc tự trỏ vào chính nó. */
+    @Column(name = "root_generation_id")
+    private Long rootGenerationId;
+
+    @OneToMany(mappedBy = "material", cascade = CascadeType.ALL, orphanRemoval = true)
+    private java.util.List<MaterialAssignment> assignments = new java.util.ArrayList<>();
+
+    /** BR-MAT-01: Cho phép người tạo hoặc Giảng viên sở hữu khóa học được xem/sử dụng học liệu. */
     public boolean isReusableBy(User other) {
-        return user != null && user.equals(other);
+        if (user == null || other == null) return false;
+        if (user.getId() != null && user.getId().equals(other.getId())) return true;
+        if (course != null && course.getInstructor() != null && course.getInstructor().getId() != null && course.getInstructor().getId().equals(other.getId())) return true;
+        return false;
     }
 }

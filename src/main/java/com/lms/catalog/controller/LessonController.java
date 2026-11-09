@@ -13,7 +13,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('INSTRUCTOR')")
+@PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
 public class LessonController {
 
     private final LessonService lessonService;

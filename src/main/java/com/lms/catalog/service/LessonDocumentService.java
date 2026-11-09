@@ -1,5 +1,6 @@
 package com.lms.catalog.service;
 
+import com.lms.catalog.dto.LessonDocumentDto.AddLinkReq;
 import com.lms.catalog.dto.LessonDocumentDto.Res;
 import com.lms.catalog.entity.Lesson;
 import com.lms.catalog.entity.LessonDocument;
@@ -116,6 +117,31 @@ public class LessonDocumentService {
         return mapToRes(lessonDocumentRepository.save(document));
     }
 
+    /** "+ Tài nguyên" > "Dán link" (15/09/2026, mở rộng) — cùng giới hạn số lượng với tài liệu
+     * upload (BR-UPLOAD-01), nhưng KHÔNG tính vào dung lượng/định dạng vì không có file thật. */
+    @Transactional
+    public Res addLink(String instructorEmail, Long lessonId, AddLinkReq req) {
+        Lesson lesson = lessonService.loadOwnedLesson(lessonId, instructorEmail);
+
+        String url = req.url().trim();
+        if (!url.startsWith("http://") && !url.startsWith("https://")) {
+            throw new InvalidRequestException("Link phải bắt đầu bằng http:// hoặc https://");
+        }
+        long existingCount = lessonDocumentRepository.countByLesson_Id(lessonId);
+        if (existingCount >= maxDocumentsPerLesson) {
+            throw new BusinessRuleViolationException(
+                    "Đã đạt tối đa " + maxDocumentsPerLesson + " tài liệu cho bài học này");
+        }
+
+        LessonDocument document = new LessonDocument();
+        document.setLesson(lesson);
+        document.setFileName(req.title().trim());
+        document.setFileUrl(url);
+        document.setFileType("LINK");
+        document.setFileSize(0L);
+        return mapToRes(lessonDocumentRepository.save(document));
+    }
+
     @Transactional
     public void delete(String instructorEmail, Long documentId) {
         LessonDocument document = lessonDocumentRepository.findById(documentId)
@@ -124,7 +150,10 @@ public class LessonDocumentService {
             throw new AccessDeniedDomainException("Bạn không có quyền thao tác trên tài liệu này");
         }
         lessonDocumentRepository.delete(document);
-        storageService.delete(StorageService.extractKeyFromUrl(document.getFileUrl()));
+        // "LINK" (dán link ngoài) không có file thật trên kho lưu trữ B2 — chỉ xoá bản ghi.
+        if (!"LINK".equals(document.getFileType())) {
+            storageService.delete(StorageService.extractKeyFromUrl(document.getFileUrl()));
+        }
     }
 
     private Res mapToRes(LessonDocument document) {

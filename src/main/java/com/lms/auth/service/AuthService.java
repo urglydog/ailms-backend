@@ -12,6 +12,8 @@ import com.lms.common.enums.Role;
 import com.lms.common.exception.BusinessRuleViolationException;
 import com.lms.common.exception.ConflictException;
 import com.lms.common.exception.ResourceNotFoundException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -22,12 +24,18 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
+import java.net.URI;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.time.Duration;
 import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 
 @Slf4j
 @Service
@@ -42,10 +50,25 @@ public class AuthService {
     private final StringRedisTemplate redisTemplate;
     private final EmailService emailService;
     private final GoogleOAuthProvider googleOAuthProvider;
+    private final HttpServletRequest request;
+    private final ObjectMapper objectMapper;
+
+    @Value("${google.oauth.mobile-redirect-uri}")
+    private String googleMobileRedirectUri;
+
+    @Value("${lms.frontend-base-url:http://localhost:3000}")
+    private String frontendBaseUrl;
+
+    /** Scheme app mobile hợp lệ để redirect về sau khi đăng nhập Google — chặn open-redirect, xem app.json "scheme". */
+    private static final Set<String> ALLOWED_MOBILE_RETURN_SCHEMES = Set.of("exp", "mobile");
 
     private static final String LOGIN_FAIL_PREFIX = "login_fail:";
     private static final String REFRESH_TOKEN_PREFIX = "refresh_token:";
+    private static final String USER_TOKENS_PREFIX = "user_refresh_tokens:";
     private static final String PENDING_USER_PREFIX = "pending_user:";
+    private static final String GOOGLE_MOBILE_CODE_PREFIX = "oauth:google:mobile_code:";
+    /** Task 10: Hash {email} -> {refreshToken: JSON{deviceName,ip,lastActiveAt}} — chỉ phục vụ hiển thị danh sách thiết bị, tách biệt khỏi cơ chế xác thực refresh token. */
+    private static final String USER_SESSIONS_PREFIX = "user_sessions:";
 
     /**
      * B1 Đăng ký: Lưu tạm thông tin user vào Redis chờ xác thực OTP.
@@ -133,10 +156,54 @@ public class AuthService {
         CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
         
         // Lưu Refresh Token vào Redis với TTL 7 ngày (BR-AUTH-04)
-        // Lưu key là token, value là email. Có thể lưu thêm set user_refresh_tokens để thu hồi
         redisTemplate.opsForValue().set(REFRESH_TOKEN_PREFIX + refreshToken, userDetails.getEmail(), Duration.ofDays(7));
+        redisTemplate.opsForSet().add(USER_TOKENS_PREFIX + userDetails.getEmail(), refreshToken);
+        redisTemplate.expire(USER_TOKENS_PREFIX + userDetails.getEmail(), Duration.ofDays(7));
+
+        recordSessionMeta(userDetails.getEmail(), refreshToken);
 
         return new TokenRes(accessToken, refreshToken);
+    }
+
+    /** Task 10: ghi lại thiết bị/IP cho phiên này — best-effort, không được làm hỏng luồng đăng nhập nếu lỗi. */
+    private void recordSessionMeta(String email, String refreshToken) {
+        try {
+            String userAgent = request.getHeader("User-Agent");
+            String ip = extractClientIp();
+            java.util.Map<String, String> meta = new java.util.LinkedHashMap<>();
+            meta.put("deviceName", parseDeviceName(userAgent));
+            meta.put("ip", ip != null ? ip : "");
+            meta.put("lastActiveAt", java.time.LocalDateTime.now().toString());
+            redisTemplate.opsForHash().put(USER_SESSIONS_PREFIX + email, refreshToken, objectMapper.writeValueAsString(meta));
+            redisTemplate.expire(USER_SESSIONS_PREFIX + email, Duration.ofDays(7));
+        } catch (Exception e) {
+            log.warn("Không thể ghi session metadata cho {}: {}", email, e.getMessage());
+        }
+    }
+
+    private String extractClientIp() {
+        String forwarded = request.getHeader("X-Forwarded-For");
+        if (forwarded != null && !forwarded.isBlank()) {
+            return forwarded.split(",")[0].trim();
+        }
+        return request.getRemoteAddr();
+    }
+
+    /** Suy luận tên thiết bị đơn giản từ User-Agent (không cần thư viện ngoài cho nhu cầu hiển thị cơ bản). */
+    private String parseDeviceName(String ua) {
+        if (ua == null || ua.isBlank()) return "Thiết bị không xác định";
+        String browser = ua.contains("Edg/") ? "Edge"
+                : ua.contains("Chrome/") ? "Chrome"
+                : ua.contains("Firefox/") ? "Firefox"
+                : ua.contains("Safari/") && !ua.contains("Chrome") ? "Safari"
+                : "Trình duyệt";
+        String os = ua.contains("Windows") ? "Windows"
+                : ua.contains("Mac OS") ? "macOS"
+                : ua.contains("Android") ? "Android"
+                : ua.contains("iPhone") || ua.contains("iPad") ? "iOS"
+                : ua.contains("Linux") ? "Linux"
+                : "";
+        return os.isEmpty() ? browser : browser + " trên " + os;
     }
 
     public TokenRes refreshToken(RefreshTokenReq req) {
@@ -157,14 +224,60 @@ public class AuthService {
         Authentication authentication = new UsernamePasswordAuthenticationToken(
                 new CustomUserDetails(user), null, new CustomUserDetails(user).getAuthorities());
 
-        // Xóa token cũ, sinh cặp token mới (Rotation)
+        // BUG THẬT (12/10/2026, user báo cáo — "Xem thêm 531 thiết bị") — Xóa token cũ, sinh cặp
+        // token mới (Rotation) trước đây CHỈ xoá key `refresh_token:{token}` (value-lookup), KHÔNG
+        // xoá token cũ khỏi Set `user_refresh_tokens:{email}` hay Hash `user_sessions:{email}` —
+        // mỗi lần FE tự động refresh token ngầm (không phải đăng nhập mới) đều CỘNG THÊM 1 bản ghi
+        // "thiết bị" vào danh sách mà không bao giờ dọn bản ghi cũ. Vì `generateTokens()` gọi
+        // `.expire()` lại TTL 7 ngày mỗi lần, Set/Hash gần như KHÔNG BAO GIỜ tự hết hạn khi tài
+        // khoản còn hoạt động — số "thiết bị" phình vô hạn theo số lần refresh, không phản ánh số
+        // thiết bị thật. Giờ dọn cả 2 nơi trước khi sinh token mới, token cũ KHÔNG còn hiện trong
+        // danh sách thiết bị nữa sau khi rotate.
         redisTemplate.delete(REFRESH_TOKEN_PREFIX + req.refreshToken());
+        redisTemplate.opsForSet().remove(USER_TOKENS_PREFIX + email, req.refreshToken());
+        redisTemplate.opsForHash().delete(USER_SESSIONS_PREFIX + email, req.refreshToken());
         return generateTokens(authentication);
     }
 
     public void logout(String refreshToken) {
-        // Thu hồi refresh token hiện tại bằng cách xóa khỏi Redis
+        String email = redisTemplate.opsForValue().get(REFRESH_TOKEN_PREFIX + refreshToken);
+        if (email != null) {
+            redisTemplate.opsForSet().remove(USER_TOKENS_PREFIX + email, refreshToken);
+            redisTemplate.opsForHash().delete(USER_SESSIONS_PREFIX + email, refreshToken);
+        }
         redisTemplate.delete(REFRESH_TOKEN_PREFIX + refreshToken);
+    }
+
+    public void logoutAllDevices(String email) {
+        java.util.Set<String> tokens = redisTemplate.opsForSet().members(USER_TOKENS_PREFIX + email);
+        if (tokens != null && !tokens.isEmpty()) {
+            for (String token : tokens) {
+                redisTemplate.delete(REFRESH_TOKEN_PREFIX + token);
+            }
+        }
+        redisTemplate.delete(USER_TOKENS_PREFIX + email);
+        redisTemplate.delete(USER_SESSIONS_PREFIX + email);
+        // Xoá cả phiên xem video hiện tại (nếu có) — key "user_stream:" dùng userId (Long), không
+        // phải email (PlayerHeartbeatService), nên phải tra User trước.
+        userRepository.findByEmail(email).ifPresent(user ->
+                redisTemplate.delete("user_stream:" + user.getId()));
+    }
+
+    /** Task 10: liệt kê các thiết bị/phiên đang đăng nhập (dựa trên refresh token còn hiệu lực). */
+    public java.util.List<java.util.Map<String, String>> getActiveSessions(String email) {
+        java.util.Map<Object, Object> entries = redisTemplate.opsForHash().entries(USER_SESSIONS_PREFIX + email);
+        java.util.List<java.util.Map<String, String>> result = new java.util.ArrayList<>();
+        for (Object value : entries.values()) {
+            try {
+                @SuppressWarnings("unchecked")
+                java.util.Map<String, String> meta = objectMapper.readValue((String) value, java.util.Map.class);
+                result.add(meta);
+            } catch (Exception e) {
+                log.warn("Bỏ qua session metadata hỏng cho {}: {}", email, e.getMessage());
+            }
+        }
+        result.sort((a, b) -> b.getOrDefault("lastActiveAt", "").compareTo(a.getOrDefault("lastActiveAt", "")));
+        return result;
     }
 
     /**
@@ -174,6 +287,7 @@ public class AuthService {
     public void forgotPassword(String email) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("User", email));
+        rejectIfGoogleAccount(user);
 
         String otp = generateOtp();
         String redisKey = "otp:forgot:" + email;
@@ -205,6 +319,7 @@ public class AuthService {
     public TokenRes resetPassword(String email, String otp, String newPassword) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("User", email));
+        rejectIfGoogleAccount(user);
 
         String redisKey = "otp:forgot:" + email;
         String storedOtp = redisTemplate.opsForValue().get(redisKey);
@@ -246,6 +361,57 @@ public class AuthService {
                 new CustomUserDetails(user), null, new CustomUserDetails(user).getAuthorities());
 
         return generateTokens(authentication);
+    }
+
+    /** Tài khoản Google không có mật khẩu (BR-AUTH-01) — mọi luồng đặt lại mật khẩu (OTP, link Admin)
+     * đều phải chặn, nếu không {@code setAuthProvider("LOCAL")} sẽ biến tài khoản Google thành LOCAL (05/11/2026). */
+    private void rejectIfGoogleAccount(User user) {
+        if ("GOOGLE".equals(user.getAuthProvider())) {
+            throw new BusinessRuleViolationException(
+                    "Tài khoản này đăng nhập bằng Google, không có mật khẩu để đặt lại. Vui lòng dùng nút Đăng nhập bằng Google.");
+        }
+    }
+
+    /**
+     * Admin hỗ trợ user khi quên-mật-khẩu-nhưng-email/OTP không tới được (23/10/2026) — khác
+     * hẳn {@link #forgotPassword}: sinh 1 token ngẫu nhiên thay vì OTP. Từ 05/11/2026 link được
+     * tự động gửi qua email cho user; link vẫn trả về cho Admin làm dự phòng (mail lỗi/vào spam).
+     * TTL 30 phút.
+     */
+    public ResetLinkRes generateAdminResetLink(String email) {
+        User target = userRepository.findByEmail(email).orElseThrow(() -> new ResourceNotFoundException("User", email));
+        rejectIfGoogleAccount(target);
+
+        String token = UUID.randomUUID().toString();
+        String redisKey = "pwreset:token:" + token;
+        Duration ttl = Duration.ofMinutes(30);
+        redisTemplate.opsForValue().set(redisKey, email, ttl);
+
+        String resetLink = frontendBaseUrl + "/reset-password?token=" + token;
+        java.time.LocalDateTime expiresAt = java.time.LocalDateTime.now().plus(ttl);
+        // Best-effort (05/11/2026): lỗi gửi mail không throw — Admin vẫn thấy link ở UI làm dự phòng.
+        emailService.sendPasswordResetLinkEmail(email, resetLink, expiresAt);
+
+        return new ResetLinkRes(resetLink, expiresAt);
+    }
+
+    /** Consume token sinh bởi {@link #generateAdminResetLink} — không auto-login, user tự đăng nhập lại. */
+    @Transactional
+    public void resetPasswordByToken(String token, String newPassword) {
+        String redisKey = "pwreset:token:" + token;
+        String email = redisTemplate.opsForValue().get(redisKey);
+        if (email == null) {
+            throw new BusinessRuleViolationException("Link đặt lại mật khẩu đã hết hạn hoặc không hợp lệ");
+        }
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User", email));
+        // Chặn cả lúc consume: token sinh trước khi có guard ở generateAdminResetLink vẫn không đổi được tài khoản Google.
+        rejectIfGoogleAccount(user);
+
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        user.setAuthProvider("LOCAL");
+        userRepository.save(user);
+        redisTemplate.delete(redisKey);
     }
 
     /**
@@ -296,6 +462,72 @@ public class AuthService {
                 new CustomUserDetails(user), null, new CustomUserDetails(user).getAuthorities());
 
         return generateTokens(authentication);
+    }
+
+    /**
+     * Luồng mobile (Expo Go không mở được custom URL scheme nên không thể nhận id_token trực
+     * tiếp như web) — BE đứng giữa nhận redirect từ Google (`code` qua HTTPS), tự đổi lấy
+     * id_token bằng client secret (app không bao giờ cầm secret), rồi tái dùng {@link #loginWithGoogle}
+     * y hệt luồng web. Thay vì nhét thẳng JWT vào URL redirect (lộ qua lịch sử trình duyệt/log),
+     * sinh 1 mã dùng-1-lần ngắn hạn để app đổi lấy JWT thật ở bước sau ({@link #exchangeGoogleMobileCode}).
+     *
+     * @param code authorization code Google trả về
+     * @param state do app sinh ra lúc mở trình duyệt — ở đây chỉ chứa URL redirect về app (urlencoded),
+     *              KHÔNG phải CSRF token thật vì bước này chưa có session nào để đối chiếu; vẫn an toàn vì
+     *              scheme bị chặn whitelist nên không thể lợi dụng làm open-redirect ra ngoài app.
+     * @return URL đầy đủ để 302 redirect về app (kèm mã dùng-1-lần), vd {@code exp://.../--/google-auth-return?code=...}
+     */
+    @Transactional
+    public String handleGoogleMobileCallback(String code, String state) throws GeneralSecurityException, IOException {
+        String appReturnUrl = state != null ? URLDecoder.decode(state, StandardCharsets.UTF_8) : null;
+        if (appReturnUrl == null || appReturnUrl.isBlank()) {
+            throw new BusinessRuleViolationException("Thiếu thông tin redirect về app (state).");
+        }
+
+        URI appReturnUri = URI.create(appReturnUrl);
+        String scheme = appReturnUri.getScheme();
+        boolean isAllowedAppScheme = scheme != null && ALLOWED_MOBILE_RETURN_SCHEMES.contains(scheme.toLowerCase());
+        // http(s)://localhost | 127.0.0.1 — CHỈ để test nhanh bằng `expo start --web` lúc dev,
+        // không dùng lúc demo/production (Expo Go thật luôn trả về scheme exp://). Giới hạn
+        // đúng host loopback nên không thể lợi dụng làm open-redirect ra domain ngoài.
+        boolean isLocalWebDev = scheme != null && (scheme.equalsIgnoreCase("http") || scheme.equalsIgnoreCase("https"))
+                && appReturnUri.getHost() != null
+                && (appReturnUri.getHost().equalsIgnoreCase("localhost") || appReturnUri.getHost().equals("127.0.0.1"));
+        if (!isAllowedAppScheme && !isLocalWebDev) {
+            throw new BusinessRuleViolationException("Redirect scheme không hợp lệ.");
+        }
+
+        String idToken = googleOAuthProvider.exchangeCodeForIdToken(code, googleMobileRedirectUri);
+        TokenRes tokens = loginWithGoogle(idToken);
+
+        String exchangeCode = UUID.randomUUID().toString();
+        try {
+            redisTemplate.opsForValue().set(
+                    GOOGLE_MOBILE_CODE_PREFIX + exchangeCode,
+                    objectMapper.writeValueAsString(tokens),
+                    Duration.ofMinutes(2));
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            throw new RuntimeException(e);
+        }
+
+        String separator = appReturnUrl.contains("?") ? "&" : "?";
+        return appReturnUrl + separator + "code=" + exchangeCode;
+    }
+
+    /** Đổi mã dùng-1-lần (sinh ở {@link #handleGoogleMobileCallback}) lấy JWT thật — xoá ngay sau khi đọc. */
+    public TokenRes exchangeGoogleMobileCode(String code) {
+        String key = GOOGLE_MOBILE_CODE_PREFIX + code;
+        String json = redisTemplate.opsForValue().get(key);
+        if (json == null) {
+            throw new BusinessRuleViolationException("Mã xác thực đã hết hạn hoặc không hợp lệ.");
+        }
+        redisTemplate.delete(key);
+
+        try {
+            return objectMapper.readValue(json, TokenRes.class);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     /**

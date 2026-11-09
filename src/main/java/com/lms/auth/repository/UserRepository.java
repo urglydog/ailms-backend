@@ -1,7 +1,14 @@
 package com.lms.auth.repository;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Slice;
 import com.lms.auth.entity.User;
+import com.lms.common.enums.Role;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -12,6 +19,54 @@ import org.springframework.stereotype.Repository;
  */
 @Repository
 public interface UserRepository extends JpaRepository<User, Long> {
-    
+
     java.util.Optional<User> findByEmail(String email);
+
+    /** Auto-ban bằng AI (25/09/2026) — danh sách đề xuất khoá đang chờ Admin xử lý. */
+    java.util.List<User> findByAiLockProposedAtIsNotNull();
+
+    /** Thông báo hệ thống từ Admin (26/09/2026) — phạm vi INSTRUCTOR/STUDENT. */
+    java.util.List<User> findByRole(Role role);
+
+    /** Ranking cộng đồng (XpService) — UPDATE atomic, KHÔNG load-modify-save, để 2 hành động
+     * cộng XP cùng lúc của 1 user (hiếm nhưng có thể) không ghi đè lẫn nhau. */
+    @Modifying
+    @Query("UPDATE User u SET u.totalXp = u.totalXp + :amount WHERE u.id = :userId")
+    int addXp(@Param("userId") Long userId, @Param("amount") long amount);
+
+    /** Top N học viên theo XP, dùng cho leaderboard trang chủ — CHỈ người đã có XP (>0), không
+     * liệt kê user chưa làm gì chỉ vì bảng còn ít dữ liệu (bug thật 05/10/2026: ban đầu dùng
+     * {@code findByOrderByTotalXpDesc} không lọc, mọi user total_xp=0 vẫn bị xếp "hạng 1-5" một
+     * cách vô nghĩa theo thứ tự ngẫu nhiên của DB). */
+    java.util.List<User> findByTotalXpGreaterThanOrderByTotalXpDesc(long totalXp, Pageable pageable);
+
+    /** Hạng của 1 user = số người có nhiều XP hơn + 1 — không cần tải cả bảng. */
+    long countByTotalXpGreaterThan(Long totalXp);
+    /** ID người nhận thông báo hệ thống theo lô ({@code role} null = mọi người dùng) — không nạp entity (hiệu năng đợt 3). */
+    @Query("SELECT u.id FROM User u WHERE (:role IS NULL OR u.role = :role) ORDER BY u.id")
+    Slice<Long> findIdsForAudience(@Param("role") Role role, Pageable pageable);
+
+    @Query("SELECT COUNT(u) FROM User u WHERE (:role IS NULL OR u.role = :role)")
+    long countForAudience(@Param("role") Role role);
+
+    /**
+     * Trang Quản lý người dùng (Admin) — tìm theo tên/email, lọc vai trò/bị khóa/bị gắn cờ spam, sắp xếp và
+     * phân trang NGAY TRONG DB (hiệu năng đợt 3; trước đây tải toàn bộ người dùng về trình duyệt).
+     * {@code q} đã chuẩn hóa thành {@code %từ khóa%} (chữ thường) hoặc null.
+     */
+    @Query("SELECT u FROM User u WHERE (:q IS NULL OR LOWER(u.fullName) LIKE :q OR LOWER(u.email) LIKE :q) "
+            + "AND (:role IS NULL OR u.role = :role) "
+            + "AND (:lockedOnly = false OR u.isActive = false) "
+            + "AND (:spamOnly = false OR u.isSpamFlagged = true)")
+    Page<User> searchForAdmin(@Param("q") String q, @Param("role") Role role, @Param("lockedOnly") boolean lockedOnly,
+                              @Param("spamOnly") boolean spamOnly, Pageable pageable);
+
+    /** Số người dùng theo vai trò — mỗi dòng là [Role, Long]. */
+    @Query("SELECT u.role, COUNT(u) FROM User u GROUP BY u.role")
+    java.util.List<Object[]> countGroupedByRole();
+
+    long countByIsActiveFalse();
+
+    long countByIsSpamFlaggedTrue();
+
 }

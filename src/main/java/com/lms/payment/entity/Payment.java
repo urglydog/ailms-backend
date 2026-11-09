@@ -4,6 +4,9 @@ import com.lms.common.entity.BaseEntity;
 import com.lms.auth.entity.User;
 import com.lms.catalog.entity.Course;
 import com.lms.common.enums.PaymentStatus;
+import com.lms.common.enums.RevenueSource;
+import com.lms.coupon.entity.Coupon;
+import com.lms.bundle.entity.CourseBundle;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import jakarta.persistence.*;
@@ -21,9 +24,13 @@ import lombok.Setter;
  * IPN — cổng thanh toán gửi lại callback thành công lần thứ hai phải bị nhận diện và
  * bỏ qua, không được tạo Enrollment thứ hai.
  *
- * <p><b>BR-PAY-05:</b> {@code platformFee} (30%) và {@code instructorEarning} (70%)
- * được tính và <b>chốt cứng tại thời điểm PAID</b>, không tính lại lúc hiển thị —
- * để số liệu thống kê không lệch nếu tỷ lệ % thay đổi trong tương lai.
+ * <p><b>BR-PAY-05 (20/09/2026, thay bằng chia doanh thu 2 mức):</b> {@code platformFee}
+ * và {@code instructorEarning} được tính và <b>chốt cứng tại thời điểm PAID</b>, không
+ * tính lại lúc hiển thị — để số liệu thống kê không lệch nếu tỷ lệ % thay đổi trong tương
+ * lai. Tỷ lệ áp dụng phụ thuộc {@link #revenueSource}, chốt SẴN lúc tạo đơn (trước PAID):
+ * {@code ORGANIC} → Giảng viên 37% / nền tảng 63%; {@code INSTRUCTOR_REFERRAL} (mua qua
+ * liên kết giới thiệu riêng của Giảng viên, {@code Course.referralCode}) → Giảng viên
+ * 97% / nền tảng 3%. Xem {@code PaymentService.resolveRevenueSource}/{@code applyOutcome}.
  */
 @Entity
 @Table(name = "payments")
@@ -35,19 +42,54 @@ public class Payment extends BaseEntity {
     @Column(name = "txn_ref", nullable = false, unique = true, length = 100)
     private String txnRef;
 
-    /** Lấy từ giá server, KHÔNG nhận từ client (BR-PAY-02). */
+    /** Giỏ hàng (06/09/2026, mở rộng ngoài đặc tả gốc) — các Payment tạo CÙNG 1 lần bấm
+     * "Proceed to Checkout" (gộp thanh toán nhiều khóa) chia sẻ chung giá trị này, để
+     * webhook cổng thanh toán xác nhận CẢ NHÓM cùng lúc (xem {@code PaymentService.
+     * processGatewayCallback}). NULL ở luồng mua 1 khóa trực tiếp (UC13/UC14, không đổi). */
+    @Column(name = "order_group_ref", length = 50)
+    private String orderGroupRef;
+
+    /** Lấy từ giá server, KHÔNG nhận từ client (BR-PAY-02). Là giá THỰC THU, đã trừ giảm giá
+     * nếu có coupon áp dụng (15/09/2026, mở rộng) — BR-PAY-05 (30/70) tính trên field này. */
     @Column(name = "amount", nullable = false, precision = 12, scale = 2)
     private BigDecimal amount;
 
-    /** = amount x 30%, chốt cứng lúc PAID (BR-PAY-05). */
+    /** Giá khóa học TRƯỚC khi trừ coupon — NULL nếu không áp coupon nào (15/09/2026, mở rộng). */
+    @Column(name = "original_amount", precision = 12, scale = 2)
+    private BigDecimal originalAmount;
+
+    /** = originalAmount - amount, mặc định 0 nếu không có coupon (15/09/2026, mở rộng). */
+    @Column(name = "discount_amount", nullable = false, precision = 12, scale = 2)
+    private BigDecimal discountAmount = BigDecimal.ZERO;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "coupon_id")
+    private Coupon coupon;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "bundle_id")
+    private CourseBundle bundle;
+
+    /** = amount x (63% ORGANIC hoặc 3% INSTRUCTOR_REFERRAL tùy {@link #revenueSource}), chốt
+     * cứng lúc PAID (BR-PAY-05, xem {@code PaymentService.applyOutcome}).
+     * (29/09/2026, sửa comment lỗi thời) — còn sót từ model chia 30/70 cũ, đã đổi sang 2 mức từ
+     * migration V122__revenue_share_referral.sql, comment cũ chưa cập nhật theo. */
     @Column(name = "platform_fee", nullable = false, precision = 12, scale = 2)
     private BigDecimal platformFee = BigDecimal.ZERO;
 
-    /** = amount x 70%, chốt cứng lúc PAID (BR-PAY-05). */
+    /** = amount x (37% ORGANIC hoặc 97% INSTRUCTOR_REFERRAL tùy {@link #revenueSource}), chốt
+     * cứng lúc PAID (BR-PAY-05). (29/09/2026, sửa comment lỗi thời) — bản cũ ghi ngược 2 tỷ lệ
+     * này với {@link #platformFee}, xem thực tế tại {@code PaymentService.applyOutcome}. */
     @Column(name = "instructor_earning", nullable = false, precision = 12, scale = 2)
     private BigDecimal instructorEarning = BigDecimal.ZERO;
 
-    /** MOMO / ZALOPAY / VNPAY (đều Sandbox). */
+    /** Chốt lúc TẠO đơn (không đổi được sau đó) — quyết định tỷ lệ ăn chia áp dụng lúc PAID,
+     * xem docblock lớp. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "revenue_source", nullable = false, length = 20)
+    private RevenueSource revenueSource = RevenueSource.ORGANIC;
+
+    /** PAYOS (thật) / MOMO / ZALOPAY (dữ liệu demo). */
     @Column(name = "payment_method", nullable = false, length = 20)
     private String paymentMethod;
 

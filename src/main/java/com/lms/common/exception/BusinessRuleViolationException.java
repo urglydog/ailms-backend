@@ -14,4 +14,8 @@ public class BusinessRuleViolationException extends DomainException {
     public BusinessRuleViolationException(String message) {
         super(HttpStatus.UNPROCESSABLE_ENTITY, "BUSINESS_RULE_VIOLATION", message);
     }
+
+    public BusinessRuleViolationException(String code, String message) {
+        super(HttpStatus.UNPROCESSABLE_ENTITY, code, message);
+    }
 }

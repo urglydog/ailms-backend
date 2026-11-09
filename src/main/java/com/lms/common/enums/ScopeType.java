@@ -10,5 +10,6 @@ package com.lms.common.enums;
 public enum ScopeType {
     WHOLE_COURSE,
     CHAPTER,
-    COMPLETED_LESSONS
+    COMPLETED_LESSONS,
+    CUSTOM_LESSONS
 }

@@ -1,8 +1,14 @@
 package com.lms.catalog.repository;
 
+import com.lms.catalog.repository.projection.CourseLessonStats;
+import java.util.Collection;
+import com.lms.enrollment.repository.projection.CourseLessonRef;
 import com.lms.catalog.entity.Lesson;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -20,4 +26,36 @@ public interface LessonRepository extends JpaRepository<Lesson, Long> {
     long countByChapter_CourseIdAndStatus(Long courseId, String status);
 
     List<Lesson> findByChapterIdOrderByDisplayOrderAsc(Long chapterId);
+
+    /** "Học ngay" (my-courses) — bài học đầu tiên của khoá theo đúng thứ tự chương rồi bài. */
+    Optional<Lesson> findFirstByChapter_CourseIdOrderByChapter_DisplayOrderAscDisplayOrderAsc(Long courseId);
+
+    /** "Học tiếp" (my-courses) — mọi bài của khóa theo đúng thứ tự chương rồi bài, để tìm bài kế tiếp. */
+    List<Lesson> findByChapter_CourseIdOrderByChapter_DisplayOrderAscDisplayOrderAsc(Long courseId);
+
+    /** UC09 mở rộng (14/09/2026) — tổng thời lượng video của khóa, dùng cho bộ lọc "Video Duration". */
+    @Query("SELECT COALESCE(SUM(l.durationSec), 0) FROM Lesson l WHERE l.chapter.course.id = :courseId")
+    int sumDurationSecByCourseId(@Param("courseId") Long courseId);
+
+    /**
+     * UC10 mở rộng (14/09/2026) — "ngôn ngữ gốc" hiển thị ở trang chi tiết khóa kiểu Udemy.
+     * {@code sourceLanguage} tự điền sau lần bóc băng đầu tiên của MỖI bài (BR-DUB-09), nên lấy
+     * bài đầu tiên (theo đúng thứ tự chương-bài) đã có giá trị này làm đại diện cho cả khóa.
+     */
+    Optional<Lesson> findFirstByChapter_CourseIdAndSourceLanguageIsNotNullOrderByChapter_DisplayOrderAscDisplayOrderAsc(Long courseId);
+
+    /** Reschedule Study Plan — tra cứu tên chương cho từng bài, dùng LEFT JOIN
+     *  để bài chưa gán chapter trả null thay vì bị loại khỏi kết quả. */
+    @Query("SELECT l.id, c.title FROM Lesson l LEFT JOIN l.chapter c WHERE l.id IN :ids")
+    List<Object[]> findChapterTitlesByLessonIds(@Param("ids") java.util.Collection<Long> ids);
+    /** Mọi bài học của các khóa cho trước, theo thứ tự khóa → chương → bài (1 truy vấn cho cả danh sách). */
+    @Query("SELECT new com.lms.enrollment.repository.projection.CourseLessonRef(ch.course.id, l.id) FROM Lesson l JOIN l.chapter ch "
+            + "WHERE ch.course.id IN :courseIds ORDER BY ch.course.id, ch.displayOrder, l.displayOrder")
+    List<CourseLessonRef> findLessonRefsByCourseIds(@Param("courseIds") Collection<Long> courseIds);
+
+    /** Số bài và tổng thời lượng của nhiều khóa trong 1 truy vấn (trang kết quả tìm kiếm). */
+    @Query("SELECT new com.lms.catalog.repository.projection.CourseLessonStats(ch.course.id, COUNT(l), COALESCE(SUM(l.durationSec), 0)) "
+            + "FROM Lesson l JOIN l.chapter ch WHERE ch.course.id IN :courseIds GROUP BY ch.course.id")
+    List<CourseLessonStats> findLessonStatsByCourseIds(@Param("courseIds") Collection<Long> courseIds);
+
 }

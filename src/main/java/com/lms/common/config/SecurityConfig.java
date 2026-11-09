@@ -1,6 +1,10 @@
 package com.lms.common.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.net.URI;
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -13,13 +17,22 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
+import com.lms.common.ratelimit.RateLimitFilter;
 import com.lms.auth.security.JwtAuthenticationFilter;
 import com.lms.auth.security.CustomUserDetailsService;
+import com.lms.common.security.InternalApiTokenFilter;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.core.annotation.Order;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.security.web.AuthenticationEntryPoint;
+import org.springframework.security.web.access.AccessDeniedHandler;
 import lombok.RequiredArgsConstructor;
 /**
  * Cấu hình bảo mật — <b>khung sườn của Giai đoạn 0</b>.
@@ -40,6 +53,8 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final CustomUserDetailsService customUserDetailsService;
+    private final InternalApiTokenFilter internalApiTokenFilter;
+    private final RateLimitFilter rateLimitFilter;
 
     /**
      * Danh sách endpoint public — khớp mục "Nhóm endpoint public" trong
@@ -53,22 +68,111 @@ public class SecurityConfig {
             "/api/v1/auth/**",          // UC01 đăng ký, UC02 đăng nhập, UC04 quên mật khẩu
             "/api/v1/oauth2/**",        // UC02 Google OAuth2
             "/api/v1/payments/callback/**", // UC14 IPN từ cổng thanh toán (xác thực bằng HMAC, không phải JWT)
+            "/api/v1/payments/payos/webhook",
             "/api/v1/payments/ipn-mock",
+            // UC49 Course Discovery — stateless, cho phép Guest gọi (quota theo IP, kiểm trong controller)
+            "/api/v1/discovery/chat",
+            // Ticket hỗ trợ (05/11/2026) — khách chưa đăng nhập (vd quên mật khẩu) vẫn gửi được; chống spam theo IP/email trong SupportTicketService
+            "/api/v1/support/tickets",
+            // Giai đoạn 11 (F11.1) — LiveKit Cloud gọi vào, không có JWT của hệ thống; xác thực
+            // thật là chữ ký HMAC kiểm trong LiveKitWebhookController (giống HMAC IPN thanh toán)
+            "/api/v1/live/webhooks/livekit",
             "/ws/**"                    // handshake WebSocket, token kiểm ở tầng STOMP
     };
 
-    /** Endpoint public chỉ cho phép đọc: UC09 tìm kiếm, UC10 chi tiết, UC11 preview, UC49 chat. */
+    /** Endpoint public chỉ cho phép đọc: UC09 tìm kiếm, UC10 chi tiết, UC11 preview. */
     private static final String[] PUBLIC_GET_ENDPOINTS = {
+            "/api/v1/courses",
             "/api/v1/courses/**",
+            "/api/v1/categories",
             "/api/v1/categories/**",
-            "/api/v1/discovery/**"
+            "/api/v1/lessons/**",
+            // UC20 mở rộng — danh mục ngôn ngữ/giọng đọc đang hỗ trợ, dữ liệu tham chiếu công khai
+            // giống courses/categories, không gắn với 1 bài học hay tài khoản cụ thể nào.
+            "/api/v1/voice-options",
+            // "View public profile" (14/09/2026, mở rộng) — hồ sơ công khai xem được không cần
+            // đăng nhập, giống cách khách vãng lai xem chi tiết khóa học (UC10). "/me/**" và các
+            // path 1-đoạn khác dưới "/api/v1/users" KHÔNG khớp "/*/public-profile" (đúng 1 đoạn
+            // biến duy nhất) nên vẫn bắt buộc JWT như cũ.
+            "/api/v1/users/*/public-profile",
+            // Giai đoạn 11 (F11.2, UC51) — Guest xem được live PUBIC (BR-LIVE-01); quyền xem THẬT
+            // lọc ở LiveViewService, endpoint này chỉ mở cửa Spring Security, không phải "ai xem
+            // gì cũng được". "/api/v1/courses/{id}/live-sessions" đã nằm dưới "/api/v1/courses/**"
+            // ở trên rồi nên không cần liệt kê lại ở đây.
+            "/api/v1/live-sessions/*/view",
+            // Giai đoạn 11 (F11.3, UC52) — badge số người nghe/ngôn ngữ đang phát hiện cho cả
+            // Guest (BR-LIVE-06 chỉ giới hạn NGÔN NGỮ nào hợp lệ, không giới hạn AI XEM được badge
+            // này); kích hoạt/rời (POST/DELETE cùng path) vẫn bắt buộc JWT vì không nằm trong
+            // PUBLIC_GET_ENDPOINTS (chỉ áp dụng method GET, xem HttpMethod.GET bên dưới).
+            "/api/v1/live-sessions/*/language-tracks",
+            // F11.9 — tab "Công khai" trang /live, Guest xem được (BR-LIVE-01 PUBLIC). Path LITERAL
+            // "public" khác "/api/v1/live-sessions/{sessionId}/view" ở trên (khác số đoạn đường
+            // dẫn) và khác "/api/v1/live-sessions/{sessionId}" của LiveSessionController (đoạn
+            // literal luôn được Spring ưu tiên khớp trước {biến} cùng vị trí — không cần thêm gì
+            // để tránh 2 route đó "cắn" nhau). Tab "Khóa học của tôi" (endpoint /enrolled) CỐ TÌNH
+            // không liệt kê ở đây — bắt buộc JWT, rơi vào anyRequest().authenticated() mặc định.
+            "/api/v1/live-sessions/public",
+            // /api/v1/discovery/** đã chuyển sang PUBLIC_ENDPOINTS vì discovery/chat là POST, không phải GET
+            // BR-CERT-06 — trang xác thực chứng chỉ công khai, nhà tuyển dụng không có tài khoản
+            // cũng xem được. KHÔNG khớp "/api/v1/certificates/{code}"/"/{code}/pdf" (đoạn "verify"
+            // literal khác số đoạn đường dẫn) nên 2 endpoint đó vẫn bắt buộc JWT như bình thường.
+            "/api/v1/certificates/verify/**",
+            // (26/09/2026, tính năng mới) — banner "Bảo trì hệ thống" (severity HIGH) phải hiện
+            // được cho CẢ khách vãng lai chưa đăng nhập, không chỉ user đã đăng nhập.
+            "/api/v1/system-announcements/banner",
+            // Ranking cộng đồng (05/10/2026) — banner trang chủ hiện Top N cho CẢ khách vãng
+            // lai (giống cách trang chủ hiện courses nổi bật không cần đăng nhập). "/me" KHÔNG
+            // nằm trong danh sách này — vẫn bắt buộc JWT như bình thường.
+            "/api/v1/ranking/leaderboard"
     };
 
+    /**
+     * {@link InternalApiTokenFilter} là {@code @Component} nên Spring Boot TỰ ĐỘNG đăng
+     * ký nó như 1 servlet filter toàn cục (mọi request, kể cả {@code /actuator/health})
+     * — {@link #internalFilterChain} bên dưới CHỈ gắn nó vào 1 chain riêng, không phải
+     * đăng ký duy nhất. Phải tắt đăng ký tự động này, nếu không mọi request đều bị chặn
+     * vì thiếu {@code X-Internal-Token} (đã xảy ra thật: {@code JwtAuthenticationFilter}
+     * bị double-register tương tự nhưng vô hại vì nó không tự chặn request nào).
+     */
     @Bean
+    public FilterRegistrationBean<InternalApiTokenFilter> disableAutoRegistration(InternalApiTokenFilter filter) {
+        FilterRegistrationBean<InternalApiTokenFilter> registration = new FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
+    }
+
+    /** Rate limit chỉ chạy trong chuỗi security (sau CORS) — tắt đăng ký servlet tự động để không chạy 2 lần. */
+    @Bean
+    public FilterRegistrationBean<RateLimitFilter> disableRateLimitAutoRegistration(RateLimitFilter filter) {
+        FilterRegistrationBean<RateLimitFilter> registration = new FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
+    }
+
+    /**
+     * Chuỗi RIÊNG cho {@code /api/internal/**} — AI Worker gọi callback (F5.2) bằng
+     * secret {@code X-Internal-Token}, không phải JWT nên phải tách khỏi
+     * {@link #filterChain} chứ không thêm vào {@code PUBLIC_ENDPOINTS} (public thật sự
+     * sẽ không có bước xác thực nào — sai hoàn toàn với mục đích của nhóm endpoint này).
+     */
+    @Bean
+    @Order(1)
+    public SecurityFilterChain internalFilterChain(HttpSecurity http) throws Exception {
+        http
+                .securityMatcher("/api/internal/**")
+                .csrf(csrf -> csrf.ignoringRequestMatchers("/api/internal/**"))
+                .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
+                .addFilterBefore(internalApiTokenFilter, UsernamePasswordAuthenticationFilter.class);
+        return http.build();
+    }
+
+    @Bean
+    @Order(2)
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
                 // API stateless dùng JWT nên không cần CSRF token
-                .csrf(csrf -> csrf.disable())
+                .csrf(csrf -> csrf.ignoringRequestMatchers("/api/**", "/ws/**", "/actuator/**"))
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
@@ -77,8 +181,50 @@ public class SecurityConfig {
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(authenticationProvider())
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                // (23/10/2026, sửa bug thật) — mặc định Spring Security trả response RỖNG (không
+                // phải JSON) khi chặn ở tầng filter (vd user bị AccountLockRegistry chặn giữa
+                // phiên — xem docblock ở đó). FE lib/api/client.ts#parseProblem không parse được
+                // body rỗng nên rơi vào fallback "Yêu cầu thất bại với mã {status}" vô nghĩa.
+                .exceptionHandling(e -> e
+                        .authenticationEntryPoint(problemJsonEntryPoint())
+                        .accessDeniedHandler(problemJsonAccessDeniedHandler()));
         return http.build();
+    }
+
+    private AuthenticationEntryPoint problemJsonEntryPoint() {
+        return (request, response, authException) -> writeProblemJson(
+                response, HttpStatus.UNAUTHORIZED,
+                "Phiên đăng nhập không hợp lệ hoặc tài khoản đã bị khóa. Vui lòng đăng nhập lại.",
+                "AUTHENTICATION_REQUIRED", request.getRequestURI());
+    }
+
+    private AccessDeniedHandler problemJsonAccessDeniedHandler() {
+        return (request, response, accessDeniedException) -> writeProblemJson(
+                response, HttpStatus.FORBIDDEN,
+                "Bạn không có quyền thực hiện hành động này, hoặc tài khoản đã bị khóa.",
+                "ACCESS_DENIED", request.getRequestURI());
+    }
+
+    /** Cùng khuôn {@code ProblemDetail} với {@code GlobalExceptionHandler.build} — FE chỉ có 1
+     * cách parse lỗi duy nhất (xem lib/api/client.ts#parseProblem), không cần phân biệt lỗi đến
+     * từ filter chain hay từ controller advice. */
+    private void writeProblemJson(
+            jakarta.servlet.http.HttpServletResponse response, HttpStatus status,
+            String detail, String code, String path) throws java.io.IOException {
+        response.setStatus(status.value());
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        response.setCharacterEncoding("UTF-8");
+        Map<String, Object> body = Map.of(
+                "type", URI.create("https://lms.local/errors/" + code.toLowerCase().replace('_', '-')).toString(),
+                "title", status.getReasonPhrase(),
+                "status", status.value(),
+                "detail", detail,
+                "instance", path,
+                "code", code,
+                "timestamp", LocalDateTime.now().toString());
+        new ObjectMapper().writeValue(response.getWriter(), body);
     }
 
     @Bean
@@ -86,6 +232,20 @@ public class SecurityConfig {
         DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider();
         authProvider.setUserDetailsService(customUserDetailsService);
         authProvider.setPasswordEncoder(passwordEncoder());
+        // (23/10/2026, sửa bug thật) — mặc định Spring Security ném LockedException với message
+        // tiếng Anh cứng "User account is locked" khi isAccountNonLocked()=false lúc đăng nhập —
+        // GlobalExceptionHandler.handleAuthentication trả thẳng ex.getMessage() ra FE, user thấy
+        // câu tiếng Anh vô nghĩa thay vì biết rõ tài khoản bị khóa cần liên hệ Admin.
+        authProvider.setPreAuthenticationChecks(user -> {
+            if (!user.isAccountNonLocked()) {
+                throw new org.springframework.security.authentication.LockedException(
+                        "Tài khoản của bạn đã bị khóa. Vui lòng liên hệ quản trị viên để được hỗ trợ.");
+            }
+            if (!user.isEnabled()) {
+                throw new org.springframework.security.authentication.DisabledException(
+                        "Tài khoản của bạn đã bị vô hiệu hóa.");
+            }
+        });
         return authProvider;
     }
 
@@ -107,10 +267,13 @@ public class SecurityConfig {
      * CORS cho frontend dev. Giai đoạn 10 phải thay {@code localhost} bằng domain thật.
      * {@code allowCredentials(true)} cần thiết để browser gửi cookie refresh token.
      */
+    @Value("${lms.cors.allowed-origins:http://localhost:3000}")
+    private List<String> allowedOrigins;
+
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of("http://localhost:3000"));
+        config.setAllowedOriginPatterns(allowedOrigins);
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);

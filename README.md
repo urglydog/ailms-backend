@@ -72,3 +72,11 @@ Trước khi viết code, tra skill trong workspace cha:
 | Quy chuẩn code backend | `Skills/CodeSkills/04_TechStack/rules/lms/lms-springboot-backend.md` |
 
 Kế hoạch 11 giai đoạn: `doc/DEVELOPMENT_PLAN.md`.
+
+## Chặn rò rỉ secret trước khi push
+
+Mới clone repo? Cài hook kiểm tra secret trước khi push (không tự động theo git, phải cài tay 1 lần):
+```bash
+cp scripts/pre-push-check.sh .git/hooks/pre-push && chmod +x .git/hooks/pre-push
+```
+Hook quét commit sắp push tìm secret hardcode (Google/AWS/GitHub token, private key...) và file `.env`/`.pem`/`.key` bị track nhầm, chặn push nếu phát hiện. Cài thêm [gitleaks](https://github.com/gitleaks/gitleaks) (`gitleaks` trên `PATH`) để quét chính xác hơn — không có cũng chạy được bằng regex dự phòng. Bỏ qua 1 lần (không khuyến khích): `SKIP_PUSH_CHECK=1 git push`.

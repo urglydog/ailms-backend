@@ -26,13 +26,12 @@ services:
       --collation-server=utf8mb4_unicode_ci
       --default-authentication-plugin=caching_sha2_password
     environment:
+      TZ: Asia/Ho_Chi_Minh
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
       MYSQL_DATABASE: ${MYSQL_DATABASE:-lms_db}
       # App dùng user riêng, không dùng root (nguyên tắc least-privilege)
       MYSQL_USER: ${MYSQL_USER:-lms_user}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-lms_pass}
-    ports:
-      - "${MYSQL_PORT:-3306}:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
@@ -46,14 +45,12 @@ services:
     image: redis:7-alpine
     container_name: lms_redis
     restart: unless-stopped
-    command: redis-server --appendonly yes
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:?Thieu_Mat_Khau_Redis_trong_env}
     volumes:
       - redis_data:/data
     # Healthcheck để backend/worker chờ đúng thời điểm Redis sẵn sàng
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:?Thieu_Mat_Khau_Redis_trong_env}", "ping"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -64,7 +61,7 @@ services:
     container_name: lms_adminer
     restart: unless-stopped
     ports:
-      - "${ADMINER_PORT:-8081}:8080"
+      - "127.0.0.1:${ADMINER_PORT:-8083}:8080"
     environment:
       ADMINER_DEFAULT_SERVER: mysql
     depends_on:
@@ -78,8 +75,8 @@ services:
     container_name: lms_mailpit
     restart: unless-stopped
     ports:
-      - "${MAILPIT_UI_PORT:-8025}:8025"
-      - "${MAILPIT_SMTP_PORT:-1025}:1025"
+      - "127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025"
+      - "127.0.0.1:${MAILPIT_SMTP_PORT:-1025}:1025"
     environment:
       MP_MAX_MESSAGES: 500
       MP_SMTP_AUTH_ACCEPT_ANY: 1
@@ -93,9 +90,22 @@ services:
     container_name: lms_backend
     restart: unless-stopped
     ports:
-      - "${BACKEND_PORT:-8080}:8080"
+      - "127.0.0.1:${BACKEND_PORT:-8080}:8080"
     environment:
+      # BUG THUC TE (30/08/2026): container KHONG dat TZ nen chay UTC, trong khi JDBC URL ben
+      # duoi khai "serverTimezone=Asia/Ho_Chi_Minh" — MySQL Connector/J tin loi khai bao nay,
+      # tu quy doi moi LocalDateTime.now() (Hibernate @CreatedDate...) LECH +7 GIO truoc khi ghi
+      # xuong DB (vd: ChatSession.createdAt hien "future" so voi gio that cua may chu). Dat TZ
+      # dung thuc te de loi khai bao o tren tro thanh dung, sua tan goc thay vi sua tung cho.
+      TZ: Asia/Ho_Chi_Minh
+      LMS_CORS_ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
+      # Nap du lieu demo (khoa hoc YouTube + hoc vien/ghi danh/thanh toan gia lap) — chi them, khong xoa.
+      # Bat bang APP_DEMO_SEED_ENABLED=true; mat khau chung dat trong .env (khong commit).
+      APP_DEMO_SEED_ENABLED: ${APP_DEMO_SEED_ENABLED:-false}
+      APP_DEMO_SEED_PASSWORD: ${APP_DEMO_SEED_PASSWORD:-}
+      # Seed du lieu mau dev (4 class Dev*Seeder) — mac dinh tat.
+      DEV_SEED_ENABLED: ${DEV_SEED_ENABLED:-false}
       # Datasource
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-lms_db}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Ho_Chi_Minh&useUnicode=true&characterEncoding=UTF-8
       SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-lms_user}
@@ -104,13 +114,22 @@ services:
       # (property đã đổi tên từ Boot 3.0 — dùng tên cũ là Redis không kết nối được)
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
-      # Mail (Mailpit)
-      SPRING_MAIL_HOST: mailpit
-      SPRING_MAIL_PORT: 1025
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD:?Thieu_Mat_Khau_Redis_trong_env}
+      # Mail — mặc định Mailpit (local dev), điền SPRING_MAIL_* trong be/.env để chuyển
+      # sang Gmail SMTP thật (production) mà không cần đổi file này (27/09/2026).
+      SPRING_MAIL_HOST: ${SPRING_MAIL_HOST:-mailpit}
+      SPRING_MAIL_PORT: ${SPRING_MAIL_PORT:-1025}
+      SPRING_MAIL_USERNAME: ${SPRING_MAIL_USERNAME:-}
+      SPRING_MAIL_PASSWORD: ${SPRING_MAIL_PASSWORD:-}
+      SPRING_MAIL_SMTP_AUTH: ${SPRING_MAIL_SMTP_AUTH:-false}
+      SPRING_MAIL_SMTP_STARTTLS: ${SPRING_MAIL_SMTP_STARTTLS:-false}
+      MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-noreply@lms.local}
       # JWT — thời hạn theo BR-AUTH-04
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET chua duoc dat trong .env}
       JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
       JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-7d}
+      # Giai đoạn 5 — khóa Redis chống trùng job lồng tiếng (BR-DUB-05)
+      DUB_LOCK_TTL_SECONDS: ${DUB_LOCK_TTL_SECONDS:-1800}
       # Hạn ngạch nghiệp vụ (BR-DUB-06, BR-MAT-08, BR-TUTOR-04, BR-DISCOVERY-01)
       QUOTA_DUB_STUDENT_PER_DAY: ${QUOTA_DUB_STUDENT_PER_DAY:-15}
       QUOTA_DUB_INSTRUCTOR_PER_DAY: ${QUOTA_DUB_INSTRUCTOR_PER_DAY:-30}
@@ -122,10 +141,17 @@ services:
       B2_KEY_ID: ${B2_KEY_ID:-}
       B2_APPLICATION_KEY: ${B2_APPLICATION_KEY:-}
       B2_ENDPOINT: ${B2_ENDPOINT:-}
+      # YouTube Data API v3 — YoutubeMetadataService (05/09/2026, thay yt-dlp bị chặn IP VPS)
+      YOUTUBE_API_KEY: ${YOUTUBE_API_KEY:-}
       # Cổng thanh toán (Sandbox)
       MOMO_PARTNER_CODE: ${MOMO_PARTNER_CODE:-}
       MOMO_ACCESS_KEY: ${MOMO_ACCESS_KEY:-}
       MOMO_SECRET_KEY: ${MOMO_SECRET_KEY:-}
+      PAYOS_CLIENT_ID: ${PAYOS_CLIENT_ID:-}
+      PAYOS_API_KEY: ${PAYOS_API_KEY:-}
+      PAYOS_CHECKSUM_KEY: ${PAYOS_CHECKSUM_KEY:-}
+      PAYOS_RETURN_URL: ${PAYOS_RETURN_URL:-}
+      PAYOS_CANCEL_URL: ${PAYOS_CANCEL_URL:-}
       ZALOPAY_APP_ID: ${ZALOPAY_APP_ID:-}
       ZALOPAY_KEY1: ${ZALOPAY_KEY1:-}
       ZALOPAY_KEY2: ${ZALOPAY_KEY2:-}
@@ -133,8 +159,18 @@ services:
       VNPAY_HASH_SECRET: ${VNPAY_HASH_SECRET:-}
       # Google OAuth
       GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
+      # Chỉ dùng cho luồng mobile (BE tự đổi authorization code lấy id_token) — web vẫn
+      # verify id_token có sẵn từ GSI, không cần secret.
+      GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
+      # KHÔNG map GOOGLE_OAUTH_MOBILE_REDIRECT_URI ở đây — nếu set (kể cả rỗng) thì Spring coi
+      # biến môi trường "đã có giá trị" và bỏ qua default trong application.yml, dù giá trị đó
+      # là chuỗi rỗng. Chỉ set biến này ở be/.env khi thật sự cần đổi domain khác default.
       # Token nội bộ để AI Worker gọi callback về đây
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-dev-internal-token}
+      # Giai đoạn 11 — LiveKit Cloud (F11.1)
+      LIVEKIT_URL: ${LIVEKIT_URL:-}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
     volumes:
       - .:/app                              # hot-reload khi sửa code
       - backend_maven_cache:/root/.m2       # cache dependency Maven giữa các lần chạy
@@ -161,34 +197,23 @@ services:
     restart: unless-stopped
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     ports:
-      - "${AI_API_PORT:-8000}:8000"
+      - "127.0.0.1:${AI_API_PORT:-8000}:8000"
+    # Biến riêng của ai-worker (ASR/LLM/TTS/tham số pipeline/B2/Supabase) đọc từ
+    # project/ai-worker/.env — tách khỏi be/.env (Giai đoạn 5) để dễ quản lý theo service.
+    env_file:
+      - ../ai-worker/.env
     environment: &ai_env
-      REDIS_URL: redis://redis:6379/0
+      REDIS_URL: redis://:${REDIS_PASSWORD:?Thieu_Mat_Khau_Redis_trong_env}@redis:6379/0
       # AI Worker KHÔNG kết nối MySQL trực tiếp (xem architecture.md) —
       # mọi thay đổi dữ liệu phải gọi callback về backend.
       INTERNAL_BE_URL: http://backend:8080
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-dev-internal-token}
-      # STT: Groq mặc định (§5.1.1 — không phụ thuộc GPU).
-      # Đổi thành whisperx_local khi cần đo đối chứng cho Chương 6.
-      ASR_BACKEND: ${ASR_BACKEND:-groq}
-      GROQ_API_KEY: ${GROQ_API_KEY:-}
-      GROQ_ASR_MODEL: ${GROQ_ASR_MODEL:-whisper-large-v3-turbo}
-      # LLM: tên model đọc từ env, KHÔNG hardcode (BR-DUB-02)
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      GEMINI_API_KEYS: ${GEMINI_API_KEYS:-}
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.0-flash}
-      # TTS
-      EDGE_TTS_REGION: ${EDGE_TTS_REGION:-}
-      # RAG cho Socratic Tutor (BR-TUTOR-03)
-      SUPABASE_VECTOR_URL: ${SUPABASE_VECTOR_URL:-}
-      SUPABASE_VECTOR_KEY: ${SUPABASE_VECTOR_KEY:-}
-      # Cloud storage
-      B2_BUCKET_NAME: ${B2_BUCKET_NAME:-}
-      B2_KEY_ID: ${B2_KEY_ID:-}
-      B2_APPLICATION_KEY: ${B2_APPLICATION_KEY:-}
-      # Tham số pipeline (BR-CHUNK-02, BR-CHUNK-04)
-      CHUNK_MINUTES: ${CHUNK_MINUTES:-10}
-      MAX_RETRY: ${MAX_RETRY:-3}
+      # CHỈ 3 biến thực sự dùng chung với `be` mới liệt kê ở đây. Mọi biến riêng của
+      # ai-worker (ASR/LLM/TTS/tham số pipeline/B2/Supabase) đã đọc qua `env_file:` ở
+      # trên rồi — liệt kê lại bằng ${VAR:-...} là BUG: giá trị đó nội suy từ `.env`
+      # GỐC (`project/be/.env`), không phải `project/ai-worker/.env`, nên sẽ ĐÈ giá
+      # trị thật bằng chuỗi rỗng/giá trị mặc định (đã từng vá lỗi này 1 lần, bị tái
+      # lập lại — xem GEMINI_API_KEY từng bị rỗng dù `.env` của ai-worker có key thật).
     volumes:
       - ../ai-worker:/app
       - ai_tmp_storage:/tmp/lms-processing   # file trung gian, xoá ≤24h (BR-STORAGE-01)
@@ -204,7 +229,9 @@ services:
       dockerfile: Dockerfile
     container_name: lms_ai_worker
     restart: unless-stopped
-    command: celery -A app.celery_app worker --loglevel=info --concurrency=2
+    command: celery -A app.celery_app worker --loglevel=info --concurrency=8
+    env_file:
+      - ../ai-worker/.env
     environment: *ai_env
     volumes:
       - ../ai-worker:/app
@@ -223,6 +250,8 @@ services:
     container_name: lms_ai_beat
     restart: unless-stopped
     command: celery -A app.celery_app beat --loglevel=info
+    env_file:
+      - ../ai-worker/.env
     environment: *ai_env
     volumes:
       - ../ai-worker:/app
@@ -238,19 +267,42 @@ services:
     container_name: lms_frontend_dev
     restart: unless-stopped
     ports:
-      - "${FRONTEND_PORT:-3000}:3000"
+      - "127.0.0.1:${FRONTEND_PORT:-3000}:3000"
+    # Biến riêng của frontend (NEXT_PUBLIC_*) đọc từ project/fe/.env — tách khỏi
+    # be/.env (Giai đoạn 5) để dễ quản lý theo service.
+    env_file:
+      - ../fe/.env
     environment:
       # Browser gọi qua localhost (người dùng thật gõ URL này)
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080}
       # Server Component fetch TỪ TRONG container — phải dùng tên service,
       # localhost trong container là chính container frontend, không phải backend.
+      # Không phải thứ người dùng chỉnh nên giữ hardcode, không đưa vào .env.
       INTERNAL_API_URL: http://backend:8080
       NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-http://localhost:8080}
+      # Google OAuth2 — NEXT_PUBLIC_* phải được truyền vào đây để Next.js bake vào bundle
+      NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-${GOOGLE_OAUTH_CLIENT_ID:-}}
       WATCHPACK_POLLING: "true"   # hot-reload qua bind mount trên Windows/WSL2
     volumes:
       - ../fe:/app
       - frontend_node_modules:/app/node_modules   # giữ node_modules của container
       - frontend_next_cache:/app/.next
+    depends_on:
+      backend:
+        condition: service_started
+
+  # ── Service 4: Reverse Proxy (Caddy) ──────────────────────────
+  # Tự động cấp chứng chỉ HTTPS (SSL) cho nip.io để giải quyết lỗi 
+  # Vercel 500 và lỗi Mixed Content trên trình duyệt.
+  caddy:
+    image: caddy:2-alpine
+    container_name: lms_caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8443:443"
+    command: caddy reverse-proxy --from 46.224.175.90.nip.io --to backend:8080
     depends_on:
       backend:
         condition: service_started

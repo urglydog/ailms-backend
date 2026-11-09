@@ -1,0 +1,549 @@
+package com.lms.material.service;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.lms.auth.entity.User;
+import com.lms.auth.repository.UserRepository;
+import com.lms.auth.security.AccountRestrictionService;
+import com.lms.catalog.entity.Course;
+import com.lms.catalog.repository.CourseRepository;
+import com.lms.common.enums.GenStatus;
+import com.lms.common.exception.AccessDeniedDomainException;
+import com.lms.common.exception.BusinessRuleViolationException;
+import com.lms.common.exception.ResourceNotFoundException;
+import com.lms.enrollment.repository.EnrollmentRepository;
+import com.lms.material.dto.MaterialGenerationReq;
+import com.lms.material.dto.MaterialGenerationRes;
+import com.lms.material.entity.MaterialGeneration;
+import com.lms.material.repository.MaterialGenerationRepository;
+import com.lms.material.dto.LanguageAvailabilityRes;
+import com.lms.dubbing.repository.TranscriptRepository;
+import com.lms.dubbing.repository.VoiceMappingRepository;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+/**
+ * Service xử lý sinh học liệu (Mindmap, Quiz, Flashcard).
+ * Tích hợp AI Worker qua Redis Queue.
+ */
+@Service
+@RequiredArgsConstructor
+public class MaterialGenerationService {
+
+    private final UserRepository userRepository;
+    private final CourseRepository courseRepository;
+    private final EnrollmentRepository enrollmentRepository;
+    private final MaterialGenerationRepository materialGenerationRepository;
+    private final com.lms.material.repository.MindmapRepository mindmapRepository;
+    private final com.lms.material.repository.FlashcardDeckRepository flashcardDeckRepository;
+    private final com.lms.material.repository.FlashcardRepository flashcardRepository;
+    private final com.lms.material.repository.FlashcardReviewRepository flashcardReviewRepository;
+    private final com.lms.material.repository.QuizRepository quizRepository;
+    private final com.lms.material.repository.QuizQuestionRepository quizQuestionRepository;
+    private final com.lms.material.repository.QuizOptionRepository quizOptionRepository;
+    private final com.lms.material.repository.QuizAttemptRepository quizAttemptRepository;
+    private final com.lms.material.repository.QuizAnswerRepository quizAnswerRepository;
+    private final com.lms.catalog.repository.ChapterRepository chapterRepository;
+    private final com.lms.catalog.repository.LessonRepository lessonRepository;
+    private final TranscriptRepository transcriptRepository;
+    private final VoiceMappingRepository voiceMappingRepository;
+    private final StringRedisTemplate redisTemplate;
+    private final ObjectMapper objectMapper;
+    private final com.lms.dubbing.service.TranscriptExtractionService transcriptExtractionService;
+    private final com.lms.catalog.service.CourseActivityLogService activityLogService;
+    private final AccountRestrictionService accountRestrictionService;
+
+    @Value("${lms.redis-keys.material-queue:lms:material:jobs}")
+    private String queueKey;
+
+    // BR-MAT-08 — Task 11A: dùng chung 1 hằng số cho cả chỗ kiểm tra hạn ngạch và chỗ trả
+    // header X-RateLimit-*, tránh lệch số nếu sau này đổi hạn mức.
+    private static final int MATERIAL_QUOTA_PER_DAY = 6;
+
+    private long hoursUntilReset() {
+        return java.time.Duration.between(LocalDateTime.now(), LocalDate.now().plusDays(1).atStartOfDay()).toHours() + 1;
+    }
+
+    /** Task 11A — trạng thái hạn ngạch sinh học liệu hiện tại, dùng để trả header X-RateLimit-*. */
+    public record MaterialQuotaRes(boolean unlimited, int limit, int used, int remaining, long resetEpochSeconds) {}
+
+    @Transactional(readOnly = true)
+    public MaterialQuotaRes getQuotaStatus(String email, Long courseId) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User", email));
+        long resetEpochSeconds = LocalDate.now().plusDays(1).atStartOfDay()
+                .atZone(java.time.ZoneId.systemDefault()).toEpochSecond();
+
+        boolean isInstructor = courseId != null && courseRepository.findById(courseId)
+                .map(c -> c.getInstructor().getId().equals(user.getId()))
+                .orElse(false);
+        if (isInstructor) {
+            return new MaterialQuotaRes(true, 0, 0, 0, resetEpochSeconds);
+        }
+
+        LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
+        long todayCount = materialGenerationRepository.countByUser_IdAndCreatedAtGreaterThanEqual(user.getId(), startOfDay);
+        int remaining = (int) Math.max(0, MATERIAL_QUOTA_PER_DAY - todayCount);
+        return new MaterialQuotaRes(false, MATERIAL_QUOTA_PER_DAY, (int) todayCount, remaining, resetEpochSeconds);
+    }
+
+    @Transactional
+    public MaterialGenerationRes requestGeneration(String email, MaterialGenerationReq req) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User", email));
+                
+        accountRestrictionService.requireAiAllowed(user);
+        Course course = courseRepository.findById(req.courseId())
+                .orElseThrow(() -> new ResourceNotFoundException("Course", req.courseId()));
+
+        requireCourseAccess(user, course);
+
+        boolean isInstructor = course.getInstructor().getId().equals(user.getId());
+        if (!isInstructor) {
+            // BR-MAT-08: Hạn ngạch 6 lần/ngày (Chỉ áp dụng cho Học viên)
+            LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
+            long todayCount = materialGenerationRepository.countByUser_IdAndCreatedAtGreaterThanEqual(user.getId(), startOfDay);
+            if (todayCount >= MATERIAL_QUOTA_PER_DAY) {
+                throw new BusinessRuleViolationException(
+                        "MATERIAL_QUOTA_EXCEEDED",
+                        "Bạn đã dùng hết " + MATERIAL_QUOTA_PER_DAY + " lượt sinh học liệu hôm nay. "
+                                + "Hạn mức làm mới sau " + hoursUntilReset() + " giờ (0h00 ngày mai) - BR-MAT-08");
+            }
+
+            // BR-MAT-07: Giới hạn 10 bộ / khóa học (Chỉ áp dụng cho Học viên)
+            long courseCount = materialGenerationRepository.countByUser_IdAndCourse_Id(user.getId(), course.getId());
+            if (courseCount >= 10) {
+                throw new BusinessRuleViolationException("Đã đạt giới hạn sinh học liệu cho khóa học này (tối đa 10 bộ) - BR-MAT-07");
+            }
+        }
+
+
+        // BR-DUB-07 — ngôn ngữ đích phải nằm trong danh sách Admin đang bật, CÙNG nguồn với dropdown
+        // lồng tiếng (UC47) để 2 nơi luôn khớp nhau. KHÔNG còn đòi hỏi "đã lồng tiếng ngôn ngữ này
+        // chưa" như trước — BR-MAT-01 cho chọn ngôn ngữ đầu ra tự do.
+        String reqLang = req.language();
+        if (voiceMappingRepository.findByLanguageAndIsActiveTrue(reqLang).isEmpty()) {
+            throw new BusinessRuleViolationException("Ngôn ngữ này chưa được hệ thống hỗ trợ (BR-DUB-07)");
+        }
+
+        int nextVersion = materialGenerationRepository.findTopByUser_IdAndCourse_IdAndIsDeletedFalseOrderByVersionNoDesc(user.getId(), course.getId())
+                .map(mg -> mg.getVersionNo() + 1)
+                .orElse(1);
+
+        MaterialGeneration generation = new MaterialGeneration();
+        generation.setUser(user);
+        generation.setCourse(course);
+        generation.setMaterialType(req.materialType());
+        generation.setLanguage(req.language());
+        if (req.title() != null && !req.title().trim().isEmpty()) {
+            generation.setTitle(req.title().trim());
+        }
+        generation.setScopeType(req.scopeType());
+        generation.setScopeRefId(req.scopeRefId());
+        
+        // Auto-binding logic
+        if (req.scopeType() == com.lms.common.enums.ScopeType.CUSTOM_LESSONS && req.customLessonIds() != null && req.customLessonIds().size() == 1) {
+            com.lms.catalog.entity.Lesson lesson = new com.lms.catalog.entity.Lesson();
+            lesson.setId(req.customLessonIds().get(0));
+            generation.setLesson(lesson);
+        }
+        if (req.scopeType() == com.lms.common.enums.ScopeType.CHAPTER && req.scopeRefId() != null) {
+            com.lms.catalog.entity.Chapter chapter = new com.lms.catalog.entity.Chapter();
+            chapter.setId(req.scopeRefId());
+            generation.setChapter(chapter);
+        }
+
+        if (req.scopeType() == com.lms.common.enums.ScopeType.CUSTOM_LESSONS && req.customLessonIds() != null && !req.customLessonIds().isEmpty()) {
+            try {
+                generation.setCustomLessonIds(objectMapper.writeValueAsString(req.customLessonIds()));
+            } catch (JsonProcessingException e) {
+                throw new IllegalStateException("Không serialize được customLessonIds", e);
+            }
+        }
+        generation.setQuantityLevel(req.quantityLevel());
+        generation.setDifficultyLevel(req.difficultyLevel());
+        generation.setVersionNo(nextVersion);
+
+        java.util.List<com.lms.catalog.entity.Lesson> missingLessons = getMissingLessonsInScope(course.getId(), generation);
+        boolean isPendingTranscript = !missingLessons.isEmpty();
+        generation.setStatus(isPendingTranscript ? GenStatus.PENDING_TRANSCRIPT : GenStatus.PENDING);
+
+        MaterialGeneration saved = materialGenerationRepository.save(generation);
+
+        org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                new org.springframework.transaction.support.TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        if (isPendingTranscript) {
+                            for (com.lms.catalog.entity.Lesson lesson : missingLessons) {
+                                transcriptExtractionService.requestExtraction(lesson);
+                            }
+                        } else {
+                            String jsonPayload = toJson(saved);
+                            redisTemplate.opsForList().leftPush(queueKey, jsonPayload);
+                        }
+                    }
+                }
+        );
+
+        return toDto(saved);
+    }
+
+    @org.springframework.context.event.EventListener
+    @org.springframework.transaction.annotation.Transactional
+    public void onTranscriptExtracted(com.lms.common.event.TranscriptExtractedEvent event) {
+        java.util.List<MaterialGeneration> pendingGens = materialGenerationRepository.findByCourse_IdAndStatus(event.courseId(), GenStatus.PENDING_TRANSCRIPT);
+        for (MaterialGeneration gen : pendingGens) {
+            java.util.List<com.lms.catalog.entity.Lesson> missingLessons = getMissingLessonsInScope(event.courseId(), gen);
+            if (missingLessons.isEmpty()) {
+                gen.setStatus(GenStatus.PENDING);
+                MaterialGeneration saved = materialGenerationRepository.save(gen);
+                String jsonPayload = toJson(saved);
+                redisTemplate.opsForList().leftPush(queueKey, jsonPayload);
+            }
+        }
+    }
+
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public com.lms.material.dto.MaterialDetailRes getDetail(String email, Long id) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User", email));
+        MaterialGeneration generation = materialGenerationRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("MaterialGeneration", id));
+                
+        if (Boolean.TRUE.equals(generation.getIsDeleted())) {
+            throw new ResourceNotFoundException("MaterialGeneration", id);
+        }
+        
+        boolean isOfficial = false;
+        
+        String mermaidCode = null;
+        Long lessonId = generation.getLesson() != null ? generation.getLesson().getId() : null;
+        String quizType = "OFFICIAL_EXAM";
+        Long quizId = null;
+        java.util.List<com.lms.material.dto.MaterialDetailRes.FlashcardDto> flashcards = null;
+        java.util.List<com.lms.material.dto.MaterialDetailRes.QuizQuestionDto> quizQuestions = null;
+        
+        if (generation.getMaterialType() == com.lms.common.enums.MaterialType.MINDMAP) {
+            java.util.Optional<com.lms.material.entity.Mindmap> mindmapOpt = mindmapRepository.findByMaterialGeneration_Id(generation.getId());
+            if (mindmapOpt.isPresent()) {
+                com.lms.material.entity.Mindmap mindmap = mindmapOpt.get();
+                mermaidCode = mindmap.getMermaidCode();
+                isOfficial = mindmap.getIsOfficial() != null ? mindmap.getIsOfficial() : false;
+            }
+        } else if (generation.getMaterialType() == com.lms.common.enums.MaterialType.FLASHCARD) {
+            java.util.Optional<com.lms.material.entity.FlashcardDeck> deckOpt = flashcardDeckRepository.findByMaterialGeneration_Id(generation.getId());
+            if (deckOpt.isPresent()) {
+                com.lms.material.entity.FlashcardDeck deck = deckOpt.get();
+                isOfficial = deck.getIsOfficial() != null ? deck.getIsOfficial() : false;
+                
+                Long deckId = deck.getId();
+                java.util.Map<Long, com.lms.material.entity.FlashcardReview> reviewMap = flashcardReviewRepository.findByUser_IdAndFlashcard_FlashcardDeck_Id(user.getId(), deckId)
+                        .stream().collect(java.util.stream.Collectors.toMap(r -> r.getFlashcard().getId(), r -> r));
+
+                flashcards = flashcardRepository.findByFlashcardDeck_Id(deckId)
+                        .stream()
+                        .map(card -> {
+                            com.lms.material.entity.FlashcardReview r = reviewMap.get(card.getId());
+                            if (r != null) {
+                                boolean isDue = r.getNextReviewAt() == null || !r.getNextReviewAt().isAfter(java.time.LocalDateTime.now());
+                                return com.lms.material.dto.MaterialDetailRes.FlashcardDto.builder()
+                                        .id(card.getId())
+                                        .frontText(card.getFrontText())
+                                        .backText(card.getBackText())
+                                        .nextReviewAt(r.getNextReviewAt())
+                                        .intervalDays(r.getIntervalDays())
+                                        .repetitions(r.getRepetitions())
+                                        .easiness(r.getEasiness())
+                                        .isDue(isDue)
+                                        .build();
+                            } else {
+                                return com.lms.material.dto.MaterialDetailRes.FlashcardDto.builder()
+                                        .id(card.getId())
+                                        .frontText(card.getFrontText())
+                                        .backText(card.getBackText())
+                                        .nextReviewAt(java.time.LocalDateTime.now())
+                                        .intervalDays(0)
+                                        .repetitions(0)
+                                        .easiness(new java.math.BigDecimal("2.50"))
+                                        .isDue(true)
+                                        .build();
+                            }
+                        })
+                        .toList();
+            }
+        } else if (generation.getMaterialType() == com.lms.common.enums.MaterialType.QUIZ) {
+            java.util.Optional<com.lms.material.entity.Quiz> quizOpt = quizRepository.findByMaterialGeneration_IdAndIsDeletedFalse(generation.getId());
+            if (quizOpt.isPresent()) {
+                com.lms.material.entity.Quiz quiz = quizOpt.get();
+                isOfficial = quiz.getIsOfficial() != null ? quiz.getIsOfficial() : false;
+                quizType = quiz.getQuizType() != null ? quiz.getQuizType().name() : "OFFICIAL_EXAM";
+                quizId = quiz.getId();
+                
+                quizQuestions = quizQuestionRepository.findByQuiz_IdOrderByDisplayOrderAsc(quiz.getId())
+                        .stream()
+                        .map(q -> com.lms.material.dto.MaterialDetailRes.QuizQuestionDto.builder()
+                                .id(q.getId())
+                                .content(q.getContent())
+                                .displayOrder(q.getDisplayOrder())
+                                .topicTag(q.getTopicTag())
+                                .videoTimestamp(q.getVideoTimestamp())
+                                .referenceLessonId(q.getReferenceLessonId())
+                                .options(quizOptionRepository.findByQuizQuestion_Id(q.getId())
+                                        .stream()
+                                        .map(o -> com.lms.material.dto.MaterialDetailRes.QuizOptionDto.builder()
+                                                .id(o.getId())
+                                                .content(o.getContent())
+                                                .isCorrect(o.getIsCorrect())
+                                                .build())
+                                        .toList())
+                                .build())
+                        .toList();
+            }
+        }
+        
+        if (!generation.isReusableBy(user) && !isOfficial) {
+            throw new AccessDeniedDomainException("Học liệu này thuộc về người khác");
+        }
+        
+        return com.lms.material.dto.MaterialDetailRes.builder()
+                .id(generation.getId())
+                .materialType(generation.getMaterialType())
+                .language(generation.getLanguage())
+                .title(generation.getTitle() != null ? generation.getTitle() : "")
+                .versionNo(generation.getVersionNo())
+                .status(generation.getStatus())
+                .lessonId(lessonId)
+                .quizType(quizType)
+                .createdAt(generation.getCreatedAt())
+                .mermaidCode(mermaidCode)
+                .flashcards(flashcards)
+                .quizQuestions(quizQuestions)
+                .quizId(quizId)
+                .isOfficial(isOfficial)
+                .build();
+    }
+
+    private void requireCourseAccess(User user, Course course) {
+        boolean isInstructor = course.getInstructor().getId().equals(user.getId());
+        if (isInstructor) {
+            return;
+        }
+        boolean enrolled = enrollmentRepository.existsByUser_IdAndCourse_Id(user.getId(), course.getId());
+        if (!enrolled) {
+            throw new AccessDeniedDomainException("Bạn chưa sở hữu khóa học này");
+        }
+    }
+
+    private String toJson(MaterialGeneration generation) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("generationId", generation.getId());
+        payload.put("courseId", generation.getCourse().getId());
+        payload.put("materialType", generation.getMaterialType().name());
+        
+        if (generation.getScopeType() == com.lms.common.enums.ScopeType.CUSTOM_LESSONS && generation.getCustomLessonIds() != null) {
+            try {
+                payload.put("customLessonIds", objectMapper.readValue(generation.getCustomLessonIds(), java.util.List.class));
+            } catch (JsonProcessingException e) {
+                // ignore
+            }
+        }
+        
+        try {
+            return objectMapper.writeValueAsString(payload);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Không tạo được payload hàng đợi sinh học liệu", e);
+        }
+    }
+
+    public java.util.List<MaterialGenerationRes> getGenerations(String email, Long courseId) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User", email));
+        Course course = courseRepository.findById(courseId)
+                .orElseThrow(() -> new ResourceNotFoundException("Course", courseId));
+        requireCourseAccess(user, course);
+        
+        return materialGenerationRepository.findByUser_IdAndCourse_IdAndIsDeletedFalseOrderByVersionNoDesc(user.getId(), courseId)
+                .stream()
+                .map(this::toDto)
+                .toList();
+    }
+
+    @Transactional
+    public void updateMaterial(String email, Long id, String title, String mermaidCode) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User", email));
+        MaterialGeneration generation = materialGenerationRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("MaterialGeneration", id));
+        if (!generation.isReusableBy(user)) {
+            throw new AccessDeniedDomainException("Học liệu này thuộc về người khác");
+        }
+        if (title != null && !title.equals(generation.getTitle())) {
+            Long folderId = generation.getFolder() != null ? generation.getFolder().getId() : null;
+            java.util.List<MaterialGeneration> siblings = folderId != null
+                    ? materialGenerationRepository.findByFolder_IdAndIsDeletedFalse(folderId)
+                    : materialGenerationRepository.findByCourse_IdAndFolderIsNullAndIsDeletedFalse(generation.getCourse().getId());
+            // Chỉ so trùng tên với học liệu CÙNG chủ sở hữu — xem giải thích ở
+            // InstructorMaterialController#siblingsInFolder (Workspace thư mục là tính năng riêng
+            // của giảng viên; ở gốc còn có học liệu AI riêng tư của từng học viên).
+            java.util.List<MaterialGeneration> ownedSiblings = siblings.stream()
+                    .filter(m -> m.getUser() != null && m.getUser().getId().equals(generation.getUser().getId()))
+                    .toList();
+            MaterialNamingRules.assertNoCollision(ownedSiblings, title, generation.getMaterialType(), generation.getId());
+
+            activityLogService.log(generation.getCourse(), email,
+                    "Đã đổi tên học liệu \"" + generation.getTitle() + "\" thành \"" + title + "\"");
+            generation.setTitle(title);
+        }
+        if (mermaidCode != null && generation.getMaterialType() == com.lms.common.enums.MaterialType.MINDMAP) {
+            mindmapRepository.findByMaterialGeneration_Id(generation.getId()).ifPresent(mindmap -> {
+                mindmap.setMermaidCode(mermaidCode);
+                mindmapRepository.save(mindmap);
+            });
+        }
+        materialGenerationRepository.save(generation);
+    }
+
+    @Transactional
+    public void deleteMaterial(String email, Long id) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User", email));
+        MaterialGeneration generation = materialGenerationRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("MaterialGeneration", id));
+        if (!generation.isReusableBy(user)) {
+            throw new AccessDeniedDomainException("Học liệu này thuộc về người khác");
+        }
+
+        // 100% Soft Delete
+        generation.setIsDeleted(true);
+        generation.setDeletedAt(java.time.LocalDateTime.now());
+        generation.setStatus(com.lms.common.enums.GenStatus.ARCHIVED);
+        materialGenerationRepository.save(generation);
+        activityLogService.log(generation.getCourse(), email, "Đã xóa học liệu \"" + generation.getTitle() + "\"");
+
+        if (generation.getMaterialType() == com.lms.common.enums.MaterialType.QUIZ) {
+            quizRepository.findByMaterialGeneration_IdAndIsDeletedFalse(generation.getId()).ifPresent(quiz -> {
+                quiz.setIsDeleted(true);
+                quiz.setDeletedAt(java.time.LocalDateTime.now());
+                quizRepository.save(quiz);
+            });
+        }
+    }
+
+    public MaterialGenerationRes toDto(MaterialGeneration generation) {
+        String quizType = null;
+        if (generation.getMaterialType() == com.lms.common.enums.MaterialType.QUIZ) {
+            quizType = quizRepository.findByMaterialGeneration_IdAndIsDeletedFalse(generation.getId())
+                    .map(quiz -> quiz.getQuizType() != null ? quiz.getQuizType().name() : "OFFICIAL_EXAM")
+                    .orElse(null);
+        }
+
+        return MaterialGenerationRes.builder()
+                .id(generation.getId())
+                .materialType(generation.getMaterialType())
+                .language(generation.getLanguage())
+                .title(generation.getTitle())
+                .versionNo(generation.getVersionNo())
+                .status(generation.getStatus())
+                .celeryTaskId(generation.getCeleryTaskId())
+                .createdAt(generation.getCreatedAt())
+                .updatedAt(generation.getUpdatedAt())
+                .quizType(quizType)
+                .build();
+    }
+
+    /** UC24 — danh sách ngôn ngữ cho FE chọn, CÙNG nguồn với dropdown lồng tiếng (BR-DUB-07),
+     * kèm gợi ý "đã có bản dịch sẵn" (dấu tích) hay chưa (dấu chấm) — xem {@link LanguageAvailabilityRes}. */
+    public java.util.List<LanguageAvailabilityRes> getAvailableLanguages(Long courseId) {
+        java.util.Set<String> translated = new java.util.HashSet<>(
+                transcriptRepository.findTranslatedLanguagesByCourseId(courseId));
+        return voiceMappingRepository.findByIsActiveTrue().stream()
+                .map(com.lms.dubbing.entity.VoiceMapping::getLanguage)
+                .distinct()
+                .map(code -> new LanguageAvailabilityRes(code, displayLabel(code), translated.contains(code)))
+                .toList();
+    }
+
+    private String displayLabel(String languageCode) {
+        return java.util.Locale.forLanguageTag(languageCode).getDisplayName(java.util.Locale.forLanguageTag("vi-VN"));
+    }
+
+    private java.util.List<com.lms.catalog.entity.Lesson> getMissingLessonsInScope(Long courseId, MaterialGeneration gen) {
+        java.util.List<com.lms.catalog.entity.Lesson> scopeLessons = new java.util.ArrayList<>();
+        switch (gen.getScopeType()) {
+            case WHOLE_COURSE -> {
+                chapterRepository.findByCourseIdOrderByDisplayOrderAsc(courseId).forEach(ch -> scopeLessons.addAll(lessonRepository.findByChapterIdOrderByDisplayOrderAsc(ch.getId())));
+            }
+            case CHAPTER -> {
+                if (gen.getScopeRefId() != null) {
+                    scopeLessons.addAll(lessonRepository.findByChapterIdOrderByDisplayOrderAsc(gen.getScopeRefId()));
+                }
+            }
+            case CUSTOM_LESSONS -> {
+                if (gen.getCustomLessonIds() != null && !gen.getCustomLessonIds().isEmpty()) {
+                    try {
+                        java.util.List<Long> customLessonIds = objectMapper.readValue(gen.getCustomLessonIds(), new com.fasterxml.jackson.core.type.TypeReference<java.util.List<Long>>(){});
+                        scopeLessons.addAll(lessonRepository.findAllById(customLessonIds));
+                    } catch (JsonProcessingException e) {
+                        // ignore
+                    }
+                } else if (gen.getLesson() != null) {
+                    scopeLessons.add(gen.getLesson());
+                }
+            }
+        }
+        
+        java.util.Set<Long> readyLessonIds = new java.util.HashSet<>(
+                transcriptRepository.findLessonIdsWithSourceTranscriptByCourseId(courseId));
+        
+        return scopeLessons.stream()
+                .filter(l -> !readyLessonIds.contains(l.getId()) && "READY".equals(l.getStatus()))
+                .toList();
+    }
+
+    /** UC24 — chọn phạm vi Chương/Bài tuỳ chọn: chỉ hiện bài ĐÃ có transcript gốc (sẵn sàng sinh
+     * học liệu ở BẤT KỲ ngôn ngữ nào — BR-MAT-01), không còn lọc theo "đã lồng tiếng ngôn ngữ X". */
+    public java.util.List<com.lms.catalog.dto.ChapterDto.Res> getCourseChapters(Long courseId, String language) {
+        if (!courseRepository.existsById(courseId)) {
+            throw new ResourceNotFoundException("Course", courseId);
+        }
+
+        java.util.Set<Long> readyLessonIds = new java.util.HashSet<>(
+                transcriptRepository.findLessonIdsWithSourceTranscriptByCourseId(courseId));
+
+        return chapterRepository.findByCourseIdOrderByDisplayOrderAsc(courseId).stream()
+                .map(chapter -> {
+                    java.util.List<com.lms.catalog.dto.LessonDto.Res> filteredLessons = lessonRepository.findByChapterIdOrderByDisplayOrderAsc(chapter.getId()).stream()
+                            .filter(lesson -> readyLessonIds.contains(lesson.getId()))
+                            .map(lesson -> new com.lms.catalog.dto.LessonDto.Res(
+                                    lesson.getId(),
+                                    lesson.getTitle(),
+                                    lesson.getDisplayOrder(),
+                                    lesson.getIsPreview(),
+                                    lesson.getStatus(),
+                                    lesson.getVideoSource(),
+                                    lesson.getVideoUrl(),
+                                    lesson.getYoutubeId(),
+                                    lesson.getDurationSec(),
+                                    lesson.getDescription()
+                            ))
+                            .toList();
+                    return new com.lms.catalog.dto.ChapterDto.Res(
+                            chapter.getId(),
+                            chapter.getTitle(),
+                            chapter.getDisplayOrder(),
+                            filteredLessons,
+                            chapter.getDescription()
+                    );
+                })
+                .filter(chapter -> !chapter.lessons().isEmpty())
+                .toList();
+    }
+}

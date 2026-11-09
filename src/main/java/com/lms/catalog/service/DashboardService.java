@@ -1,0 +1,240 @@
+package com.lms.catalog.service;
+
+import com.lms.catalog.entity.Course;
+import com.lms.catalog.entity.Lesson;
+import com.lms.catalog.repository.CourseRepository;
+import com.lms.catalog.repository.LessonRepository;
+import com.lms.common.enums.PaymentStatus;
+import com.lms.common.exception.AccessDeniedDomainException;
+import com.lms.common.exception.ResourceNotFoundException;
+import com.lms.enrollment.entity.CourseReview;
+import com.lms.enrollment.entity.Enrollment;
+import com.lms.enrollment.repository.CourseReviewRepository;
+import com.lms.enrollment.repository.EnrollmentRepository;
+import com.lms.enrollment.repository.LessonProgressRepository;
+import com.lms.enrollment.repository.LessonWatchCheckpointRepository;
+import com.lms.material.repository.QuizAnswerRepository;
+import com.lms.payment.entity.Payment;
+import com.lms.payment.repository.PaymentRepository;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+/**
+ * Trang "Hiệu suất" của Giảng viên (19/09/2026, mở rộng ngoài đặc tả gốc — giao diện tham khảo
+ * Udemy "Performance": Tổng quan/Doanh thu/Sinh viên/Đánh giá). Trước đây trang này chỉ là
+ * placeholder "Coming Soon" ở FE, chưa có dữ liệu thật nào.
+ *
+ * <p>Tách riêng khỏi {@code DashboardController} (vốn xử lý logic ngay trong controller cho 2
+ * endpoint cũ /admin, /instructor) — logic ở đây nhiều bước tính toán hơn (khoảng thời gian,
+ * nhiều repository) nên theo đúng kiến trúc 3 tầng chuẩn của dự án (Controller → Service →
+ * Repository) thay vì để thẳng trong controller.
+ */
+@Service
+@RequiredArgsConstructor
+public class DashboardService {
+
+    private final CourseRepository courseRepository;
+    private final EnrollmentRepository enrollmentRepository;
+    private final CourseReviewRepository courseReviewRepository;
+    private final PaymentRepository paymentRepository;
+    private final QuizAnswerRepository quizAnswerRepository;
+    private final LessonRepository lessonRepository;
+    private final LessonProgressRepository lessonProgressRepository;
+    private final LessonWatchCheckpointRepository lessonWatchCheckpointRepository;
+
+    /** "7d"/"30d"/"12m"/"all" — quy ước tham số `range` dùng chung cho mọi endpoint bên dưới. */
+    private LocalDateTime resolveRangeStart(String range) {
+        LocalDateTime now = LocalDateTime.now();
+        return switch (range == null ? "30d" : range) {
+            case "7d" -> now.minusDays(7);
+            case "12m" -> now.minusMonths(12);
+            case "all" -> LocalDateTime.of(2000, 1, 1, 0, 0);
+            default -> now.minusDays(30);
+        };
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> getPerformanceOverview(String email, String range) {
+        LocalDateTime since = resolveRangeStart(range);
+        BigDecimal revenue = paymentRepository.sumInstructorEarningSince(email, since);
+        long enrollments = enrollmentRepository.countByCourse_Instructor_EmailAndEnrolledAtAfter(email, since);
+        double avgRatingRaw = courseReviewRepository.findAverageRatingByInstructorEmailSince(email, since);
+        BigDecimal avgRating = BigDecimal.valueOf(avgRatingRaw).setScale(2, RoundingMode.HALF_UP);
+
+        return Map.of(
+                "revenue", revenue,
+                "enrollments", enrollments,
+                "avgRating", avgRating
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getRevenueList(String email, String range) {
+        LocalDateTime since = resolveRangeStart(range);
+        List<Payment> payments = paymentRepository
+                .findByCourse_Instructor_EmailAndStatusAndPaidAtAfterOrderByPaidAtDesc(email, PaymentStatus.PAID, since);
+        return payments.stream()
+                .map(p -> {
+                    Map<String, Object> row = new java.util.HashMap<>();
+                    row.put("courseTitle", p.getCourse().getTitle());
+                    row.put("amount", p.getAmount());
+                    row.put("instructorEarning", p.getInstructorEarning());
+                    row.put("paidAt", p.getPaidAt());
+                    row.put("couponCode", p.getCoupon() != null ? p.getCoupon().getCode() : null);
+                    // Chia doanh thu 2 mức (20/09/2026) — để Giảng viên phân biệt giao dịch nào
+                    // đến từ liên kết giới thiệu riêng (97%) và tự tìm thấy trên nền tảng (37%).
+                    row.put("revenueSource", p.getRevenueSource());
+                    // UX (30/09/2026) — để FE tính tỷ lệ doanh thu qua Gói combo vs Bán lẻ.
+                    row.put("bundleId", p.getBundle() != null ? p.getBundle().getId() : null);
+                    return row;
+                })
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getStudents(String email, Long courseId) {
+        List<Enrollment> enrollments = enrollmentRepository.findByCourse_Instructor_EmailOrderByEnrolledAtDesc(email);
+        return enrollments.stream()
+                .filter(e -> courseId == null || e.getCourse().getId().equals(courseId))
+                .map(e -> {
+                    Map<String, Object> row = new java.util.HashMap<>();
+                    row.put("studentId", e.getUser().getId());
+                    row.put("studentName", e.getUser().getFullName());
+                    row.put("studentEmail", e.getUser().getEmail());
+                    row.put("courseId", e.getCourse().getId());
+                    row.put("courseTitle", e.getCourse().getTitle());
+                    row.put("enrolledAt", e.getEnrolledAt());
+                    row.put("progressPct", e.getProgressPct());
+                    return row;
+                })
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getReviews(String email, Long courseId) {
+        List<CourseReview> reviews = courseReviewRepository.findByCourse_Instructor_EmailAndIsHiddenFalseOrderByCreatedAtDesc(email);
+        return reviews.stream()
+                .filter(r -> courseId == null || r.getCourse().getId().equals(courseId))
+                .map(r -> {
+                    Map<String, Object> row = new java.util.HashMap<>();
+                    row.put("id", r.getId());
+                    row.put("studentName", r.getUser().getFullName());
+                    row.put("courseId", r.getCourse().getId());
+                    row.put("courseTitle", r.getCourse().getTitle());
+                    row.put("rating", r.getRating());
+                    row.put("comment", r.getComment());
+                    row.put("createdAt", r.getCreatedAt());
+                    return row;
+                })
+                .toList();
+    }
+
+    /** Sprint 3 mục 10 — Báo cáo doanh thu gộp/phí nền tảng/thực nhận theo khoảng thời gian tự
+     * chọn (khác {@link #getPerformanceOverview}, vốn chỉ hỗ trợ preset "7d"/"30d"/"12m"/"all").
+     *
+     * <p>`from`/`to` là {@link LocalDate} (chỉ có ngày) trong khi cột {@code paid_at} là
+     * DATETIME — BẮT BUỘC quy đổi sang khoảng NỬA-MỞ {@code [start, end)} ở tầng Service này
+     * TRƯỚC khi truyền vào repository: nếu truyền thẳng {@code to} dạng LocalDate, JPA ép kiểu
+     * ngầm thành {@code to 00:00:00}, làm mất trọn các giao dịch phát sinh TRONG ngày {@code to}. */
+    @Transactional(readOnly = true)
+    public Map<String, Object> getRevenueSummary(String email, LocalDate from, LocalDate to) {
+        LocalDateTime start = from.atStartOfDay();
+        LocalDateTime end = to.plusDays(1).atStartOfDay();
+        Object[] row = paymentRepository.sumRevenueSummaryBetween(email, start, end).get(0);
+        return Map.of(
+                "grossRevenue", row[0],
+                "platformFee", row[1],
+                "netRevenue", row[2],
+                "transactionCount", row[3]
+        );
+    }
+
+    /** Sprint 3 mục 10 — Top câu hỏi có tỷ lệ sai > 60% (ngưỡng mẫu tối thiểu 5 lượt trả lời, xem
+     * {@code QuizAnswerRepository.findHardQuestionsByInstructor}), CHỈ của đúng giảng viên đang
+     * gọi (RBAC đã lọc ở tầng query). */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getHardQuestions(String email) {
+        return quizAnswerRepository.findHardQuestionsByInstructor(email).stream()
+                .map(row -> {
+                    long totalAnswers = (Long) row[6];
+                    long wrongCount = (Long) row[7];
+                    double wrongRatePercent = BigDecimal.valueOf(wrongCount * 100.0 / totalAnswers)
+                            .setScale(1, RoundingMode.HALF_UP).doubleValue();
+                    Map<String, Object> item = new java.util.HashMap<>();
+                    item.put("questionId", row[0]);
+                    item.put("content", row[1]);
+                    item.put("courseId", row[2]);
+                    item.put("courseTitle", row[3]);
+                    item.put("lessonTitle", row[4]);
+                    // Sprint 3 mục 10, UX (30/09/2026) — FE deep-link thẳng tới trang Quản lý học
+                    // liệu với ?inspect={materialGenerationId} để giảng viên sửa câu hỏi ngay,
+                    // không phải tự đi tìm (xem CourseMaterialsManager.tsx).
+                    item.put("materialGenerationId", row[5]);
+                    item.put("totalAnswers", totalAnswers);
+                    item.put("wrongRatePercent", wrongRatePercent);
+                    return item;
+                })
+                .toList();
+    }
+
+    /** Sprint 3 mục 10 — Retention Heatmap (Drop-off Rate) của 1 bài học, dựa trên
+     * {@code lesson_watch_checkpoints} (ghi tự động mỗi khi học viên gửi tiến độ xem, xem
+     * {@code LessonProgressService.recordWatchCheckpoints}).
+     *
+     * <p>2 guard bắt buộc:
+     * <ul>
+     *   <li><b>RBAC</b> — {@code lessonId} là tham số tự do trên URL; nếu không kiểm tra quyền sở
+     *   hữu, giảng viên A truyền lessonId thuộc khóa của giảng viên B sẽ xem trộm được số liệu
+     *   học viên/retention của người khác.</li>
+     *   <li><b>Baseline = 0</b> — bài học mới, chưa ai xem → tránh chia cho 0.</li>
+     * </ul>
+     */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getLessonRetention(String instructorEmail, Long lessonId) {
+        Lesson lesson = lessonRepository.findById(lessonId)
+                .orElseThrow(() -> new ResourceNotFoundException("Lesson", lessonId));
+        if (!lesson.getChapter().getCourse().getInstructor().getEmail().equals(instructorEmail)) {
+            throw new AccessDeniedDomainException("Bạn không sở hữu bài học này");
+        }
+
+        long baseline = lessonProgressRepository.countByLesson_Id(lessonId);
+        if (baseline == 0) {
+            return List.of();
+        }
+
+        Map<Integer, Long> countByDecile = new java.util.HashMap<>();
+        for (Object[] row : lessonWatchCheckpointRepository.countDistinctUsersPerDecile(lessonId)) {
+            countByDecile.put((Integer) row[0], (Long) row[1]);
+        }
+
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (int decile = 1; decile <= 10; decile++) {
+            long reached = countByDecile.getOrDefault(decile, 0L);
+            double retainedPercent = BigDecimal.valueOf(reached * 100.0 / baseline)
+                    .setScale(1, RoundingMode.HALF_UP).doubleValue();
+            Map<String, Object> point = new java.util.HashMap<>();
+            point.put("decile", decile);
+            point.put("retainedPercent", retainedPercent);
+            result.add(point);
+        }
+        return result;
+    }
+
+    /** Danh sách khóa học của giảng viên để đổ vào dropdown lọc ở trang "Học viên"/"Đánh giá". */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getMyCoursesForFilter(String email) {
+        List<Course> courses = courseRepository.findByInstructor_Email(
+                email, org.springframework.data.domain.Pageable.unpaged()).getContent();
+        return courses.stream()
+                .map(c -> Map.<String, Object>of("id", c.getId(), "title", c.getTitle()))
+                .toList();
+    }
+}

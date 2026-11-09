@@ -28,6 +28,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
  */
 @Configuration
 @Profile("dev")
+// Tắt mặc định — bật bằng DEV_SEED_ENABLED=true (xem application-dev.yml).
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "app.dev-seed.enabled", havingValue = "true")
 public class DevDataSeeder {
 
     private static final Logger log = LoggerFactory.getLogger(DevDataSeeder.class);

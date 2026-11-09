@@ -1,7 +1,9 @@
 package com.lms.auth.provider;
 
+import com.google.api.client.googleapis.auth.oauth2.GoogleAuthorizationCodeTokenRequest;
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier;
+import com.google.api.client.googleapis.auth.oauth2.GoogleTokenResponse;
 import com.google.api.client.http.javanet.NetHttpTransport;
 import com.google.api.client.json.gson.GsonFactory;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +24,9 @@ public class GoogleOAuthProvider {
 
     @Value("${google.oauth.client-id}")
     private String clientId;
+
+    @Value("${google.oauth.client-secret}")
+    private String clientSecret;
 
     /**
      * Verify Google ID token and return payload containing user information.
@@ -44,5 +49,26 @@ public class GoogleOAuthProvider {
             return token.getPayload();
         }
         throw new RuntimeException("Invalid Google ID token");
+    }
+
+    /**
+     * Đổi Authorization Code (luồng mobile — app không giữ client secret) lấy id_token thật
+     * bằng cách gọi thẳng Google token endpoint từ server. Chỉ BE mới cầm client secret.
+     *
+     * @param code Authorization code Google trả về sau khi user đăng nhập
+     * @param redirectUri PHẢI khớp y hệt redirect_uri đã dùng lúc tạo authorization URL
+     * @return Google ID token (JWT) — đưa tiếp vào {@link #verifyToken(String)} để tái dùng logic hiện có
+     */
+    public String exchangeCodeForIdToken(String code, String redirectUri) throws IOException {
+        NetHttpTransport transport = new NetHttpTransport();
+        GoogleTokenResponse tokenResponse = new GoogleAuthorizationCodeTokenRequest(
+                transport, new GsonFactory(), clientId, clientSecret, code, redirectUri)
+                .execute();
+
+        String idToken = tokenResponse.getIdToken();
+        if (idToken == null) {
+            throw new RuntimeException("Google không trả về id_token khi đổi authorization code");
+        }
+        return idToken;
     }
 }

@@ -34,8 +34,10 @@ public class CourseReviewController {
         return ResponseEntity.ok(courseReviewService.listForCourse(courseId, pageable));
     }
 
+    /** (20/09/2026, sửa lỗi) — trước đây chỉ STUDENT, khiến tài khoản đã lên Giảng viên không
+     * đánh giá được khóa đã mua từ lúc còn là Học viên (xem docblock EnrollmentController.getMine). */
     @PostMapping("/api/v1/courses/{courseId}/reviews")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     public ResponseEntity<Res> create(
             Principal principal, @PathVariable Long courseId, @Valid @RequestBody CreateReq req) {
         return ResponseEntity.ok(courseReviewService.create(principal.getName(), courseId, req));
@@ -44,8 +46,11 @@ public class CourseReviewController {
     @GetMapping("/api/v1/reviews")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Page<Res>> listAll(
+            @RequestParam(required = false) String courseTitle,
+            @RequestParam(required = false) String instructorEmail,
+            @RequestParam(required = false) String status,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
-        return ResponseEntity.ok(courseReviewService.listAll(pageable));
+        return ResponseEntity.ok(courseReviewService.listAll(courseTitle, instructorEmail, status, pageable));
     }
 
     @PostMapping("/api/v1/reviews/{id}/hide")
@@ -58,5 +63,15 @@ public class CourseReviewController {
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Res> unhide(@PathVariable Long id) {
         return ResponseEntity.ok(courseReviewService.unhide(id));
+    }
+
+    /** Refined AC (03/10/2026) — Giảng viên report review vi phạm trên khóa CỦA CHÍNH MÌNH;
+     * ẩn ngay + vào hàng chờ Admin duyệt (status=PENDING_REPORT, xem {@code listAll}). */
+    @PostMapping("/api/v1/reviews/{id}/report")
+    @PreAuthorize("hasRole('INSTRUCTOR')")
+    public ResponseEntity<Res> report(
+            Principal principal, @PathVariable Long id, @RequestBody(required = false) ReportReq req) {
+        String reason = req != null ? req.reason() : null;
+        return ResponseEntity.ok(courseReviewService.reportByInstructor(id, principal.getName(), reason));
     }
 }

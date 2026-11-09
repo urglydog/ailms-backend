@@ -12,14 +12,17 @@ dependency-reduced-pom.xml
 # .env chứa GROQ_API_KEY, GEMINI_API_KEY, JWT_SECRET, khoá cổng thanh toán
 .env
 .env.local
-.env.*.local
+.env.*
+!.env.example
 *.pem
+*.key
 *.p12
 *.jks
 
 # ── Log & runtime ──────────────────────────────
 logs/
 *.log
+backend_logs.txt
 hs_err_pid*
 replay_pid*
 
@@ -43,3 +46,6 @@ desktop.ini
 # ── Dữ liệu local phát sinh khi chạy Docker ────
 mysql_data/
 redis_data/
+
+# ── Báo cáo kiểm tra bảo mật trước khi push (chỉ local, không commit) ──
+PUSH_CHECK_REPORT.md

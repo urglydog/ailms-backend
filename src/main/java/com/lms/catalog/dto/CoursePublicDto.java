@@ -1,6 +1,7 @@
 package com.lms.catalog.dto;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -10,6 +11,14 @@ import java.util.List;
  * không cần đăng nhập.
  */
 public class CoursePublicDto {
+
+    /**
+     * Một "lát" kết quả tìm kiếm (08/11/2026) — thay {@code Page}: Kho khóa học tải dần khi cuộn nên không
+     * cần tổng số (bỏ câu COUNT). Record riêng thay vì {@code SliceImpl} vì kết quả được cache trong Redis
+     * bằng Jackson, mà {@code SliceImpl} không dựng lại được từ JSON. Giữ tên {@code content} để client cũ
+     * (đọc {@code page.content}) vẫn chạy.
+     */
+    public record SearchSliceRes(java.util.List<SummaryRes> content, int page, int size, boolean last) {}
 
     public record SummaryRes(
             Long id,
@@ -23,8 +32,14 @@ public class CoursePublicDto {
             BigDecimal avgRating,
             Long reviewCount,
             Integer totalLessons,
+            /** UC09 mở rộng (14/09/2026) — tổng giây video, dùng cho bộ lọc "Video Duration" kiểu Udemy. */
+            Integer totalDurationSec,
             String categorySlug,
-            String categoryName
+            String categoryName,
+            /** UC57 mở rộng (15/09/2026) — giá sau khi áp coupon autoApply tốt nhất (BR-COUPON-04); bằng {@code price} nếu không có coupon nào áp dụng được. */
+            BigDecimal finalPrice,
+            /** Null nếu không có coupon nào áp dụng — FE dùng để quyết định có hiện giá gạch ngang hay không. */
+            Integer discountPercent
     ) {}
 
     public record DetailRes(
@@ -33,15 +48,32 @@ public class CoursePublicDto {
             String slug,
             String description,
             String instructorName,
+            /** Ảnh đại diện giảng viên (null nếu chưa đặt) — FE hiện chữ cái đầu thay thế. */
+            String instructorAvatarUrl,
             String thumbnailUrl,
             String level,
             BigDecimal price,
             Boolean isFree,
             BigDecimal avgRating,
             Long reviewCount,
+            Integer totalDurationSec,
             String categorySlug,
             String categoryName,
-            List<ChapterRes> chapters
+            List<ChapterRes> chapters,
+            /** UC10 mở rộng (14/09/2026) — vùng "hero" nền đen kiểu Udemy ở trang chi tiết khóa. */
+            LocalDateTime updatedAt,
+            /** Nhãn hiển thị (vd "Tiếng Anh"), sinh từ mã ngôn ngữ qua {@code Locale}, không hardcode danh sách. Null nếu chưa bài nào có transcript. */
+            String sourceLanguage,
+            /** Ngôn ngữ đã lồng tiếng XONG (ít nhất 1 bài, {@code AudioTrack.status = COMPLETED}) — rỗng nếu chưa có. */
+            List<String> dubbedLanguages,
+            Long learnerCount,
+            /** UC57 mở rộng (15/09/2026) — xem {@code SummaryRes.finalPrice}. */
+            BigDecimal finalPrice,
+            Integer discountPercent,
+            /** "Đăng ký (Quyền riêng tư)" kiểu Udemy (19/09/2026) — {@code true} khi khóa học ở
+             * chế độ {@code PRIVATE_PASSWORD}, FE hiện ô nhập mật khẩu trước khi cho ghi danh.
+             * Không bao giờ trả mật khẩu/hash thật. */
+            boolean requiresPassword
     ) {}
 
     public record ChapterRes(

@@ -16,6 +16,7 @@ import com.lms.common.exception.InvalidRequestException;
 import com.lms.common.media.FfprobeService;
 import com.lms.common.media.YoutubeMetadataService;
 import com.lms.common.storage.StorageService;
+import com.lms.dubbing.service.TranscriptExtractionService;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
@@ -45,11 +46,14 @@ class LessonServiceTest {
     private static final String OWNER_EMAIL = "instructor@lms.local";
 
     @Mock private LessonRepository lessonRepository;
+    @Mock private com.lms.common.util.CacheEvictionHelper cacheEvictionHelper;
     @Mock private ChapterRepository chapterRepository;
     @Mock private LessonDocumentRepository lessonDocumentRepository;
     @Mock private StorageService storageService;
     @Mock private FfprobeService ffprobeService;
     @Mock private YoutubeMetadataService youtubeMetadataService;
+    @Mock private TranscriptExtractionService transcriptExtractionService;
+    @Mock private CourseEmbeddingService courseEmbeddingService;
 
     @InjectMocks
     private LessonService lessonService;
@@ -82,7 +86,7 @@ class LessonServiceTest {
 
     @Test
     void update_canEnablePreviewWithNoQuantityLimit() {
-        Res result = lessonService.update(OWNER_EMAIL, 30L, new UpdateReq("Bài 1", true));
+        Res result = lessonService.update(OWNER_EMAIL, 30L, new UpdateReq("Bài 1", true, null));
 
         assertThat(result.isPreview()).isTrue();
     }
@@ -91,14 +95,14 @@ class LessonServiceTest {
     void update_canDisablePreview() {
         lesson.setIsPreview(true);
 
-        Res result = lessonService.update(OWNER_EMAIL, 30L, new UpdateReq("Bài 1", false));
+        Res result = lessonService.update(OWNER_EMAIL, 30L, new UpdateReq("Bài 1", false, null));
 
         assertThat(result.isPreview()).isFalse();
     }
 
     @Test
     void update_throwsWhenCallerIsNotOwner() {
-        assertThatThrownBy(() -> lessonService.update("khac@lms.local", 30L, new UpdateReq("Bài 1", false)))
+        assertThatThrownBy(() -> lessonService.update("khac@lms.local", 30L, new UpdateReq("Bài 1", false, null)))
                 .isInstanceOf(AccessDeniedDomainException.class);
     }
 

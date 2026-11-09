@@ -20,6 +20,10 @@ public class FlashcardDeck extends BaseEntity {
     @Column(name = "card_count", nullable = false)
     private Integer cardCount = 0;
 
+    /** Hoc lieu chuan do Giang vien danh dau (Cong viec 5). */
+    @Column(name = "is_official", nullable = false)
+    private Boolean isOfficial = false;
+
     @OneToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "material_generation_id", nullable = false, unique = true)
     private MaterialGeneration materialGeneration;

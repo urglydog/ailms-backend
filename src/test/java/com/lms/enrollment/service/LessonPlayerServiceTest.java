@@ -1,0 +1,356 @@
+package com.lms.enrollment.service;
+
+import com.lms.auth.entity.User;
+import com.lms.auth.repository.UserRepository;
+import com.lms.catalog.entity.Chapter;
+import com.lms.catalog.entity.Course;
+import com.lms.catalog.entity.Lesson;
+import com.lms.catalog.repository.ChapterRepository;
+import com.lms.catalog.repository.LessonRepository;
+import com.lms.common.enums.TrackStatus;
+import com.lms.common.exception.AccessDeniedDomainException;
+import com.lms.dubbing.entity.AudioChunk;
+import com.lms.dubbing.entity.AudioTrack;
+import com.lms.dubbing.entity.Transcript;
+import com.lms.dubbing.entity.TranscriptSegment;
+import com.lms.dubbing.entity.VoiceMapping;
+import com.lms.dubbing.repository.AudioChunkRepository;
+import com.lms.dubbing.repository.AudioTrackRepository;
+import com.lms.dubbing.repository.TranscriptRepository;
+import com.lms.dubbing.repository.TranscriptSegmentRepository;
+import com.lms.dubbing.repository.VoiceMappingRepository;
+import com.lms.enrollment.dto.LessonPlayerDto.Res;
+import com.lms.enrollment.entity.LessonProgress;
+import com.lms.enrollment.repository.EnrollmentRepository;
+import com.lms.enrollment.repository.LessonProgressRepository;
+import com.lms.enrollment.security.EnrollmentSecurity;
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.when;
+
+/** UC16/17 — chặn chưa ghi danh, trả đúng danh sách ngôn ngữ active/inactive, chunks chỉ khi PARTIAL. */
+@ExtendWith(MockitoExtension.class)
+class LessonPlayerServiceTest {
+
+    private static final String EMAIL = "student1@lms.local";
+
+    @Mock private LessonRepository lessonRepository;
+    @Mock private ChapterRepository chapterRepository;
+    @Mock private UserRepository userRepository;
+    @Mock private EnrollmentSecurity enrollmentSecurity;
+    @Mock private VoiceMappingRepository voiceMappingRepository;
+    @Mock private AudioTrackRepository audioTrackRepository;
+    @Mock private AudioChunkRepository audioChunkRepository;
+    @Mock private LessonProgressRepository lessonProgressRepository;
+    @Mock private EnrollmentRepository enrollmentRepository;
+    @Mock private TranscriptRepository transcriptRepository;
+    @Mock private TranscriptSegmentRepository transcriptSegmentRepository;
+
+    private LessonPlayerService service;
+
+    private Lesson lesson;
+    private User user;
+
+    @BeforeEach
+    void setUp() {
+        service = new LessonPlayerService(
+                lessonRepository, chapterRepository, userRepository, enrollmentSecurity,
+                voiceMappingRepository, audioTrackRepository, audioChunkRepository, lessonProgressRepository,
+                enrollmentRepository, transcriptRepository, transcriptSegmentRepository);
+
+        Course course = new Course();
+        course.setId(10L);
+        course.setTitle("Khoa hoc test");
+        course.setSlug("khoa-hoc-test");
+
+        Chapter chapter = new Chapter();
+        chapter.setCourse(course);
+
+        lesson = new Lesson();
+        lesson.setId(21L);
+        lesson.setTitle("Bai 1");
+        lesson.setChapter(chapter);
+        lesson.setVideoSource("UPLOAD");
+        lesson.setVideoUrl("https://b2.example/video.mp4");
+        lesson.setDurationSec(900);
+        lesson.setSourceLanguage("en");
+        lesson.setIsPreview(false);
+
+        user = new User();
+        user.setId(1L);
+        user.setEmail(EMAIL);
+
+        lenient().when(lessonRepository.findById(21L)).thenReturn(Optional.of(lesson));
+        lenient().when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user));
+        lenient().when(lessonProgressRepository.findByUser_IdAndLesson_Id(1L, 21L)).thenReturn(Optional.empty());
+        lenient().when(voiceMappingRepository.findByIsActiveTrue()).thenReturn(List.of());
+    }
+
+    @Test
+    void chuaGhiDanh_khongPhaiPreview_biChan() {
+        when(enrollmentSecurity.canAccessLesson(EMAIL, 21L, true)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.getLessonForPlayback(EMAIL, 21L))
+                .isInstanceOf(AccessDeniedDomainException.class);
+    }
+
+    @Test
+    void daGhiDanh_traVeThongTinCoBan_vaLastPositionSec() {
+        when(enrollmentSecurity.canAccessLesson(EMAIL, 21L, true)).thenReturn(true);
+        LessonProgress progress = new LessonProgress();
+        progress.setLastPositionSec(120);
+        when(lessonProgressRepository.findByUser_IdAndLesson_Id(1L, 21L)).thenReturn(Optional.of(progress));
+
+        Res res = service.getLessonForPlayback(EMAIL, 21L);
+
+        assertThat(res.lessonId()).isEqualTo(21L);
+        assertThat(res.courseId()).isEqualTo(10L);
+        assertThat(res.lastPositionSec()).isEqualTo(120);
+        assertThat(res.languages()).isEmpty();
+    }
+
+    @Test
+    void ngonNguChuaCoTrack_availableFalse_trackNull() {
+        when(enrollmentSecurity.canAccessLesson(EMAIL, 21L, true)).thenReturn(true);
+        VoiceMapping vi = voiceMapping("vi");
+        when(voiceMappingRepository.findByIsActiveTrue()).thenReturn(List.of(vi));
+        when(audioTrackRepository.findByLesson_IdAndLanguage(21L, "vi")).thenReturn(Optional.empty());
+
+        Res res = service.getLessonForPlayback(EMAIL, 21L);
+
+        assertThat(res.languages()).hasSize(1);
+        assertThat(res.languages().get(0).code()).isEqualTo("vi");
+        assertThat(res.languages().get(0).available()).isFalse();
+        assertThat(res.languages().get(0).track()).isNull();
+    }
+
+    @Test
+    void trackCompletedVoiFinalUrl_availableTrue_khongCoChunks() {
+        when(enrollmentSecurity.canAccessLesson(EMAIL, 21L, true)).thenReturn(true);
+        VoiceMapping vi = voiceMapping("vi");
+        when(voiceMappingRepository.findByIsActiveTrue()).thenReturn(List.of(vi));
+
+        AudioTrack track = new AudioTrack();
+        track.setId(5L);
+        track.setLanguage("vi");
+        track.setStatus(TrackStatus.COMPLETED);
+        track.setFinalUrl("https://b2.example/final.mp3");
+        track.setDurationSec(900);
+        when(audioTrackRepository.findByLesson_IdAndLanguage(21L, "vi")).thenReturn(Optional.of(track));
+
+        Res res = service.getLessonForPlayback(EMAIL, 21L);
+
+        var lang = res.languages().get(0);
+        assertThat(lang.available()).isTrue();
+        assertThat(lang.track().finalUrl()).isEqualTo("https://b2.example/final.mp3");
+        assertThat(lang.track().chunks()).isEmpty();
+    }
+
+    @Test
+    void trackPartial_availableTrue_traVeDanhSachChunkTheoThuTu() {
+        when(enrollmentSecurity.canAccessLesson(EMAIL, 21L, true)).thenReturn(true);
+        VoiceMapping vi = voiceMapping("vi");
+        when(voiceMappingRepository.findByIsActiveTrue()).thenReturn(List.of(vi));
+
+        AudioTrack track = new AudioTrack();
+        track.setId(5L);
+        track.setLanguage("vi");
+        track.setStatus(TrackStatus.PARTIAL);
+        track.setFinalUrl(null);
+        when(audioTrackRepository.findByLesson_IdAndLanguage(21L, "vi")).thenReturn(Optional.of(track));
+
+        AudioChunk chunk0 = chunk(0, 0, 600, "https://b2.example/chunk_0.mp3");
+        when(audioChunkRepository.findByAudioTrack_IdOrderByChunkIndexAsc(5L)).thenReturn(List.of(chunk0));
+
+        Res res = service.getLessonForPlayback(EMAIL, 21L);
+
+        var lang = res.languages().get(0);
+        assertThat(lang.available()).isTrue();
+        assertThat(lang.track().status()).isEqualTo("PARTIAL");
+        assertThat(lang.track().chunks()).hasSize(1);
+        assertThat(lang.track().chunks().get(0).chunkIndex()).isEqualTo(0);
+    }
+
+    @Test
+    void daSoHuuKhoaHoc_traVeEnrolledTrue_duBaiHocDangLaPreview() {
+        // BR-ENROLL-02/03: học viên ĐÃ sở hữu khóa học vẫn xem được bài preview — `enrolled`
+        // phải phản ánh đúng việc sở hữu khóa, KHÔNG được suy ra ngược từ `lesson.isPreview`
+        // (bug từng gặp: FE khoá nhầm Ghi chú/Học liệu AI của học viên đã mua chỉ vì bài họ đang
+        // xem tình cờ là bài preview).
+        lesson.setIsPreview(true);
+        when(enrollmentSecurity.canAccessLesson(EMAIL, 21L, true)).thenReturn(true);
+        when(enrollmentRepository.existsByUser_EmailAndCourse_Id(EMAIL, 10L)).thenReturn(true);
+
+        Res res = service.getLessonForPlayback(EMAIL, 21L);
+
+        assertThat(res.isPreview()).isTrue();
+        assertThat(res.enrolled()).isTrue();
+    }
+
+    @Test
+    void khachXemBaiPreview_chuaSoHuu_traVeEnrolledFalse() {
+        lesson.setIsPreview(true);
+        when(enrollmentSecurity.canAccessLesson(EMAIL, 21L, true)).thenReturn(true);
+        when(enrollmentRepository.existsByUser_EmailAndCourse_Id(EMAIL, 10L)).thenReturn(false);
+
+        Res res = service.getLessonForPlayback(EMAIL, 21L);
+
+        assertThat(res.isPreview()).isTrue();
+        assertThat(res.enrolled()).isFalse();
+    }
+
+    @Test
+    void giangVienSoHuuKhoaHoc_traVeEnrolledTrue_duChuaTungGhiDanh() {
+        // (19/09/2026) — nút "Xem trước > Với tư cách là Giảng viên" ở trang chỉnh sửa khóa học:
+        // Giảng viên chưa từng tự ghi danh khóa của MÌNH vẫn phải thấy đầy đủ trải nghiệm (Hỏi
+        // đáp/Học liệu/Bài tập/Gia sư AI), không bị khóa như khách lạ.
+        User instructor = new User();
+        instructor.setEmail(EMAIL);
+        lesson.getChapter().getCourse().setInstructor(instructor);
+        when(enrollmentSecurity.canAccessLesson(EMAIL, 21L, true)).thenReturn(true);
+        when(enrollmentRepository.existsByUser_EmailAndCourse_Id(EMAIL, 10L)).thenReturn(false);
+
+        Res res = service.getLessonForPlayback(EMAIL, 21L);
+
+        assertThat(res.enrolled()).isTrue();
+    }
+
+    @Test
+    void traVeDanhSachChuongBai_theoThuTu_khongCoChapterThiRong() {
+        when(enrollmentSecurity.canAccessLesson(EMAIL, 21L, true)).thenReturn(true);
+
+        Res res = service.getLessonForPlayback(EMAIL, 21L);
+
+        assertThat(res.chapters()).isEmpty();
+    }
+
+    @Test
+    void danhSachChuongBai_danhDauDungBaiDaHoanThanh() {
+        when(enrollmentSecurity.canAccessLesson(EMAIL, 21L, true)).thenReturn(true);
+
+        Chapter chapter = new Chapter();
+        chapter.setId(100L);
+        chapter.setTitle("Chuong 1");
+        chapter.setDisplayOrder(0);
+        when(chapterRepository.findByCourseIdOrderByDisplayOrderAsc(10L)).thenReturn(List.of(chapter));
+
+        Lesson lesson2 = new Lesson();
+        lesson2.setId(22L);
+        lesson2.setTitle("Bai 2");
+        lesson2.setDisplayOrder(1);
+        lesson2.setDurationSec(600);
+        lesson2.setIsPreview(false);
+        when(lessonRepository.findByChapterIdOrderByDisplayOrderAsc(100L)).thenReturn(List.of(lesson, lesson2));
+
+        LessonProgress completedProgress = new LessonProgress();
+        completedProgress.setIsCompleted(true);
+        when(lessonProgressRepository.findByUser_IdAndLesson_Id(1L, 21L)).thenReturn(Optional.of(completedProgress));
+        when(lessonProgressRepository.findByUser_IdAndLesson_Id(1L, 22L)).thenReturn(Optional.empty());
+
+        Res res = service.getLessonForPlayback(EMAIL, 21L);
+
+        assertThat(res.chapters()).hasSize(1);
+        var lessons = res.chapters().get(0).lessons();
+        assertThat(lessons).hasSize(2);
+        assertThat(lessons.get(0).lessonId()).isEqualTo(21L);
+        assertThat(lessons.get(0).isCompleted()).isTrue();
+        assertThat(lessons.get(1).lessonId()).isEqualTo(22L);
+        assertThat(lessons.get(1).isCompleted()).isFalse();
+    }
+
+    @Test
+    void trackProcessing_availableFalse() {
+        when(enrollmentSecurity.canAccessLesson(EMAIL, 21L, true)).thenReturn(true);
+        VoiceMapping vi = voiceMapping("vi");
+        when(voiceMappingRepository.findByIsActiveTrue()).thenReturn(List.of(vi));
+
+        AudioTrack track = new AudioTrack();
+        track.setId(5L);
+        track.setLanguage("vi");
+        track.setStatus(TrackStatus.PROCESSING);
+        when(audioTrackRepository.findByLesson_IdAndLanguage(21L, "vi")).thenReturn(Optional.of(track));
+
+        Res res = service.getLessonForPlayback(EMAIL, 21L);
+
+        assertThat(res.languages().get(0).available()).isFalse();
+    }
+
+    @Test
+    void chuaTungLongTieng_originalSubtitlesVaSubtitlesTungNgonNguDeuRong() {
+        when(enrollmentSecurity.canAccessLesson(EMAIL, 21L, true)).thenReturn(true);
+        VoiceMapping vi = voiceMapping("vi");
+        when(voiceMappingRepository.findByIsActiveTrue()).thenReturn(List.of(vi));
+        when(transcriptRepository.findByLesson_IdAndIsSourceTrue(21L)).thenReturn(Optional.empty());
+        when(transcriptRepository.findByLesson_IdAndLanguage(21L, "vi")).thenReturn(Optional.empty());
+
+        Res res = service.getLessonForPlayback(EMAIL, 21L);
+
+        assertThat(res.originalSubtitles()).isEmpty();
+        assertThat(res.languages().get(0).subtitles()).isEmpty();
+    }
+
+    @Test
+    void daLongTieng_traVeDungPhuDeGocVaPhuDeDaDich() {
+        when(enrollmentSecurity.canAccessLesson(EMAIL, 21L, true)).thenReturn(true);
+        VoiceMapping vi = voiceMapping("vi");
+        when(voiceMappingRepository.findByIsActiveTrue()).thenReturn(List.of(vi));
+
+        Transcript source = new Transcript();
+        source.setId(1L);
+        when(transcriptRepository.findByLesson_IdAndIsSourceTrue(21L)).thenReturn(Optional.of(source));
+        when(transcriptSegmentRepository.findByTranscript_IdOrderBySeqAsc(1L))
+                .thenReturn(List.of(segment(1, "0.0", "3.5", "Hello everyone")));
+
+        Transcript target = new Transcript();
+        target.setId(2L);
+        when(transcriptRepository.findByLesson_IdAndLanguage(21L, "vi")).thenReturn(Optional.of(target));
+        when(transcriptSegmentRepository.findByTranscript_IdOrderBySeqAsc(2L))
+                .thenReturn(List.of(segment(1, "0.0", "3.5", "Chào mọi người")));
+
+        Res res = service.getLessonForPlayback(EMAIL, 21L);
+
+        assertThat(res.originalSubtitles()).hasSize(1);
+        assertThat(res.originalSubtitles().get(0).text()).isEqualTo("Hello everyone");
+        assertThat(res.languages().get(0).subtitles()).hasSize(1);
+        assertThat(res.languages().get(0).subtitles().get(0).text()).isEqualTo("Chào mọi người");
+    }
+
+    private TranscriptSegment segment(int seq, String start, String end, String text) {
+        TranscriptSegment s = new TranscriptSegment();
+        s.setSeq(seq);
+        s.setStartSec(new BigDecimal(start));
+        s.setEndSec(new BigDecimal(end));
+        s.setText(text);
+        return s;
+    }
+
+    private VoiceMapping voiceMapping(String language) {
+        VoiceMapping vm = new VoiceMapping();
+        vm.setLanguage(language);
+        vm.setVoiceName(language + "-Voice");
+        vm.setGender("FEMALE");
+        vm.setIsActive(true);
+        return vm;
+    }
+
+    private AudioChunk chunk(int index, int start, int end, String url) {
+        AudioChunk c = new AudioChunk();
+        c.setChunkIndex(index);
+        c.setStartSec(start);
+        c.setEndSec(end);
+        c.setFileUrl(url);
+        return c;
+    }
+}

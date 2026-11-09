@@ -1,0 +1,1 @@
+ALTER TABLE quiz_questions ADD COLUMN is_multiple_choice BOOLEAN NOT NULL DEFAULT FALSE;

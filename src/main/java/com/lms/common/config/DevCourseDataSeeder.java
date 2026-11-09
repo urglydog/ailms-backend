@@ -45,6 +45,8 @@ import org.springframework.core.annotation.Order;
  */
 @Configuration
 @Profile("dev")
+// Tắt mặc định — bật bằng DEV_SEED_ENABLED=true (xem application-dev.yml).
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "app.dev-seed.enabled", havingValue = "true")
 public class DevCourseDataSeeder {
 
     private static final Logger log = LoggerFactory.getLogger(DevCourseDataSeeder.class);
@@ -166,6 +168,7 @@ public class DevCourseDataSeeder {
         course.setIsFree(price.compareTo(BigDecimal.ZERO) == 0);
         course.setCategory(category);
         course.setInstructor(instructor);
+        course.setReferralCode(java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 10));
         course.setStatus(CourseStatus.PUBLISHED);
         Course saved = courseRepository.save(course);
 
@@ -193,6 +196,7 @@ public class DevCourseDataSeeder {
         course.setIsFree(true);
         course.setCategory(category);
         course.setInstructor(instructor);
+        course.setReferralCode(java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 10));
         course.setStatus(status);
         courseRepository.save(course);
     }

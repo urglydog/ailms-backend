@@ -3,7 +3,7 @@ package com.lms.material.entity;
 import com.lms.common.entity.BaseEntity;
 import com.lms.auth.entity.User;
 import java.math.BigDecimal;
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -38,7 +38,7 @@ public class FlashcardReview extends BaseEntity {
     private Integer repetitions = 0;
 
     @Column(name = "next_review_at", nullable = false)
-    private LocalDate nextReviewAt;
+    private LocalDateTime nextReviewAt;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id", nullable = false)

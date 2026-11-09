@@ -12,9 +12,14 @@ spring:
     password: ${SPRING_DATASOURCE_PASSWORD:lms_pass}
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
-      maximum-pool-size: 20
+      # Hiệu năng đợt 4: pool 20 đủ cho ~500 req/s đã đo (truy vấn ngắn sau đợt 1-3). Chờ kết nối tối đa 5s
+      # rồi báo lỗi thay vì treo 30s; đóng kết nối nhàn rỗi/già trước timeout của MySQL; cảnh báo rò kết nối.
+      maximum-pool-size: ${DB_POOL_MAX:20}
       minimum-idle: 5
-      connection-timeout: 30000
+      connection-timeout: 5000
+      idle-timeout: 300000
+      max-lifetime: 1500000
+      leak-detection-threshold: 20000
 
   jpa:
     # validate: Hibernate ĐỐI CHIẾU 31 entity với schema do Flyway tạo.
@@ -43,17 +48,24 @@ spring:
       # Spring Boot 3 dùng spring.data.redis.*, KHÔNG phải spring.redis.*
       host: ${SPRING_DATA_REDIS_HOST:localhost}
       port: ${SPRING_DATA_REDIS_PORT:6379}
+      password: ${SPRING_DATA_REDIS_PASSWORD:}
       timeout: 5s
 
   mail:
+    # Local dev: Mailpit (không set các env dưới) — Production: Gmail SMTP thật (set đủ
+    # SPRING_MAIL_HOST=smtp.gmail.com, SPRING_MAIL_PORT=587, SPRING_MAIL_USERNAME/PASSWORD =
+    # địa chỉ Gmail + App Password, SPRING_MAIL_SMTP_AUTH/STARTTLS=true). Cùng 1 jar chạy được cả
+    # 2 môi trường chỉ bằng biến môi trường, không cần profile riêng.
     host: ${SPRING_MAIL_HOST:localhost}
     port: ${SPRING_MAIL_PORT:1025}
+    username: ${SPRING_MAIL_USERNAME:}
+    password: ${SPRING_MAIL_PASSWORD:}
     properties:
       mail:
         smtp:
-          auth: false
+          auth: ${SPRING_MAIL_SMTP_AUTH:false}
           starttls:
-            enable: false
+            enable: ${SPRING_MAIL_SMTP_STARTTLS:false}
 
   servlet:
     multipart:
@@ -87,6 +99,11 @@ management:
 google:
   oauth:
     client-id: ${GOOGLE_OAUTH_CLIENT_ID:}
+    # Chỉ dùng cho luồng mobile (Authorization Code, BE đổi code lấy id_token) — web vẫn dùng
+    # GSI credential trực tiếp ở /oauth/google/callback, không cần secret.
+    client-secret: ${GOOGLE_OAUTH_CLIENT_SECRET:}
+    # Phải khớp 100% với "Authorized redirect URIs" đã đăng ký trên Google Cloud Console.
+    mobile-redirect-uri: ${GOOGLE_OAUTH_MOBILE_REDIRECT_URI:https://46.224.175.90.nip.io/api/v1/auth/oauth/google/mobile-callback}
 
 # ── Cấu hình riêng của ứng dụng ─────────────────────────────────
 lms:
@@ -103,10 +120,25 @@ lms:
     material-per-day: ${QUOTA_MATERIAL_PER_DAY:6}                 # BR-MAT-08
     tutor-msg-per-day: ${QUOTA_TUTOR_MSG_PER_DAY:30}              # BR-TUTOR-04
     discovery-guest-per-hour: ${QUOTA_DISCOVERY_GUEST_PER_HOUR:15} # BR-DISCOVERY-01
+    discovery-student-per-day: ${QUOTA_DISCOVERY_STUDENT_PER_DAY:30} # BR-DISCOVERY-01
+
+  # Auto-ban bằng AI (25/09/2026) — ngưỡng tạo ĐỀ XUẤT khoá (không tự khoá), xem AiLockScanService.
+  ai-lock:
+    daily-request-threshold: ${AI_LOCK_DAILY_THRESHOLD:20}   # >= ngưỡng này/ngày tính là "gần hết quota"
+    consecutive-days: ${AI_LOCK_CONSECUTIVE_DAYS:3}          # liên tục bao nhiêu ngày thì đề xuất
+    per-minute-threshold: ${AI_LOCK_PER_MINUTE_THRESHOLD:10} # > ngưỡng request/phút là bất thường
+    token-threshold: ${AI_LOCK_TOKEN_THRESHOLD:50000}        # > ngưỡng token trong khoảng dưới là bất thường (DoW)
+    token-window-minutes: ${AI_LOCK_TOKEN_WINDOW_MINUTES:5}  # khoảng thời gian tính tổng token
+
+  mail:
+    # Địa chỉ "From" cho mọi email hệ thống gửi (OTP, thông báo...) — Gmail SMTP thường yêu cầu
+    # From khớp đúng địa chỉ đã xác thực, nên production PHẢI set MAIL_FROM_ADDRESS = đúng địa
+    # chỉ Gmail dùng làm SPRING_MAIL_USERNAME. Mailpit (local dev) không quan tâm giá trị này.
+    from-address: ${MAIL_FROM_ADDRESS:noreply@lms.local}
 
   # Ngưỡng nghiệp vụ lấy từ business rules
   rules:
-    lesson-complete-threshold-percent: 90    # BR-PROGRESS-01
+    lesson-complete-threshold-percent: 80    # BR-PROGRESS-01 (Task 1: chuẩn hóa theo Udemy — 80%)
     max-preview-lessons-per-course: 2        # BR-ENROLL-02
     max-documents-per-lesson: 5              # BR-UPLOAD-01
     max-document-size-mb: 50                 # BR-UPLOAD-01
@@ -117,7 +149,16 @@ lms:
     platform-fee-percent: 30                 # BR-PAY-05
     instructor-earning-percent: 70           # BR-PAY-05
     notification-retention-days: 90          # BR-NOTIFY-01
-    instructor-request-cooldown-days: 7      # BR-ROLE-04
+    max-tutor-attachments-per-turn: 3        # UC30 mở rộng
+    max-tutor-attachment-size-mb: 8          # UC30 mở rộng
+    review-min-progress-percent: 20          # UpComming_Plan.md Sprint 2 mục 6 — AC "học >= 20-30% mới được review"
+    max-dispute-evidence-files: 5            # Khiếu nại giao dịch (23/10/2026)
+    max-dispute-evidence-size-mb: 20         # Khiếu nại giao dịch (23/10/2026)
+    dispute-reopen-window-days: 7            # Khiếu nại: hạn user báo "chưa nhận được tiền" sau khi admin resolve (26/10/2026)
+    max-support-ticket-files: 3              # Ticket hỗ trợ (05/11/2026) — ảnh minh chứng
+    max-support-ticket-size-mb: 5            # Ticket hỗ trợ (05/11/2026)
+    support-ticket-ip-limit-per-hour: 3      # Ticket hỗ trợ: chống spam khách vãng lai theo IP
+    support-ticket-email-limit-per-day: 5    # Ticket hỗ trợ: chống email-bombing 1 địa chỉ qua form public
 
   storage:
     b2-bucket-name: ${B2_BUCKET_NAME:}
@@ -125,16 +166,62 @@ lms:
     b2-application-key: ${B2_APPLICATION_KEY:}
     b2-endpoint: ${B2_ENDPOINT:}
 
+  # doc/DacTa_ChucNangChungChi.md — gốc URL trang xác thực công khai chứng chỉ, in trên QR code
+  # + link chữ (BR-CERT-06/10). Cùng quy ước với payment.payos.returnUrl bên dưới.
+  certificate:
+    verify-base-url: ${CERTIFICATE_VERIFY_BASE_URL:http://localhost:3000/verify}
+
+  # Gốc URL frontend dùng chung cho các link chèn vào NỘI DUNG EMAIL (khác certificate.verify-base-url
+  # ở trên vốn đã là URL đầy đủ riêng cho 1 trang cụ thể) — hiện chỉ dùng ở EmailService cho email
+  # báo giảm giá wishlist (26/09/2026, tính năng mới).
+  frontend-base-url: ${FRONTEND_BASE_URL:http://localhost:3000}
+
   internal:
     # Token AI Worker dùng khi gọi callback về đây
     api-token: ${INTERNAL_API_TOKEN:dev-internal-token}
 
+  # Giai đoạn 11 (F11.1) — LiveKit Cloud (cloud.livekit.io), lấy 3 giá trị này ở Settings → Keys
+  livekit:
+    server-url: ${LIVEKIT_URL:}
+    api-key: ${LIVEKIT_API_KEY:}
+    api-secret: ${LIVEKIT_API_SECRET:}
+
+  # Giai đoạn 5 — trước đây khối này bị lồng nhầm dưới `payment:` do lỗi thụt dòng, sau đó lại bị
+  # lồng nhầm sang dưới `ai:` (khác root `lms:` mà code `@Value("${lms.redis-keys...}")` đọc —
+  # làm app không boot lên được, xác nhận qua PlaceholderResolutionException khi restart Giai đoạn
+  # 6). Đổi đơn vị phút → giây để khớp tên biến môi trường DUB_LOCK_TTL_SECONDS
+  # (doc/SETUP_GIAIDOAN5.md).
+  redis-keys:
+    dubbing-queue: "lms:dubbing:jobs"
+    dubbing-progress: "lms:dubbing:progress"
+    dub-lock-prefix: "lock:dub:"        # lock:dub:{lessonId}:{lang} — BR-DUB-05
+    login-fail-prefix: "login_fail:"    # BR-AUTH-03
+    discovery-rate-prefix: "discovery_rate:" # BR-DISCOVERY-01
+    transcript-queue: "lms:transcript:jobs"     # trích script gốc lúc nạp video (UC34 mở rộng)
+    transcript-lock-prefix: "lock:transcript:"  # lock:transcript:{lessonId}
+    course-embedding-queue: "lms:course-embedding:jobs" # UC49 nâng cấp — đánh index semantic search
+    # (26/09/2026, tính năng mới) — 2 hàng đợi MỚI mà chính Java backend vừa đẩy vừa tự tiêu thụ
+    # (khác các hàng đợi ở trên, vốn do Python AI worker tiêu thụ) — xem
+    # WishlistPriceDropService/SystemAnnouncementService.
+    wishlist-price-drop-queue: "lms:wishlist-price-drop:jobs"
+    admin-broadcast-queue: "lms:admin-broadcast:jobs"
+  dub-lock-ttl-seconds: ${DUB_LOCK_TTL_SECONDS:1800}   # BR-DUB-05 (30 phút)
+
+ai:
+  worker:
+    # URL nội bộ Docker — FE KHÔNG gọi trực tiếp; Backend proxy vào đây (BR-DISCOVERY-01)
+    base-url: ${INTERNAL_BE_AI_URL:http://ai-api:8000}
+
+youtube:
+  # BUG THẬT (05/09/2026): YoutubeMetadataService trước đây gọi `yt-dlp` (scraping) để kiểm video
+  # tồn tại/công khai + lấy thời lượng — bị YouTube chặn IP datacenter/VPS ("Sign in to confirm
+  # you're not a bot"), xác nhận thật trên server production dù video hoàn toàn public. Chuyển
+  # sang YouTube Data API v3 chính thức (kênh Google CHO PHÉP, không bị chặn kiểu bot-detection) —
+  # chỉ cần API key free tier, lấy tại Google Cloud Console > APIs & Services > Credentials (bật
+  # "YouTube Data API v3" trong Library trước khi tạo key).
+  api-key: ${YOUTUBE_API_KEY:}
+
 payment:
-  vnpay:
-    tmnCode: ${VNPAY_TMN_CODE:}
-    hashSecret: ${VNPAY_HASH_SECRET:}
-    url: https://sandbox.vnpayment.vn/paymentv2/vpcpay.html
-    returnUrl: http://localhost:3000/payments/vnpay-return
   momo:
     partnerCode: ${MOMO_PARTNER_CODE:}
     accessKey: ${MOMO_ACCESS_KEY:}
@@ -143,16 +230,15 @@ payment:
     appId: ${ZALOPAY_APP_ID:}
     key1: ${ZALOPAY_KEY1:}
     key2: ${ZALOPAY_KEY2:}
-
-  redis-keys:
-    dubbing-queue: "lms:dubbing:jobs"
-    dubbing-progress: "lms:dubbing:progress"
-    dub-lock-prefix: "lock:dub:"        # lock:dub:{lessonId}:{lang} — BR-DUB-05, TTL 30 phút
-    login-fail-prefix: "login_fail:"    # BR-AUTH-03
-    discovery-rate-prefix: "discovery_rate:" # BR-DISCOVERY-01
-  dub-lock-ttl-minutes: 30              # BR-DUB-05
+  payos:
+    clientId: ${PAYOS_CLIENT_ID:}
+    apiKey: ${PAYOS_API_KEY:}
+    checksumKey: ${PAYOS_CHECKSUM_KEY:}
+    returnUrl: ${PAYOS_RETURN_URL:http://localhost:3000/payments/callback}
+    cancelUrl: ${PAYOS_CANCEL_URL:http://localhost:3000/payments/callback}
 
 logging:
   level:
     root: INFO
-    com.lms: DEBUG
+    # DEBUG chỉ bật ở profile dev (application-dev.yml) — production log INFO (hiệu năng đợt 4)
+    com.lms: INFO

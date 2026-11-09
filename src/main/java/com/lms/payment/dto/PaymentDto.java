@@ -1,21 +1,81 @@
 package com.lms.payment.dto;
 
 import com.lms.common.enums.PaymentStatus;
+import com.lms.common.enums.RevenueSource;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
 
 public class PaymentDto {
 
     public record CreateReq(
             @NotNull Long courseId,
-            @NotNull String paymentMethod, // VNPAY, MOMO
+            @NotNull String paymentMethod, // PAYOS
             String billingName,
-            String billingPhone
-    ) {}
+            String billingPhone,
+            /** UC57 mở rộng (15/09/2026) — mã giảm giá tự nhập, optional. */
+            String couponCode,
+            /** "Đăng ký (Quyền riêng tư)" kiểu Udemy (19/09/2026) — chỉ cần khi khóa học ở chế
+             * độ PRIVATE_PASSWORD, bỏ qua với mọi khóa khác. */
+            String courseAccessPassword,
+            /** Chia doanh thu 2 mức (20/09/2026) — mã từ liên kết giới thiệu riêng của Giảng
+             * viên (query {@code ?ref=}), optional. Khớp {@code Course.referralCode} thì tính
+             * {@code RevenueSource.INSTRUCTOR_REFERRAL}, không khớp/không gửi thì
+             * {@code ORGANIC} — xem {@code PaymentService.resolveRevenueSource}. */
+            String referralCode,
+            /** Học viên tự chọn 1 coupon trong danh sách ở trang thanh toán (không áp ngầm). Chỉ có
+             * hiệu lực khi {@code manualCoupon=true}. */
+            Long couponId,
+            /** true = chế độ chọn thủ công: KHÔNG tự áp coupon autoApply, chỉ dùng {@code couponId}
+             * (nếu có) và {@code couponCode}. null/false = hành vi cũ (mobile chưa đổi). */
+            Boolean manualCoupon
+    ) {
+        public CreateReq(Long courseId, String paymentMethod, String billingName, String billingPhone,
+                         String couponCode, String courseAccessPassword, String referralCode) {
+            this(courseId, paymentMethod, billingName, billingPhone, couponCode, courseAccessPassword,
+                    referralCode, null, null);
+        }
+    }
+
+    /** Giỏ hàng (06/09/2026, mở rộng ngoài đặc tả gốc) — gộp thanh toán nhiều khóa học học
+     * viên tự chọn trong 1 lần "Proceed to Checkout" (xem {@code PaymentService.
+     * createBatchPayment}). */
+    public record CreateBatchReq(
+            @NotEmpty List<Long> courseIds,
+            @NotNull String paymentMethod,
+            String billingName,
+            String billingPhone,
+            /** UC57 mở rộng (15/09/2026) — CÙNG 1 mã áp cho mọi khóa trong giỏ, mỗi khóa tự
+             * kiểm tra coupon tốt nhất RIÊNG (BR-COUPON-05) — khóa nào mã không hợp lệ vẫn
+             * tính giá gốc (hoặc giá coupon autoApply nếu có), không ảnh hưởng khóa khác. */
+            String couponCode,
+            /** Chia doanh thu 2 mức (20/09/2026) — mã giới thiệu RIÊNG cho từng khóa trong
+             * giỏ, khoá theo {@code courseId} (cùng tinh thần {@code couponCode}: mỗi khóa tự
+             * kiểm tra khớp {@code Course.referralCode} của CHÍNH nó, không dùng chéo được).
+             * NULL hoặc thiếu entry cho 1 khóa → khóa đó tính {@code ORGANIC}. */
+            Map<Long, String> referralCodes,
+            /** Tính năng Course Bundles (29/09/2026) — danh sách ID các gói khóa học mà học viên chọn mua. */
+            List<Long> bundleIds,
+            /** Xem {@link CreateReq#couponId()} / {@link CreateReq#manualCoupon()}. */
+            Long couponId,
+            Boolean manualCoupon
+    ) {
+        public CreateBatchReq(List<Long> courseIds, String paymentMethod, String billingName, String billingPhone,
+                              String couponCode, Map<Long, String> referralCodes, List<Long> bundleIds) {
+            this(courseIds, paymentMethod, billingName, billingPhone, couponCode, referralCodes, bundleIds,
+                    null, null);
+        }
+    }
 
     public record PaymentUrlRes(
-            String paymentUrl
+            String paymentUrl,
+            /** Mobile (không có trang web nào để landing sau khi thanh toán) poll {@code GET
+             * /api/v1/payments/mine} rồi lọc theo {@code txnRef} này để biết khi nào thanh toán
+             * xong — xem `mobile/src/lib/auth/payosCheckout.ts`. Web không dùng field này. */
+            String txnRef
     ) {}
 
     public record Res(
@@ -27,7 +87,14 @@ public class PaymentDto {
             String courseTitle,
             String gatewayTxnNo,
             String billingName,
-            String billingPhone
+            String billingPhone,
+            /** UC57 mở rộng (15/09/2026) — NULL nếu không dùng coupon. */
+            BigDecimal originalAmount,
+            BigDecimal discountAmount,
+            String couponCode,
+            /** Mã nhóm khi thanh toán giỏ hàng (NULL với đơn lẻ) — mobile dùng để khớp giao dịch giỏ hàng
+             * với {@code PaymentUrlRes.txnRef} (chính là orderGroupRef) khi poll kết quả. */
+            String orderGroupRef
     ) {}
 
     public record AdminRes(
@@ -42,6 +109,11 @@ public class PaymentDto {
             String gatewayTxnNo,
             String userEmail,
             String billingName,
-            String billingPhone
+            String billingPhone,
+            BigDecimal originalAmount,
+            BigDecimal discountAmount,
+            String couponCode,
+            /** Chia doanh thu 2 mức (20/09/2026) — tỷ lệ ĐÃ áp dụng cho platformFee/instructorEarning ở trên. */
+            RevenueSource revenueSource
     ) {}
 }
