@@ -158,4 +158,40 @@ class CourseReviewServiceTest {
 
         assertThat(result.isHidden()).isFalse();
     }
+
+    // ── hideForRefund (11/11/2026, Giai đoạn B) ───────────────────────────────
+
+    @Test
+    void hideForRefund_hidesReviewRecalculatesRatingAndEvictsCache() {
+        course.setSlug("khoa-hoc-test");
+        CourseReview review = new CourseReview();
+        review.setId(300L);
+        review.setCourse(course);
+        review.setUser(student);
+        review.setIsHidden(false);
+        when(courseReviewRepository.findByUser_IdAndCourse_Id(1L, 10L)).thenReturn(Optional.of(review));
+        when(courseReviewRepository.findAverageRatingByCourseId(10L)).thenReturn(0.0);
+
+        courseReviewService.hideForRefund(1L, 10L);
+
+        assertThat(review.getIsHidden()).isTrue();
+        assertThat(review.getModerationStatus()).isEqualTo(com.lms.enrollment.entity.ReviewModerationStatus.HIDDEN);
+        verify(courseReviewRepository).save(review);
+        verify(cacheEvictionHelper).evictCourseCacheAfterCommit("khoa-hoc-test");
+    }
+
+    @Test
+    void hideForRefund_alreadyHiddenOrNoReview_doesNothing() {
+        CourseReview hidden = new CourseReview();
+        hidden.setCourse(course);
+        hidden.setIsHidden(true);
+        when(courseReviewRepository.findByUser_IdAndCourse_Id(1L, 10L)).thenReturn(Optional.of(hidden));
+        courseReviewService.hideForRefund(1L, 10L);
+
+        when(courseReviewRepository.findByUser_IdAndCourse_Id(2L, 10L)).thenReturn(Optional.empty());
+        courseReviewService.hideForRefund(2L, 10L);
+
+        verify(courseReviewRepository, never()).save(any(CourseReview.class));
+        verify(cacheEvictionHelper, never()).evictCourseCacheAfterCommit(any());
+    }
 }

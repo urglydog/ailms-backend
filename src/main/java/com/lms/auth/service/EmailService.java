@@ -166,14 +166,42 @@ public class EmailService {
         }
     }
 
+    /** Báo học viên: admin đã chuyển khoản tiền hoàn (11/11/2026, Giai đoạn B). Best-effort: lỗi gửi mail không làm hỏng việc ghi nhận. */
+    public void sendRefundTransferredEmail(String toEmail, String txnRef, String courseTitle,
+                                           BigDecimal amount, String transferRef) {
+        try {
+            sendHtmlMail(toEmail, "Đã chuyển tiền hoàn cho giao dịch " + txnRef,
+                    "Chúng tôi đã chuyển khoản số tiền hoàn " + formatVnd(amount) + " cho giao dịch " + txnRef
+                            + " (khóa học: " + courseTitle + "). Mã chuyển khoản: " + transferRef
+                            + ". Nếu sau vài giờ bạn chưa nhận được tiền, hãy mở lại khiếu nại trong mục Khiếu nại giao dịch.",
+                    supportMailShell("Đã chuyển tiền hoàn",
+                            paragraph("Chúng tôi đã chuyển khoản số tiền hoàn cho giao dịch của bạn.")
+                                    + summaryTable(new String[][]{
+                                            {"Mã giao dịch", HtmlUtils.htmlEscape(txnRef)},
+                                            {"Khóa học", HtmlUtils.htmlEscape(courseTitle)},
+                                            {"Số tiền hoàn", formatVnd(amount)},
+                                            {"Mã chuyển khoản", HtmlUtils.htmlEscape(transferRef)}})
+                                    + paragraph("Nếu sau vài giờ bạn chưa nhận được tiền, hãy mở lại khiếu nại trong mục "
+                                            + "<strong>Khiếu nại giao dịch</strong>.")));
+            log.info("Da gui email chuyen tien hoan den {} cho giao dich {}", toEmail, txnRef);
+        } catch (Exception e) {
+            log.error("Loi khi gui email chuyen tien hoan den {}: {}", toEmail, e.getMessage());
+        }
+    }
+
     private String buildDisputeResolutionHtml(
             boolean refunded, String txnRef, String courseTitle, BigDecimal amount,
             String reason, String adminNote, String refundBankAccount) {
         String statusColor = refunded ? "#16A34A" : "#64748B";
         String statusText = refunded ? "Đã chấp nhận hoàn tiền" : "Không chấp nhận hoàn tiền";
+        // Escape HTML mọi nội dung người dùng/admin nhập (11/11/2026) — trước đây chèn thẳng vào email.
+        txnRef = HtmlUtils.htmlEscape(txnRef);
+        courseTitle = HtmlUtils.htmlEscape(courseTitle);
+        reason = HtmlUtils.htmlEscape(reason == null ? "" : reason);
+        adminNote = HtmlUtils.htmlEscape(adminNote == null ? "" : adminNote);
         String refundRow = refunded && refundBankAccount != null
                 ? "<tr><td style=\"padding:6px 0;color:#64748B;\">Hoàn tiền tới</td><td style=\"padding:6px 0;color:#0F172A;text-align:right;font-weight:600;\">"
-                        + refundBankAccount + "</td></tr>"
+                        + HtmlUtils.htmlEscape(refundBankAccount) + "</td></tr>"
                 : "";
         return "<div style=\"font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;background:#ffffff;\">"
                 + "<div style=\"text-align:center;margin-bottom:24px;\">"

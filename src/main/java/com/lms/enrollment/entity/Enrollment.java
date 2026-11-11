@@ -20,6 +20,7 @@ import lombok.Setter;
  * chuyển {@code ARCHIVED} thì học viên đã sở hữu vẫn truy cập đầy đủ (BR-ENROLL-03).
  */
 @Entity
+@org.hibernate.annotations.SQLRestriction("revoked_at IS NULL")
 @Table(name = "enrollments",
         uniqueConstraints = @UniqueConstraint(name = "uk_enrollment_user_course", columnNames = {"user_id", "course_id"}))
 @Getter
@@ -36,6 +37,18 @@ public class Enrollment extends BaseEntity {
     /** Chỉ set khi progressPct đạt 100. */
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
+
+    /** Thu hồi MỀM quyền học khi hoàn tiền (11/11/2026, V159). `@SQLRestriction` ở trên làm mọi truy vấn
+     * của entity này tự bỏ qua dòng đã thu hồi → code cũ coi như học viên không còn ghi danh. Chỉ đổi
+     * giá trị qua native query trong {@code EnrollmentRepository} (revoke/reactivate), không qua entity. */
+    @Column(name = "revoked_at")
+    private LocalDateTime revokedAt;
+
+    @Column(name = "revoked_reason", length = 255)
+    private String revokedReason;
+
+    @Column(name = "revoked_payment_id")
+    private Long revokedPaymentId;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id", nullable = false)

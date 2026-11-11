@@ -9,4 +9,6 @@ import org.springframework.stereotype.Repository;
 public interface InstructorLedgerEntryRepository extends JpaRepository<InstructorLedgerEntry, Long> {
 
     boolean existsByPayment_IdAndEntryType(Long paymentId, LedgerEntryType entryType);
+
+    java.util.Optional<InstructorLedgerEntry> findByPayment_IdAndEntryType(Long paymentId, LedgerEntryType entryType);
 }

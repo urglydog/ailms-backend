@@ -3,7 +3,19 @@ package com.lms.payment.service;
 import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
 import com.lms.auth.service.EmailService;
+import com.lms.common.enums.AttachmentSide;
+import com.lms.common.enums.DisputeCategory;
+import com.lms.common.enums.DisputeEligibility;
 import com.lms.common.enums.DisputeStatus;
+import com.lms.common.enums.InstructorDecision;
+import com.lms.common.enums.RefundResponsibility;
+import com.lms.common.service.SystemConfigService;
+import com.lms.enrollment.entity.Enrollment;
+import com.lms.enrollment.repository.EnrollmentRepository;
+import com.lms.finance.FinanceConfigKeys;
+import com.lms.payment.entity.PaymentRefund;
+import com.lms.payment.repository.PaymentRefundRepository;
+import java.math.BigDecimal;
 import com.lms.common.enums.PaymentStatus;
 import com.lms.common.enums.Role;
 import com.lms.common.exception.BusinessRuleViolationException;
@@ -58,6 +70,11 @@ public class DisputeService {
     private final NotificationService notificationService;
     private final EmailService emailService;
     private final StorageService storageService;
+    private final RefundService refundService;
+    private final RefundPolicyService refundPolicyService;
+    private final EnrollmentRepository enrollmentRepository;
+    private final SystemConfigService systemConfigService;
+    private final PaymentRefundRepository refundRepository;
     private final Tika tika = new Tika();
 
     @Value("${lms.rules.max-dispute-evidence-files}")
@@ -82,10 +99,14 @@ public class DisputeService {
         if (payment.getStatus() != PaymentStatus.PAID) {
             throw new BusinessRuleViolationException("Chỉ có thể khiếu nại giao dịch đã thanh toán thành công");
         }
-        disputeRepository.findByPayment_IdAndStatus(payment.getId(), DisputeStatus.OPEN)
-                .ifPresent(d -> {
-                    throw new BusinessRuleViolationException("Giao dịch này đang có khiếu nại chưa xử lý");
-                });
+        if (payment.getAmount() == null || payment.getAmount().signum() <= 0) {
+            throw new BusinessRuleViolationException("Giao dịch 0đ không có gì để hoàn tiền");
+        }
+        // 11/11/2026 — mỗi giao dịch chỉ có MỘT khiếu nại (trước đây chỉ chặn khi đang OPEN → sau khi xử lý
+        // vẫn nộp lại được và có thể hoàn tiền 2 lần). Đã xử lý xong mà cần xem lại thì dùng "mở lại" hoặc hỗ trợ.
+        if (disputeRepository.existsByPayment_Id(payment.getId())) {
+            throw new BusinessRuleViolationException("Giao dịch này đã có khiếu nại, không thể gửi thêm");
+        }
         if (!req.termsAccepted()) {
             throw new BusinessRuleViolationException("Bạn phải đồng ý với chính sách hoàn tiền trước khi gửi khiếu nại");
         }
@@ -102,7 +123,16 @@ public class DisputeService {
         dispute.setDescription(req.description());
         dispute.setRefundBankAccount(req.refundBankAccount());
         dispute.setStatus(DisputeStatus.OPEN);
-        dispute.setTermsAcceptedAt(LocalDateTime.now());
+        LocalDateTime now = LocalDateTime.now();
+        dispute.setTermsAcceptedAt(now);
+        DisputeCategory category = req.category() == null ? DisputeCategory.OTHER : req.category();
+        dispute.setCategory(category);
+        BigDecimal progress = enrollmentRepository.findByUser_IdAndCourse_Id(user.getId(), payment.getCourse().getId())
+                .map(Enrollment::getProgressPct).orElse(BigDecimal.ZERO);
+        dispute.setProgressPctAtFiling(progress);
+        dispute.setEligibility(refundPolicyService.evaluate(category, payment.getPaidAt(), progress, now));
+        dispute.setInstructorDeadlineAt(now.plusHours(systemConfigService.getInt(
+                FinanceConfigKeys.DISPUTE_INSTRUCTOR_RESPONSE_HOURS, 48)));
         PaymentDispute saved = disputeRepository.save(dispute);
 
         for (MultipartFile file : evidenceFiles) {
@@ -118,7 +148,34 @@ public class DisputeService {
                         "/admin/transactions/disputes"
                 ));
 
+        // Giảng viên của khóa được báo ngay và có hạn để phản hồi (trước đây chỉ admin biết).
+        User instructor = payment.getCourse().getInstructor();
+        if (instructor != null && !instructor.getId().equals(user.getId())) {
+            notificationService.notify(
+                    instructor.getId(),
+                    "DISPUTE_FILED_INSTRUCTOR",
+                    "Học viên gửi yêu cầu hoàn tiền khóa học của bạn",
+                    user.getFullName() + " khiếu nại giao dịch " + payment.getTxnRef() + " (khóa \""
+                            + payment.getCourse().getTitle() + "\"). Vui lòng phản hồi trước hạn.",
+                    "/instructor/communication/refunds"
+            );
+        }
+
         return toRes(saved);
+    }
+
+    /** Đính kèm minh chứng vào khiếu nại đã có (giảng viên phản hồi). Dùng chung quy tắc kiểm tra file với học viên. */
+    @Transactional
+    public void attachEvidence(PaymentDispute dispute, List<MultipartFile> files, AttachmentSide side) {
+        List<MultipartFile> evidenceFiles = files == null ? List.of() : files.stream().filter(f -> !f.isEmpty()).toList();
+        if (evidenceFiles.size() > maxEvidenceFiles) {
+            throw new BusinessRuleViolationException("Chỉ được đính kèm tối đa " + maxEvidenceFiles + " file minh chứng");
+        }
+        for (MultipartFile file : evidenceFiles) {
+            DisputeAttachment attachment = uploadEvidence(dispute, file);
+            attachment.setSide(side);
+            attachmentRepository.save(attachment);
+        }
     }
 
     private DisputeAttachment uploadEvidence(PaymentDispute dispute, MultipartFile file) {
@@ -169,6 +226,9 @@ public class DisputeService {
 
     @Transactional
     public DisputeDto.AdminRes resolve(String adminEmail, Long disputeId, DisputeDto.ResolveReq req) {
+        if (req.status() != DisputeStatus.RESOLVED_REFUNDED && req.status() != DisputeStatus.RESOLVED_REJECTED) {
+            throw new BusinessRuleViolationException("Trạng thái xử lý không hợp lệ: chỉ nhận đã hoàn tiền hoặc từ chối");
+        }
         PaymentDispute dispute = disputeRepository.findById(disputeId)
                 .orElseThrow(() -> new ResourceNotFoundException("PaymentDispute", disputeId));
         if (dispute.getStatus() != DisputeStatus.OPEN && dispute.getStatus() != DisputeStatus.REOPENED) {
@@ -189,6 +249,19 @@ public class DisputeService {
         PaymentDispute saved = disputeRepository.save(dispute);
 
         boolean refunded = req.status() == DisputeStatus.RESOLVED_REFUNDED;
+        if (refunded) {
+            // Hoàn tiền THẬT (11/11/2026): REFUNDED + thu hồi ghi danh + sổ cái... trong cùng transaction.
+            // Lỗi ở đây (vd giao dịch không còn PAID) làm rollback cả việc đổi trạng thái khiếu nại.
+            refundService.approve(saved, adminEmail, req.responsibility(), req.note());
+        } else {
+            User instructor = dispute.getPayment().getCourse().getInstructor();
+            if (instructor != null) {
+                notificationService.notify(instructor.getId(), "DISPUTE_REJECTED_INSTRUCTOR",
+                        "Yêu cầu hoàn tiền khóa học của bạn đã được từ chối",
+                        "Giao dịch " + dispute.getPayment().getTxnRef() + " không được hoàn tiền; thu nhập của bạn không bị ảnh hưởng.",
+                        "/instructor/communication/refunds");
+            }
+        }
 
         notificationService.notify(
                 dispute.getFiledBy().getId(),
@@ -260,13 +333,23 @@ public class DisputeService {
         return toRes(saved);
     }
 
+    /** Admin ghi nhận đã chuyển khoản tiền hoàn cho học viên (11/11/2026). */
+    @Transactional
+    public DisputeDto.AdminRes markTransferred(String adminEmail, Long disputeId, DisputeDto.MarkTransferredReq req) {
+        PaymentDispute dispute = disputeRepository.findById(disputeId)
+                .orElseThrow(() -> new ResourceNotFoundException("PaymentDispute", disputeId));
+        refundService.markTransferred(dispute, adminEmail, req.transferRef());
+        return toAdminRes(dispute);
+    }
+
     private List<DisputeDto.AttachmentRes> toAttachmentRes(PaymentDispute d) {
         return attachmentRepository.findByDispute_IdOrderByIdAsc(d.getId()).stream()
-                .map(a -> new DisputeDto.AttachmentRes(a.getId(), a.getFileUrl(), a.getFileType()))
+                .map(a -> new DisputeDto.AttachmentRes(a.getId(), a.getFileUrl(), a.getFileType(), a.getSide()))
                 .toList();
     }
 
     private DisputeDto.Res toRes(PaymentDispute d) {
+        PaymentRefund refund = refundRepository.findByPayment_Id(d.getPayment().getId()).orElse(null);
         return new DisputeDto.Res(
                 d.getId(),
                 d.getPayment().getTxnRef(),
@@ -279,11 +362,18 @@ public class DisputeService {
                 d.getCreatedAt(),
                 toAttachmentRes(d),
                 d.getResolvedAt(),
-                d.getReopenedAt()
+                d.getReopenedAt(),
+                d.getAdminNote(),
+                d.getCategory(),
+                d.getEligibility(),
+                d.getInstructorDecision(),
+                refund != null ? refund.getTransferStatus() : null,
+                d.getPayment().getPaidAt() != null ? refundPolicyService.refundDeadline(d.getPayment().getPaidAt()) : null
         );
     }
 
     private DisputeDto.AdminRes toAdminRes(PaymentDispute d) {
+        PaymentRefund refund = refundRepository.findByPayment_Id(d.getPayment().getId()).orElse(null);
         return new DisputeDto.AdminRes(
                 d.getId(),
                 d.getPayment().getTxnRef(),
@@ -301,7 +391,58 @@ public class DisputeService {
                 toAttachmentRes(d),
                 d.getReopenReason(),
                 d.getReopenedAt(),
-                d.getPreviousAdminNote()
+                d.getPreviousAdminNote(),
+                d.getCategory(),
+                d.getEligibility(),
+                d.getProgressPctAtFiling(),
+                d.getInstructorDecision(),
+                d.getInstructorResponse(),
+                d.getInstructorRespondedAt(),
+                d.getInstructorDeadlineAt(),
+                d.getPayment().getInstructorEarning(),
+                d.getPayment().getPlatformFee(),
+                d.getPayment().getPaidAt(),
+                refund != null ? refund.getResponsibility() : null,
+                refund != null ? refund.getInstructorCharge() : null,
+                refund != null ? refund.getPlatformShare() : null,
+                refund != null ? refund.getTransferStatus() : null,
+                refund != null ? refund.getTransferRef() : null
         );
+    }
+
+    /** Hình giảng viên xem — KHÔNG có email/SĐT/STK ngân hàng/ghi chú nội bộ admin của học viên. */
+    DisputeDto.InstructorRes toInstructorRes(PaymentDispute d) {
+        PaymentRefund refund = refundRepository.findByPayment_Id(d.getPayment().getId()).orElse(null);
+        return new DisputeDto.InstructorRes(
+                d.getId(),
+                d.getPayment().getTxnRef(),
+                d.getPayment().getCourse().getId(),
+                d.getPayment().getCourse().getTitle(),
+                d.getFiledBy().getFullName(),
+                d.getPayment().getAmount(),
+                d.getPayment().getInstructorEarning(),
+                d.getPayment().getPaidAt(),
+                d.getReason(),
+                d.getDescription(),
+                d.getCategory(),
+                d.getEligibility(),
+                d.getProgressPctAtFiling(),
+                d.getStatus(),
+                d.getCreatedAt(),
+                attachmentsBySide(d, AttachmentSide.STUDENT),
+                attachmentsBySide(d, AttachmentSide.INSTRUCTOR),
+                d.getInstructorDecision(),
+                d.getInstructorResponse(),
+                d.getInstructorRespondedAt(),
+                d.getInstructorDeadlineAt(),
+                d.getResolvedAt(),
+                refund != null ? refund.getInstructorCharge() : null
+        );
+    }
+
+    private List<DisputeDto.AttachmentRes> attachmentsBySide(PaymentDispute d, AttachmentSide side) {
+        return attachmentRepository.findByDispute_IdAndSideOrderByIdAsc(d.getId(), side).stream()
+                .map(a -> new DisputeDto.AttachmentRes(a.getId(), a.getFileUrl(), a.getFileType(), a.getSide()))
+                .toList();
     }
 }

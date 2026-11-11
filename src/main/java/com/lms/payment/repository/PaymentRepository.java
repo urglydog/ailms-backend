@@ -21,6 +21,11 @@ import org.springframework.data.repository.query.Param;
 @Repository
 public interface PaymentRepository extends JpaRepository<Payment, Long> {
     Optional<Payment> findByTxnRef(String txnRef);
+
+    /** Khóa dòng khi hoàn tiền (11/11/2026) — chặn 2 admin cùng duyệt hoàn 1 giao dịch. */
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @org.springframework.data.jpa.repository.Query("SELECT p FROM Payment p WHERE p.id = :id")
+    Optional<Payment> findByIdForUpdate(@org.springframework.data.repository.query.Param("id") Long id);
     List<Payment> findByUser_EmailOrderByCreatedAtDesc(String email);
     List<Payment> findByStatusAndCreatedAtBefore(PaymentStatus status, LocalDateTime before);
 

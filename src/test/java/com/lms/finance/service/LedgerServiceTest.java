@@ -104,4 +104,73 @@ class LedgerServiceTest {
 
         verify(repository, never()).save(org.mockito.ArgumentMatchers.any());
     }
+
+    // ── recordRefundReversal (11/11/2026, Giai đoạn B) ─────────────────────────────────────
+
+    private InstructorLedgerEntry earningEntry(long id, LocalDateTime availableAt) {
+        InstructorLedgerEntry e = new InstructorLedgerEntry();
+        e.setId(id);
+        e.setEntryType(LedgerEntryType.EARNING);
+        e.setAmount(new BigDecimal("74000"));
+        e.setAvailableAt(availableAt);
+        return e;
+    }
+
+    @Test
+    void recordRefundReversal_whileEarningStillHeld_inheritsItsAvailableAtSoBothNetOut() {
+        LocalDateTime heldUntil = LocalDateTime.now().plusDays(5);
+        when(repository.existsByPayment_IdAndEntryType(100L, LedgerEntryType.REFUND_REVERSAL)).thenReturn(false);
+        when(repository.findByPayment_IdAndEntryType(100L, LedgerEntryType.EARNING))
+                .thenReturn(java.util.Optional.of(earningEntry(7L, heldUntil)));
+
+        ledgerService.recordRefundReversal(payment, new BigDecimal("74000"), 9L);
+
+        ArgumentCaptor<InstructorLedgerEntry> captor = ArgumentCaptor.forClass(InstructorLedgerEntry.class);
+        verify(repository).save(captor.capture());
+        InstructorLedgerEntry e = captor.getValue();
+        assertThat(e.getEntryType()).isEqualTo(LedgerEntryType.REFUND_REVERSAL);
+        assertThat(e.getAmount()).isEqualByComparingTo("-74000");
+        assertThat(e.getAvailableAt()).isEqualTo(heldUntil);
+        assertThat(e.getRefEntryId()).isEqualTo(7L);
+        assertThat(e.getCreatedByUserId()).isEqualTo(9L);
+        assertThat(e.getInstructor()).isSameAs(instructor);
+    }
+
+    @Test
+    void recordRefundReversal_earningAlreadyMatured_takesEffectImmediately() {
+        LocalDateTime before = LocalDateTime.now();
+        when(repository.existsByPayment_IdAndEntryType(100L, LedgerEntryType.REFUND_REVERSAL)).thenReturn(false);
+        when(repository.findByPayment_IdAndEntryType(100L, LedgerEntryType.EARNING))
+                .thenReturn(java.util.Optional.of(earningEntry(7L, before.minusDays(3))));
+
+        ledgerService.recordRefundReversal(payment, new BigDecimal("74000"), 9L);
+
+        ArgumentCaptor<InstructorLedgerEntry> captor = ArgumentCaptor.forClass(InstructorLedgerEntry.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getAvailableAt()).isBetween(before, LocalDateTime.now().plusSeconds(1));
+    }
+
+    @Test
+    void recordRefundReversal_chargeLargerThanEarning_recordsFullCharge() {
+        when(repository.existsByPayment_IdAndEntryType(100L, LedgerEntryType.REFUND_REVERSAL)).thenReturn(false);
+        when(repository.findByPayment_IdAndEntryType(100L, LedgerEntryType.EARNING)).thenReturn(java.util.Optional.empty());
+
+        ledgerService.recordRefundReversal(payment, new BigDecimal("200000"), null);
+
+        ArgumentCaptor<InstructorLedgerEntry> captor = ArgumentCaptor.forClass(InstructorLedgerEntry.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getAmount()).isEqualByComparingTo("-200000");
+        assertThat(captor.getValue().getRefEntryId()).isNull();
+    }
+
+    @Test
+    void recordRefundReversal_zeroOrNullCharge_orAlreadyRecorded_writesNothing() {
+        ledgerService.recordRefundReversal(payment, BigDecimal.ZERO, 9L);
+        ledgerService.recordRefundReversal(payment, null, 9L);
+
+        when(repository.existsByPayment_IdAndEntryType(100L, LedgerEntryType.REFUND_REVERSAL)).thenReturn(true);
+        ledgerService.recordRefundReversal(payment, new BigDecimal("74000"), 9L);
+
+        verify(repository, never()).save(org.mockito.ArgumentMatchers.any());
+    }
 }

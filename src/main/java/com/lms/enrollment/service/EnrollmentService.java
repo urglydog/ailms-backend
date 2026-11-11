@@ -164,6 +164,17 @@ public class EnrollmentService {
      */
     @Transactional
     public void createFromPayment(Payment payment) {
+        // Mua lại sau khi từng bị hoàn tiền (11/11/2026): KÍCH HOẠT LẠI dòng đã thu hồi (UNIQUE user+course
+        // không cho chèn dòng mới; entity có @SQLRestriction nên existsBy... bên dưới không thấy dòng này).
+        // Giữ nguyên progress/completedAt → không cộng lại XP hoàn thành khóa.
+        if (enrollmentRepository.reactivate(payment.getUser().getId(), payment.getCourse().getId(), LocalDateTime.now()) > 0) {
+            // Chứng chỉ đã bị thu hồi lúc hoàn tiền (nếu có) có hiệu lực trở lại vì khóa vẫn ở trạng thái hoàn thành.
+            certificateRepository.findByStudent_IdAndCourse_Id(payment.getUser().getId(), payment.getCourse().getId())
+                    .filter(c -> c.getStatus() == com.lms.common.enums.CertificateStatus.REVOKED)
+                    .ifPresent(c -> c.setStatus(com.lms.common.enums.CertificateStatus.ACTIVE));
+            cartItemRepository.deleteByUser_IdAndCourse_Id(payment.getUser().getId(), payment.getCourse().getId());
+            return;
+        }
         if (enrollmentRepository.existsByUser_IdAndCourse_Id(payment.getUser().getId(), payment.getCourse().getId())) {
             return;
         }
@@ -177,5 +188,20 @@ public class EnrollmentService {
         // Gio hang (06/09/2026, mo rong) — thanh toan xong (tu gio hang hoac mua truc tiep)
         // thi xoa khoi gio hang neu co, tranh con nam lai o do sau khi da so huu.
         cartItemRepository.deleteByUser_IdAndCourse_Id(payment.getUser().getId(), payment.getCourse().getId());
+    }
+
+    /**
+     * Thu hồi MỀM quyền học khi giao dịch bị hoàn tiền (11/11/2026, Giai đoạn B). Idempotent: học viên đã
+     * không còn ghi danh hiệu lực thì trả {@code false}. Chứng chỉ của khóa (nếu có) chuyển REVOKED.
+     */
+    @Transactional
+    public boolean revokeForRefund(Payment payment, String reason) {
+        Long userId = payment.getUser().getId();
+        Long courseId = payment.getCourse().getId();
+        int revoked = enrollmentRepository.revoke(userId, courseId, payment.getId(), reason, LocalDateTime.now());
+        certificateRepository.findByStudent_IdAndCourse_Id(userId, courseId)
+                .filter(c -> c.getStatus() == com.lms.common.enums.CertificateStatus.ACTIVE)
+                .ifPresent(c -> c.setStatus(com.lms.common.enums.CertificateStatus.REVOKED));
+        return revoked > 0;
     }
 }

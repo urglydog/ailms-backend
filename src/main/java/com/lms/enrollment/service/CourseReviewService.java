@@ -202,6 +202,25 @@ public class CourseReviewService {
         return mapToRes(saved);
     }
 
+    /**
+     * Ẩn đánh giá của học viên khi họ được hoàn tiền khóa học (11/11/2026, Giai đoạn B) — đánh giá của
+     * người không còn sở hữu khóa không nên tính vào điểm. Idempotent; không có review thì bỏ qua.
+     */
+    @Transactional
+    public void hideForRefund(Long userId, Long courseId) {
+        courseReviewRepository.findByUser_IdAndCourse_Id(userId, courseId).ifPresent(review -> {
+            if (Boolean.TRUE.equals(review.getIsHidden())) {
+                return;
+            }
+            review.setIsHidden(true);
+            review.setModerationReason("Học viên đã được hoàn tiền khóa học");
+            review.setModerationStatus(ReviewModerationStatus.HIDDEN);
+            courseReviewRepository.save(review);
+            recalcAvgRating(review.getCourse());
+            cacheEvictionHelper.evictCourseCacheAfterCommit(review.getCourse().getSlug());
+        });
+    }
+
     private Res setHidden(Long id, boolean hidden) {
         CourseReview review = courseReviewRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("CourseReview", id));

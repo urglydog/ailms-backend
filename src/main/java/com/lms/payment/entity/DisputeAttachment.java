@@ -28,4 +28,9 @@ public class DisputeAttachment extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "dispute_id", nullable = false)
     private PaymentDispute dispute;
+
+    /** Minh chứng của học viên hay của giảng viên (11/11/2026, V160). Mặc định STUDENT. */
+    @jakarta.persistence.Enumerated(jakarta.persistence.EnumType.STRING)
+    @Column(name = "side", nullable = false, length = 12)
+    private com.lms.common.enums.AttachmentSide side = com.lms.common.enums.AttachmentSide.STUDENT;
 }

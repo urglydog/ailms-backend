@@ -11,5 +11,7 @@ public enum PaymentStatus {
     PENDING,
     PAID,
     FAILED,
-    EXPIRED
+    EXPIRED,
+    /** Đã hoàn tiền (11/11/2026) — mọi truy vấn doanh thu lọc `status = PAID` nên tự loại giao dịch này. */
+    REFUNDED
 }

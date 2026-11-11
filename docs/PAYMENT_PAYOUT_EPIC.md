@@ -56,20 +56,23 @@ Số hiệu migration thực tế (khác bảng dự kiến ban đầu): V154 `p
 | A14 | Test FE `payments/page.test.tsx` | ⛔ BỊ CHẶN — môi trường thiếu gói `motion` trong `node_modules` (lỗi có từ trước, `tsc` cũng báo); cần `npm ci` rồi chạy lại |
 
 ### Giai đoạn B — Hoàn tiền & khiếu nại
+Số hiệu migration thực tế: V159 `refund_core` (payments.refunded_at, enrollments.revoked_*, bảng `payment_refunds`) · V160 `dispute_v2` (category/eligibility/instructor_*, `dispute_attachments.side`). Đã kiểm trên MySQL 8 tạm: chỉ thêm cột/bảng, dữ liệu cũ nguyên vẹn, DB chặn hoàn trùng (`uk_pr_payment`), Hibernate `validate` qua, thu hồi mềm/kích hoạt lại chạy đúng với Hibernate+MySQL thật.
+
 | ID | Hạng mục | Trạng thái |
 |---|---|---|
-| B1 | V155 soft-revoke ghi danh + `@SQLRestriction`; kích hoạt lại khi mua lại | ⏳ CHƯA LÀM |
-| B2 | V156 `payment_refunds` + cột mới của `payment_disputes` / `dispute_attachments` | ⏳ CHƯA LÀM |
-| B3 | `RefundService.approve` (REFUNDED, thu hồi ghi danh, chứng chỉ REVOKED, ẩn review, sổ cái REVERSAL, cache) | ⏳ CHƯA LÀM |
-| B4 | `DisputeService` v2: chặn trùng, category, eligibility, hạn 48h cho giảng viên, validate status | ⏳ CHƯA LÀM |
-| B5 | API giảng viên: danh sách/chi tiết/phản hồi khiếu nại (ẩn thông tin ngân hàng học viên) | ⏳ CHƯA LÀM |
-| B6 | Đánh dấu đã chuyển tiền hoàn (`markTransferred`) + email học viên/giảng viên (escape HTML) | ⏳ CHƯA LÀM |
-| B7 | Job quá hạn phản hồi → NO_RESPONSE + nhắc admin | ⏳ CHƯA LÀM |
+| B1 | V159 soft-revoke ghi danh + `@SQLRestriction("revoked_at IS NULL")`; mua lại → `EnrollmentRepository.reactivate` (giữ progress/completedAt, chứng chỉ ACTIVE lại) | ✅ BE XONG 11/11/2026 (verify xanh 585 test) |
+| B2 | V159/V160: `payment_refunds`, cột mới `payment_disputes`/`dispute_attachments` | ✅ BE XONG |
+| B3 | `RefundService.approve` (REFUNDED, thu hồi ghi danh+chứng chỉ, ẩn review, sổ cái REVERSAL, xóa cache, audit, báo giảng viên, cảnh báo ≥3 lần hoàn/90 ngày); 3 chế độ trách nhiệm | ✅ BE XONG |
+| B4 | `DisputeService` v2: 1 khiếu nại/giao dịch, category (mặc định OTHER cho client cũ), eligibility theo `RefundPolicyService` (hạn 7 ngày + gia hạn T7/CN/lễ, tiến độ ≤ 20%), hạn 48h cho giảng viên, validate status resolve | ✅ BE XONG |
+| B5 | API giảng viên `/api/v1/instructor/disputes` (list/get/respond, ẩn thông tin cá nhân học viên) | ✅ BE XONG |
+| B6 | `markTransferred` + email học viên (đã escape HTML) + thông báo | ✅ BE XONG |
+| B7 | `DisputeDeadlineJob` (hằng giờ) → NO_RESPONSE + nhắc admin | ✅ BE XONG |
 | B8 | FE giảng viên: tab "Yêu cầu hoàn tiền" | ⏳ CHƯA LÀM |
 | B9 | FE admin: trang dispute nâng cấp (chế độ trách nhiệm + xem trước số tiền + mã chuyển khoản) | ⏳ CHƯA LÀM |
 | B10 | FE học viên: category, trạng thái từng bước, thấy `adminNote`, REFUNDED | ⏳ CHƯA LÀM |
-| B11 | Báo cáo các dispute `RESOLVED_REFUNDED` cũ để admin xử lý tay | ⏳ CHƯA LÀM |
-| B12 | Viết lại `/legal/refund`, `/legal/revenue-share`, `/legal/terms` (mục giảng viên) | ⏳ CHƯA LÀM |
+| B11 | Báo cáo 3 khiếu nại `RESOLVED_REFUNDED` cũ để admin xử lý tay (giao dịch vẫn PAID, chưa thu hồi) | ⏳ CHƯA LÀM — chờ chủ dự án duyệt từng ca |
+| B12 | Viết lại `/legal/refund`, `/legal/revenue-share`, `/legal/terms` | ⏳ CHƯA LÀM |
+| B13 | Mobile: category, trạng thái mới, `adminNote`, REFUNDED (BE tương thích ngược nên app cũ vẫn chạy) | ⏳ CHƯA LÀM |
 
 ### Giai đoạn C — Tài khoản nhận tiền & chi trả
 | ID | Hạng mục | Trạng thái |

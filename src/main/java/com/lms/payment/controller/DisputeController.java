@@ -51,6 +51,14 @@ public class DisputeController {
         return ResponseEntity.ok(disputeService.resolve(principal.getName(), id, req));
     }
 
+    /** Admin đã chuyển khoản tiền hoàn cho học viên và nhập mã giao dịch (11/11/2026). */
+    @PostMapping("/admin/{id}/mark-transferred")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<DisputeDto.AdminRes> markTransferred(
+            Principal principal, @PathVariable Long id, @Valid @RequestBody DisputeDto.MarkTransferredReq req) {
+        return ResponseEntity.ok(disputeService.markTransferred(principal.getName(), id, req));
+    }
+
     /** User báo "chưa nhận được tiền" sau khi admin đã đánh dấu hoàn tiền (26/10/2026). */
     @PostMapping("/mine/{id}/reopen")
     @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
