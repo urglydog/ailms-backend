@@ -137,3 +137,7 @@
 | BR-QUIZ-01 | Làm quiz không giới hạn số lần, không UNIQUE(user, quiz) |
 | BR-PAY-05 | `platform_fee` + `instructor_earning` chốt cứng lúc PAID, không tính lại |
 | Soft Delete | `course_resources` có `is_deleted`, `deleted_at` — không hard delete |
+
+## Bảng/cột mới của Epic hoàn tiền – chi trả (V154–V162)
+`payments.platform_rate`, `payments.refunded_at`; `enrollments.revoked_at/revoked_reason/revoked_payment_id`; `payment_refunds`; cột mới của `payment_disputes` (category, eligibility, instructor_*) và `dispute_attachments.side`; `finance_audit_logs`; `instructor_ledger_entries`; `instructor_payout_accounts`; `instructor_payouts`; `course_promotions`; 9 khóa tài chính trong `system_configs`.
+

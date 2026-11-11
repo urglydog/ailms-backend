@@ -121,10 +121,11 @@ Số hiệu migration thực tế: V162 (`course_promotions`). Đã kiểm trên
 ### Giai đoạn F — Hoàn thiện
 | ID | Hạng mục | Trạng thái |
 |---|---|---|
-| F1 | Mobile: dispute (category, trạng thái mới, `adminNote`), payments (REFUNDED) | ⏳ CHƯA LÀM |
-| F2 | Cập nhật `claude/*.md` (core-features, database, architecture) | ⏳ CHƯA LÀM |
+| F1 | Mobile: loại vấn đề, thông báo hoàn tiền/chuyển khoản, `REFUNDED`, mỗi giao dịch 1 khiếu nại (push `main` 8d044dc, tsc/lint sạch ở file đã sửa; các lỗi tsc/lint còn lại có từ trước) | ✅ XONG 11/11/2026 |
+| F2 | Cập nhật `claude/*.md` | ✅ XONG |
 | F3 | Ngày lễ nhập vào `REFUND_HOLIDAYS` | ⛔ BỊ CHẶN — admin nhập khi vận hành |
-| F4 | Kiểm thử đầu-cuối toàn bộ (mục "Kiểm chứng") | ⏳ CHƯA LÀM |
+| F4 | Kiểm thử đầu-cuối: `mvn clean verify` 665 test; áp V1→V162 trên MySQL 8 tạm; Hibernate `validate`; JPQL chạy thật; **khởi động đủ bean toàn ứng dụng (48s) + gọi thử API mới** (công khai chỉ đọc, còn lại 401 khi không token, đầu vào độc 400) | ✅ XONG phần tự động. 🔧 chưa thử luồng thật trên Vercel/PayOS (cần deploy) |
+| F5 | **Deploy**: BE nhánh `feat/payout-epic` (B–E) chưa merge vào nhánh chạy thật; FE commit local chưa push | ⛔ CHỜ chủ dự án duyệt deploy B (+C–E) |
 
 ## Bảo mật API công khai
 Chỉ làm khi đủ **tất cả** lớp sau (áp dụng cho D6, E5 và mọi API công khai thêm sau này):
