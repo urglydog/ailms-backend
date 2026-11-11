@@ -87,8 +87,8 @@ Số hiệu migration thực tế: V161 (`instructor_payout_accounts`, `instruct
 | C4 | `PayoutService`: yêu cầu rút (Idempotency-Key, khóa dòng giảng viên, giữ chỗ sổ cái, email xác nhận bắt buộc), xác nhận email, hủy, máy trạng thái PENDING_EMAIL→REQUESTED→APPROVED→PAID / REJECTED / CANCELLED / FAILED | ✅ BE XONG |
 | C5 | API admin `/api/v1/admin/payouts` (duyệt, đã chi + mã giao dịch, từ chối, thất bại, xem số tài khoản đầy đủ có nhật ký, xuất CSV chống công thức Excel) + 6 email các mốc | ✅ BE XONG |
 | C6 | Việc nền: hủy yêu cầu quá 30' chưa xác nhận (5 phút/lần); đối soát đêm ghi bù dòng EARNING còn thiếu (≤200 đơn/lần) và báo admin | ✅ BE XONG. 🔧 chưa có trang "Đối soát" riêng cho admin |
-| C7 | FE giảng viên "Thu nhập" (số dư, tài khoản nhận tiền, yêu cầu rút, lịch sử, sao kê) | ⏳ CHƯA LÀM |
-| C8 | FE admin "Chi trả" + nhật ký tài chính | ⏳ CHƯA LÀM |
+| C7 | FE giảng viên "Thu nhập" `/instructor/earnings` (số dư, tài khoản nhận tiền, yêu cầu rút có Idempotency-Key, lịch sử, sao kê) + trang xác nhận `/instructor/earnings/confirm` (cố ý cần bấm nút, tránh trình quét email ăn token) | ✅ FE XONG 11/11/2026 (commit local, chưa push chờ BE deploy). 🔧 chuỗi chữ viết cứng tiếng Việt (chưa i18n 4 ngôn ngữ) |
+| C8 | FE admin "Chi trả" `/admin/transactions/payouts` (duyệt, đã chuyển + mã giao dịch, từ chối, thất bại, xem số TK, xuất CSV) | ✅ FE XONG 11/11/2026. 🔧 còn: huy hiệu số yêu cầu chờ ở sidebar, trang xem nhật ký tài chính |
 | C9 | Tự động chi qua PayOS `payouts()` | 🅿️ HOÃN — cần bạn kiểm tra kênh PayOS có bật chi hộ; đã tách logic nên nối thêm `PayoutExecutor` được |
 
 ### Giai đoạn D — Chia sẻ khóa học
