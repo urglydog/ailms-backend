@@ -92,24 +92,29 @@ Số hiệu migration thực tế: V161 (`instructor_payout_accounts`, `instruct
 | C9 | Tự động chi qua PayOS `payouts()` | 🅿️ HOÃN — cần bạn kiểm tra kênh PayOS có bật chi hộ; đã tách logic nên nối thêm `PayoutExecutor` được |
 
 ### Giai đoạn D — Chia sẻ khóa học
+Không thêm API công khai nào. Số liệu chia sẻ chỉ đo **đơn mua** (đã đăng nhập). `mvn clean verify` xanh 665 test (11/11/2026, gồm cả Giai đoạn E).
+
 | ID | Hạng mục | Trạng thái |
 |---|---|---|
-| D1 | SEO/OG: `generateMetadata`, `metadataBase`, `sitemap.ts`, `robots.ts` | ⏳ CHƯA LÀM |
-| D2 | `lib/referral.ts`: hết hạn 30 ngày, đọc định dạng cũ; `buildShareUrl` | ⏳ CHƯA LÀM |
-| D3 | `ShareCourseDialog` (copy, `navigator.share` có fallback, Facebook/X/LinkedIn/Telegram/email) + điểm đặt | ⏳ CHƯA LÀM |
-| D4 | Thống kê chia sẻ theo đơn mua (số đơn, doanh thu, chuyển đổi theo link) | ⏳ CHƯA LÀM |
+| D1 | SEO/OG: `generateMetadata` (OpenGraph/Twitter/canonical) cho trang khóa học, `metadataBase` (lấy từ biến Vercel tự cấp, không cần env mới), `app/sitemap.ts`, `app/robots.ts` | ✅ FE XONG 11/11/2026 (commit local, chưa push) |
+| D2 | `lib/referral.ts` lưu kèm thời điểm, hết hạn 30 ngày, đọc được định dạng cũ, last-click; có test (`referral.test.ts`) | ✅ FE XONG |
+| D3 | `ShareCourseDialog` (sao chép, Web Share API có dò hỗ trợ, Facebook/X/LinkedIn/Telegram/Email, link gắn `ref`+kênh) + nút ở panel cài đặt khóa và trang `/instructor/share` | ✅ FE XONG. 🔧 chưa có Zalo |
+| D4 | Thống kê theo đơn mua: `GET /api/v1/instructor/share/courses` (khóa + mã giới thiệu + đơn/thu nhập theo nguồn, cần đăng nhập) + trang `/instructor/share` | ✅ BE + FE XONG. 🔧 chưa có tỷ lệ chuyển đổi (cần đo lượt xem, D6) |
 | D5 | Mã QR | ⛔ BỊ CHẶN — chờ bạn chọn có thêm thư viện `qrcode.react` không |
-| D6 | `POST /referrals/visit` (đếm lượt mở link) | 🅿️ HOÃN — API công khai ghi dữ liệu, chỉ làm với đủ lớp bảo vệ, sau khi A–C xong |
+| D6 | `POST /referrals/visit` (đếm lượt mở link) | 🅿️ HOÃN — API công khai ghi dữ liệu, chỉ làm với đủ 9 lớp bảo vệ |
 | D7 | Link ngắn `/r/{code}` | 🅿️ HOÃN |
 | D8 | Mobile: hết hạn mã giới thiệu + chia sẻ native | ⏳ CHƯA LÀM |
 
 ### Giai đoạn E — Quảng bá của nền tảng
+Số hiệu migration thực tế: V162 (`course_promotions`). Đã kiểm trên MySQL 8 tạm: Hibernate `validate` qua; truy vấn kệ nổi bật chạy đúng (đúng thứ tự ưu tiên, loại khóa nháp/riêng tư/đợt hết hạn, theo danh mục); thống kê loại đơn REFUNDED. Kệ dùng `GET /api/v1/courses/featured` — nằm sẵn dưới `PUBLIC_GET_ENDPOINTS` (`/api/v1/courses/**`) nên KHÔNG sửa `SecurityConfig`; chỉ đọc, đầu vào kiểm chặt (enum, slug theo mẫu, size kẹp 1–24), cache 15 phút.
+
 | ID | Hạng mục | Trạng thái |
 |---|---|---|
-| E1 | V160 `course_promotions` (+ `promotion_daily_stats`) | ⏳ CHƯA LÀM |
-| E2 | Giảng viên đăng ký, admin duyệt (vị trí, thời gian, ưu tiên) | ⏳ CHƯA LÀM |
-| E3 | Kệ "Khóa học nổi bật" qua tham số mới của `GET /api/v1/courses` (không thêm endpoint công khai), nhãn "Được đề xuất", boost tìm kiếm + xóa cache | ⏳ CHƯA LÀM |
-| E4 | Thống kê quảng bá theo đơn mua (`payments.promotion_id`) cho giảng viên/admin | ⏳ CHƯA LÀM |
+| E1 | V162 `course_promotions` | ✅ BE XONG 11/11/2026 |
+| E2 | Giảng viên đăng ký/hủy, admin duyệt (khung thời gian ≤ 90 ngày, độ ưu tiên)/từ chối/kết thúc sớm; điều kiện: khóa đã xuất bản + công khai + có ảnh bìa + ≥ 3 bài | ✅ BE + FE XONG (`/instructor/share`, `/admin/promotions`) |
+| E3 | Kệ "Được đề xuất" trang chủ (nhãn rõ ràng) qua `GET /courses/featured` | ✅ BE + FE XONG. 🔧 chưa có kệ đầu trang danh mục ở FE (BE đã hỗ trợ `CATEGORY_FEATURED`) |
+| E3b | Boost thứ hạng tìm kiếm + nhãn "Được đề xuất" trên thẻ khóa | 🅿️ HOÃN — phải sửa 3 truy vấn tìm kiếm phức tạp và cache 15 phút; rủi ro cao so với lợi ích |
+| E4 | Thống kê hiệu quả: đơn/doanh thu khi chạy so với khoảng bằng nhau ngay trước đó (ước tính) | ✅ BE + FE XONG. Quy kết chính xác theo `payments.promotion_id` 🅿️ HOÃN (cần sửa luồng tạo đơn) |
 | E5 | `POST /promotions/{id}/click` + đếm hiển thị | 🅿️ HOÃN — như D6 |
 | E6 | Chiến dịch email/thông báo + `marketing_opt_out` + link hủy | 🅿️ HOÃN — làm sau cùng, có thể tách PR |
 

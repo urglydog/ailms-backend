@@ -96,8 +96,8 @@ ngắn, cân nhắc bỏ quay liên tục, chỉ dựa vào chuỗi frame địn
 | A | Cấu hình tỷ lệ, `platform_rate`, sổ cái, audit, chặn giảng viên tự mua | ✅ XONG + ĐÃ DEPLOY BE 11/11/2026 (538 test xanh; V154–V158 chạy thành công trên DB thật, dữ liệu cũ nguyên vẹn, sổ cái khớp 1.514/1.514 đơn). FE đã push, xem trên Vercel. 🔧 còn: trang legal ghi tay 37/97, đơn demo thiếu sổ cái, test FE payments chưa chạy được (thiếu gói `motion`) |
 | B | Hoàn tiền (REFUNDED, thu hồi ghi danh, RefundService, DisputeService v2, giảng viên phản hồi, UI, pháp lý) | 🔄 ĐANG LÀM — BE xong + verify xanh 11/11/2026 (585 test); FE (B8–B10), pháp lý (B12), mobile (B13) còn lại |
 | C | Tài khoản nhận tiền, yêu cầu rút, trang giảng viên/admin, email, đối soát | 🔄 ĐANG LÀM — BE xong + verify xanh 11/11/2026 (649 test); FE (C7, C8) xong ở local (chưa push). C2 ⛔ chờ chủ dự án cấu hình khóa mã hóa; C9 tự động PayOS 🅿️ HOÃN |
-| D | Chia sẻ khóa học (SEO/OG, hộp chia sẻ, thống kê theo đơn mua) | ⏳ CHƯA LÀM (D5 QR ⛔ chờ chọn thư viện; D6 đếm lượt xem 🅿️ HOÃN) |
-| E | Quảng bá nền tảng (đăng ký/duyệt, kệ nổi bật, boost, thống kê theo đơn) | ⏳ CHƯA LÀM (E5 đếm click, E6 chiến dịch email 🅿️ HOÃN) |
+| D | Chia sẻ khóa học (SEO/OG, hộp chia sẻ, thống kê theo đơn mua) | ✅ BE + FE XONG 11/11/2026 (FE commit local chưa push). D5 QR ⛔ chờ chọn thư viện; D6 đếm lượt xem, D7 link ngắn 🅿️ HOÃN; D8 mobile ⏳ |
+| E | Quảng bá nền tảng (đăng ký/duyệt, kệ nổi bật, thống kê ước tính) | ✅ BE + FE XONG 11/11/2026 (665 test xanh). Boost tìm kiếm, quy kết theo `promotion_id`, đếm click, chiến dịch email 🅿️ HOÃN |
 | F | Mobile, tài liệu `claude/*.md`, kiểm thử đầu-cuối | ⏳ CHƯA LÀM |
 
 **Việc chờ chủ dự án:** sao lưu DB trước mỗi deploy có migration · biến môi trường khóa mã hóa số tài khoản · chọn thư viện QR · kiểm tra PayOS có chi hộ · nhập ngày lễ · quyết định hạ tầng (maxmemory Redis, bỏ `--reload` ở ai-api, giới hạn bộ nhớ container).
