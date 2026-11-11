@@ -71,7 +71,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
      * IP thật của client. Caddy NỐI IP nó thấy vào CUỐI {@code X-Forwarded-For}; phần đầu client tự
      * gửi được — nên lấy phần tử cuối để không bị giả IP lách giới hạn.
      */
-    static String clientIp(HttpServletRequest request) {
+    public static String clientIp(HttpServletRequest request) {
         String xff = request.getHeader("X-Forwarded-For");
         if (xff != null && !xff.isBlank()) {
             String[] parts = xff.split(",");

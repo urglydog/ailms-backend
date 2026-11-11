@@ -45,9 +45,13 @@ Trước mỗi tính năng đều đi kèm với **Bối cảnh & Nỗi đau (Pa
 |---|---|---|
 | 1 | Live session native (LiveKit) | **HOÃN** — cần EAS dev client; tạm mở phòng live bằng trình duyệt |
 | 2 | Giám sát thi (proctoring) — chụp frame định kỳ gửi Gemini Vision | **CẦN TEST THIẾT BỊ THẬT** (rủi ro `takePictureAsync` xen giữa `recordAsync`) |
-| 3 | Push notification (`expo-notifications`) | Chưa làm — Expo Go bỏ remote push; cần dev build |
-| 4 | Offline flashcard (`expo-sqlite`) | Đã có lớp DB/sync cơ bản; cần rà soát/test thiết bị thật |
+| 3 | Push notification (`expo-notifications`) | **HOÃN (09/11/2026)** — Expo Go không nhận remote push (xác minh docs Expo) + chỉ có iPhone (dev build cần Apple Developer $99) + BE chưa có bảng/API lưu push token. Tạm dùng thông báo trong app tự làm mới 30s |
+| 4 | Offline flashcard (`expo-sqlite`) | Đã rà soát + vá 09/11/2026 (mở được khi mất mạng nhờ cache học liệu, không ghi đè tiến độ chưa đồng bộ, đồng bộ lúc mở app/foreground). **Còn cần test thiết bị thật** (bật chế độ máy bay giữa chừng) |
 | 5 | Test thiết bị thật (Android + iOS) toàn bộ luồng mới ở trên | Chưa — code chỉ kiểm bằng `tsc` + lint trên server |
+
+**Đợt đối chiếu web ↔ mobile (09/11/2026):** ĐÃ làm — phụ đề phủ lên video + cài đặt phụ đề (cỡ/màu/nền/vị trí/viền; không có kéo-thả vị trí như web, không hiện ở fullscreen native), Transcript tô sáng theo thời gian thật, trang "Khoá học của tôi" (thống kê, Tiếp tục học, tìm kiếm/lọc/sắp xếp, lưới/danh sách, gợi ý), danh sách khoá học lưới/danh sách + chip bộ lọc, hồ sơ công khai (tab Chứng chỉ mặc định, thống kê, chia sẻ, lọc chứng chỉ). CHƯA làm — đa ngôn ngữ giao diện (vi/en/ja/zh, việc lớn: phải rà toàn bộ chuỗi chữ mobile); phụ đề kéo-thả vị trí; xem live trong app (Gap 1).
+
+**Đợt đối chiếu web ↔ mobile lần 2 (09/11/2026, từng điều khiển):** ĐÃ làm thêm — điều khiển player (lùi/tua 5s, tốc độ phát, nút Gốc/Dịch, tự chuyển bài), công tắc "Nghe bản gốc", nút "Lồng tiếng", toàn màn hình tự vẽ giữ phụ đề, danh sách khoá học cuộn tải thêm + đếm kết quả + trạng thái trống, "Khám phá theo chủ đề", yêu thích có tìm kiếm/thêm giỏ/đăng ký, hiện/ẩn mật khẩu, xác nhận đăng xuất. CHƯA làm (đã khảo sát, ưu tiên thấp/khó): chất lượng video (web chỉ có ở nguồn YouTube), phím tắt (không áp dụng mobile), kéo-thả vị trí phụ đề, biểu tượng "có tài liệu đính kèm" ở danh sách bài (BE chưa trả field), kệ khoá học theo từng danh mục ở trang chủ, đa ngôn ngữ giao diện.
 
 **Gap 1 — Live session mobile, lý do hoãn (12/10/2026):** Web dùng LiveKit (WebRTC) thật
 (`@livekit/components-react`, video track camera/screen-share, chat + phụ đề dịch qua data
@@ -76,6 +80,32 @@ ngắn, cân nhắc bỏ quay liên tục, chỉ dựa vào chuỗi frame địn
 
 ---
 
+### Epic: Hoàn tiền – Chi trả giảng viên – Quảng bá – Chia sẻ khóa học (bắt đầu 11/11/2026)
+
+**Bối cảnh & Nỗi đau:** mọi tiền thu về 1 tài khoản PayOS của nền tảng nhưng chưa có đường trả cho giảng viên; hoàn tiền chỉ là cờ trong `payment_disputes` (không đụng `Payment`, không thu hồi ghi danh, giảng viên không biết, doanh thu bị thổi phồng, có thể hoàn 2 lần); chia sẻ khóa học mới có `?ref=` thô (không SEO, không tracking, không chặn tự mua); chưa có quảng bá nào để biện minh tỷ lệ organic 63% của nền tảng.
+
+**Chi tiết + bảng theo dõi từng hạng mục:** `be/docs/PAYMENT_PAYOUT_EPIC.md` (file này chỉ giữ tóm tắt; sửa trạng thái ở đó thì cập nhật dòng tương ứng ở đây). Báo cáo rà soát gốc: `be/PAYMENT_REFUND_PAYOUT_REVIEW_20261111.md`.
+
+**Quyết định đã chốt (11/11/2026):** nền tảng thu hết → chi trả sau; tỷ lệ 37/63 + 97/3 giữ mặc định nhưng thành cấu hình admin (đổi chỉ áp dụng đơn mới); hạn hoàn tiền 7 ngày (tự gia hạn qua T7/CN); giữ tiền = hạn hoàn + 3 ngày; ngưỡng rút 100.000đ; chi trả đợt ngày 5 & 20, thủ công đợt đầu; rút phải gửi yêu cầu + xác nhận email; hoàn tiền thì thu hồi ghi danh (mềm) và loại khỏi doanh thu; giảng viên phản hồi (48h), admin quyết định cuối; giảng viên bị trừ đúng phần đã nhận (3 chế độ trách nhiệm, xem file chi tiết).
+
+**Quy trình phát triển (bắt buộc):** backend bind-mount thư mục thật + devtools + `restart: unless-stopped` → code dở KHÔNG để trong `/var/lms/be`. Code ở nhánh `feat/payout-epic` (worktree riêng), merge vào `feat/additional-features` khi giai đoạn xong + `mvn clean verify` xanh + chủ dự án đã sao lưu DB. FE không push trước khi BE giai đoạn tương ứng đã deploy.
+
+| Giai đoạn | Nội dung | Trạng thái |
+|---|---|---|
+| 0 | Rà soát, duyệt kế hoạch, ghi tài liệu | ✅ XONG 11/11/2026 |
+| A | Cấu hình tỷ lệ, `platform_rate`, sổ cái, audit, chặn giảng viên tự mua | ✅ XONG + ĐÃ DEPLOY BE 11/11/2026 (538 test xanh; V154–V158 chạy thành công trên DB thật, dữ liệu cũ nguyên vẹn, sổ cái khớp 1.514/1.514 đơn). FE đã push, xem trên Vercel. 🔧 còn: trang legal ghi tay 37/97, đơn demo thiếu sổ cái, test FE payments chưa chạy được (thiếu gói `motion`) |
+| B | Hoàn tiền (REFUNDED, thu hồi ghi danh, RefundService, DisputeService v2, giảng viên phản hồi, UI, pháp lý) | ⏳ CHƯA LÀM |
+| C | Tài khoản nhận tiền, yêu cầu rút, trang giảng viên/admin, email, đối soát | ⏳ CHƯA LÀM (C2 ⛔ chờ khóa mã hóa; C9 tự động PayOS 🅿️ HOÃN) |
+| D | Chia sẻ khóa học (SEO/OG, hộp chia sẻ, thống kê theo đơn mua) | ⏳ CHƯA LÀM (D5 QR ⛔ chờ chọn thư viện; D6 đếm lượt xem 🅿️ HOÃN) |
+| E | Quảng bá nền tảng (đăng ký/duyệt, kệ nổi bật, boost, thống kê theo đơn) | ⏳ CHƯA LÀM (E5 đếm click, E6 chiến dịch email 🅿️ HOÃN) |
+| F | Mobile, tài liệu `claude/*.md`, kiểm thử đầu-cuối | ⏳ CHƯA LÀM |
+
+**Việc chờ chủ dự án:** sao lưu DB trước mỗi deploy có migration · biến môi trường khóa mã hóa số tài khoản · chọn thư viện QR · kiểm tra PayOS có chi hộ · nhập ngày lễ · quyết định hạ tầng (maxmemory Redis, bỏ `--reload` ở ai-api, giới hạn bộ nhớ container).
+
+**Quy ước API công khai:** được phép nhưng phải đủ 9 lớp bảo vệ (danh sách trắng đầu vào, không ghép chuỗi vào SQL/Redis, phản hồi cố định 204, giới hạn bộ nhớ, rate limit từ chối-khi-lỗi, công tắc tắt khẩn cấp, handler nhỏ, test âm tính, rà Jackson/Tomcat) — xem file chi tiết.
+
+---
+
 ## TASK CÒN DANG DỞ / CẦN THEO DÕI TIẾP
 
 - **Nộp bài thi bị đứng hình trên Safari iOS** (`fe/app/(student)/exam/[quizId]/page.tsx`) — học viên phải tự bấm Dynamic Island tắt ghi hình rồi back lại mới nộp được bài, không tự động như desktop. Đã thử vá 1 lần (06/10/2026, dừng camera ngay trước khi đợi recorder.stop()) nhưng gây regression mất luôn phát hiện khuôn mặt — đã revert về bản cũ (commit `8bc7bab` trên `fe`). **Quyết định: KHÔNG vá tiếp trên web** — sẽ tự hết khi học viên chuyển sang làm bài thi trên app native (dùng `expo-camera` thật, không qua giới hạn WebKit `getUserMedia`/`MediaRecorder`), xem epic Mobile Native App ở trên, Tuần 5-7.
@@ -94,7 +124,5 @@ ngắn, cân nhắc bỏ quay liên tục, chỉ dựa vào chuỗi frame địn
 - ai-worker `app/config.py:58` (giá trị tạm 0.7); `MaterialGenerationService` 2 catch `JsonProcessingException` im lặng; ai-worker `discovery.py` tự mở `httpx.AsyncClient`.
 - Logo LinguaLearn cho kênh PayOS đã tạo ở `fe/public/brand/` (chưa commit).
 - `mvn clean verify` xanh 07/11/2026 (457 test).
-
-**Việc mobile đi kèm các thay đổi web:** checkout mobile cần nối cùng API chọn coupon thủ công (`couponId` + `manualCoupon: true`, `GET /coupons/available`) và `POST /payments/cancel` khi hủy PayOS; hiện vẫn chạy hành vi cũ (áp coupon tự động).
 
 Tip bảo mật data: check request nào thường xuyên hoặc truy xuất lượng dữ liệu lớn => AI cảnh báo admin
