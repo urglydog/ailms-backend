@@ -100,7 +100,7 @@ Không thêm API công khai nào. Số liệu chia sẻ chỉ đo **đơn mua** 
 | D2 | `lib/referral.ts` lưu kèm thời điểm, hết hạn 30 ngày, đọc được định dạng cũ, last-click; có test (`referral.test.ts`) | ✅ FE XONG |
 | D3 | `ShareCourseDialog` (sao chép, Web Share API có dò hỗ trợ, Facebook/X/LinkedIn/Telegram/Email, link gắn `ref`+kênh) + nút ở panel cài đặt khóa và trang `/instructor/share` | ✅ FE XONG. 🔧 chưa có Zalo |
 | D4 | Thống kê theo đơn mua: `GET /api/v1/instructor/share/courses` (khóa + mã giới thiệu + đơn/thu nhập theo nguồn, cần đăng nhập) + trang `/instructor/share` | ✅ BE + FE XONG. 🔧 chưa có tỷ lệ chuyển đổi (cần đo lượt xem, D6) |
-| D5 | Mã QR | ⛔ BỊ CHẶN — chờ bạn chọn có thêm thư viện `qrcode.react` không |
+| D5 | Mã QR trong hộp chia sẻ (`qrcode.react` 4.2.0, ISC, không phụ thuộc gói khác; vẽ SVG trên trình duyệt) | ✅ FE XONG 12/11/2026 |
 | D6 | `POST /referrals/visit` (đếm lượt mở link) | 🅿️ HOÃN — API công khai ghi dữ liệu, chỉ làm với đủ 9 lớp bảo vệ |
 | D7 | Link ngắn `/r/{code}` | 🅿️ HOÃN |
 | D8 | Mobile: hết hạn mã giới thiệu + chia sẻ native | ⏳ CHƯA LÀM |
