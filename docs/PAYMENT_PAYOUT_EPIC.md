@@ -12,6 +12,7 @@ Báo cáo rà soát gốc (lỗ hổng B1–B7): `PAYMENT_REFUND_PAYOUT_REVIEW_2
 |---|---|
 | 11/11/2026 | Tạo kế hoạch. Tỷ lệ chia mặc định giữ 37/63 (organic) và 97/3 (referral) nhưng chuyển thành cấu hình admin. Hạn hoàn 7 ngày (gia hạn qua T7/CN), giữ tiền = hạn + 3 ngày, ngưỡng rút 100.000đ, chi trả đợt ngày 5 & 20. Giảng viên phản hồi – admin quyết định cuối. |
 | 11/11/2026 | Quy trình phát triển: backend bind-mount thư mục thật + devtools + `restart: unless-stopped` → code dở KHÔNG được để trong `/var/lms/be`. Code ở nhánh riêng `feat/payout-epic` (worktree riêng), chỉ merge vào `feat/additional-features` khi giai đoạn xong + verify + bạn đã sao lưu DB. |
+| 11/11/2026 | Giai đoạn A: `refunded_at` + `REFUNDED` dời sang B; thêm `GET /instructor/revenue-share` (có đăng nhập) thay cho `GET /public/policy` (đã bỏ). Không có endpoint công khai mới nào ở giai đoạn A. |
 | 11/11/2026 | API công khai: được phép nhưng phải đủ lớp bảo vệ (mục "Bảo mật API công khai"). Làm ở giai đoạn D/E, sau khi A–C xong; có công tắc tắt khẩn cấp. |
 
 ## Nguyên tắc xuyên suốt
@@ -29,22 +30,29 @@ Báo cáo rà soát gốc (lỗ hổng B1–B7): `PAYMENT_REFUND_PAYOUT_REVIEW_2
 |---|---|---|
 | 0.1 | Rà soát lỗ hổng hoàn tiền/chi trả, báo cáo B1–B7 | ✅ XONG 11/11/2026 |
 | 0.2 | Kế hoạch được duyệt; ghi vào repo (file này + `UpComming_Plan.md`) | ✅ XONG 11/11/2026 |
-| 0.3 | Worktree + nhánh `feat/payout-epic` | ⏳ CHƯA LÀM |
+| 0.3 | Worktree + nhánh `feat/payout-epic` | ✅ XONG 11/11/2026 |
 
 ### Giai đoạn A — Cấu hình, tỷ lệ chia, sổ cái, audit, chặn tự mua
+Trạng thái chung: **code xong + `mvn clean verify` xanh (538 test) ngày 11/11/2026, nhánh `feat/payout-epic`. CHƯA deploy** — chờ chủ dự án sao lưu DB rồi merge/restart (Flyway sẽ chạy V154–V158 lúc khởi động).
+
+Số hiệu migration thực tế (khác bảng dự kiến ban đầu): V154 `platform_rate` · V155 `finance_audit_logs` · V156 seed `system_configs` · V157 `instructor_ledger_entries` · V158 backfill EARNING. Các giai đoạn sau đánh số tiếp từ V159.
+
 | ID | Hạng mục | Trạng thái |
 |---|---|---|
-| A1 | V154: `payments.platform_rate`, `refunded_at`, `promotion_id` + `PaymentStatus.REFUNDED` (backfill `platform_rate`) | ⏳ CHƯA LÀM |
-| A2 | V158→ `finance_audit_logs` + `FinanceAuditService` | ⏳ CHƯA LÀM |
-| A3 | V161: seed khóa `system_configs` (tỷ lệ, hạn hoàn, ngưỡng rút, ngày chi…) | ⏳ CHƯA LÀM |
-| A4 | `SystemConfigService`: getter có kiểu + cache 60s + validate + audit khi đổi | ⏳ CHƯA LÀM |
-| A5 | `PaymentService.applyOutcome`: đọc tỷ lệ từ config, ghi `platform_rate`, làm tròn scale 0 | ⏳ CHƯA LÀM |
-| A6 | V157 (phần sổ cái) `instructor_ledger_entries` + `LedgerService` + dòng EARNING lúc PAID | ⏳ CHƯA LÀM |
-| A7 | V162: backfill EARNING cho đơn PAID cũ (idempotent) | ⏳ CHƯA LÀM |
-| A8 | Chặn giảng viên tự mua khóa của mình (`createPayment`, `createBatchPayment`, `CartService.addItem`) | ⏳ CHƯA LÀM |
-| A9 | Xóa 2 dòng yml chết `platform-fee-percent`/`instructor-earning-percent`; sửa javadoc `Payment`, `DemoDataLoader`, test | ⏳ CHƯA LÀM |
-| A10 | FE: bỏ hard-code 37/63/97/3 (trang admin payments, `CourseReferralSection`, trang legal) | ⏳ CHƯA LÀM |
-| A11 | Form cấu hình tài chính trong admin Cấu hình hệ thống | ⏳ CHƯA LÀM |
+| A1 | V154: `payments.platform_rate` (backfill = `platform_fee/amount`). `refunded_at` + `PaymentStatus.REFUNDED` dời sang Giai đoạn B (tránh cột chưa dùng) | ✅ XONG 11/11/2026 |
+| A2 | V155 `finance_audit_logs` + `FinanceAuditService` (IP lấy theo `RateLimitFilter.clientIp`, entity `@Immutable`) | ✅ XONG 11/11/2026 |
+| A3 | V156: seed 9 khóa `system_configs` (mặc định = hành vi cũ 37/63, 97/3) | ✅ XONG 11/11/2026 |
+| A4 | `SystemConfigService`: getter có kiểu, cache 60s, validate khóa tài chính (từ chối cả lô nếu 1 giá trị sai), audit khi đổi; lỗi DB → dùng cache cũ/mặc định | ✅ XONG 11/11/2026 |
+| A5 | `PaymentService.applyOutcome`: tỷ lệ từ config, ghi `platform_rate`, làm tròn VND scale 0 | ✅ XONG 11/11/2026 |
+| A6 | V157 + `LedgerService.recordEarning` (cùng transaction với PAID, idempotent). Số dư/pending/available/frozen làm ở Giai đoạn C | ✅ XONG 11/11/2026 |
+| A7 | V158 backfill EARNING cho đơn PAID cũ (idempotent) | ✅ XONG 11/11/2026 |
+| A8 | Chặn giảng viên tự mua khóa của mình (`createPayment`, `createBatchPayment` kể cả trong bundle, `CartService.addItem`) — mã lỗi `BR-PAY-06` | ✅ XONG 11/11/2026 |
+| A9 | Xóa 2 dòng yml chết; sửa javadoc `Payment`; `DemoDataLoader` ghi `platform_rate` | 🔧 CẦN CẢI THIỆN — đơn demo do `DemoDataLoader` tạo trực tiếp KHÔNG có dòng sổ cái (đối soát C6 sẽ phát hiện/sửa) |
+| A10 | FE: bỏ hard-code ở trang admin payments (`platformRate`) và `CourseReferralSection` (đọc `GET /instructor/revenue-share`, endpoint cần đăng nhập, không công khai) | 🔧 CẦN CẢI THIỆN — trang `/legal/revenue-share` vẫn ghi tay 37%/97%; sẽ viết lại ở B12. Commit FE `63263c8` chưa push (đợi BE deploy để tránh hiện "—" tạm thời) |
+| A11 | FE: nhóm "Tài chính" trong Cấu hình hệ thống (input đúng kiểu từng khóa, đủ 4 ngôn ngữ) | ✅ XONG 11/11/2026 |
+| A12 | `GET /api/v1/instructor/revenue-share` (INSTRUCTOR/ADMIN, chỉ đọc) | ✅ XONG 11/11/2026 |
+| A13 | Test: `FinanceConfigKeysTest`, `SystemConfigServiceTest`, `LedgerServiceTest`, thêm vào `PaymentServiceTest`/`CartServiceTest` | ✅ XONG 11/11/2026 |
+| A14 | Test FE `payments/page.test.tsx` | ⛔ BỊ CHẶN — môi trường thiếu gói `motion` trong `node_modules` (lỗi có từ trước, `tsc` cũng báo); cần `npm ci` rồi chạy lại |
 
 ### Giai đoạn B — Hoàn tiền & khiếu nại
 | ID | Hạng mục | Trạng thái |

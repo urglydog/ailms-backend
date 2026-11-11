@@ -8,6 +8,9 @@ import com.lms.catalog.service.CourseAccessService;
 import com.lms.common.enums.CourseStatus;
 import com.lms.common.enums.PaymentStatus;
 import com.lms.common.enums.RevenueSource;
+import com.lms.common.service.SystemConfigService;
+import com.lms.finance.FinanceConfigKeys;
+import com.lms.finance.service.LedgerService;
 import com.lms.common.exception.BusinessRuleViolationException;
 import com.lms.common.exception.ResourceNotFoundException;
 import com.lms.coupon.entity.Coupon;
@@ -21,6 +24,7 @@ import com.lms.payment.entity.Payment;
 import com.lms.payment.repository.PaymentRepository;
 import com.lms.payment.repository.CartItemRepository;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -53,6 +57,8 @@ public class PaymentService {
     private final CourseBundleRepository bundleRepository;
     private final CartItemRepository cartItemRepository;
     private final PayOS payOS;
+    private final SystemConfigService systemConfigService;
+    private final LedgerService ledgerService;
 
     @Value("${payment.payos.returnUrl:http://localhost:3000/payments/callback}")
     private String payosReturnUrl;
@@ -68,6 +74,7 @@ public class PaymentService {
                 .orElseThrow(() -> new ResourceNotFoundException("Course", req.courseId()));
 
         courseAccessService.verifyCanEnroll(course, email, req.courseAccessPassword());
+        assertNotOwnCourse(course, user);
 
         if (course.getStatus() != CourseStatus.PUBLISHED) {
             throw new BusinessRuleViolationException("BR-PAY-01: Chỉ có thể thanh toán khóa học PUBLISHED.");
@@ -200,6 +207,7 @@ public class PaymentService {
             List<Course> validBundleCourses = new ArrayList<>();
 
             for (Course course : bundleCourses) {
+                assertNotOwnCourse(course, user);
                 if (processedCourseIds.contains(course.getId())) continue;
                 if (enrollmentRepository.existsByUser_IdAndCourse_Id(user.getId(), course.getId())) continue; // Pro-rated: Khách đã sở hữu
                 
@@ -254,6 +262,7 @@ public class PaymentService {
             Course course = courseRepository.findById(courseId).orElseThrow(() -> new ResourceNotFoundException("Course", courseId));
             
             courseAccessService.verifyCanAddToCart(course, email);
+            assertNotOwnCourse(course, user);
             if (course.getStatus() != CourseStatus.PUBLISHED) {
                 throw new BusinessRuleViolationException("BR-PAY-01: Khóa học \"" + course.getTitle() + "\" chưa được xuất bản.");
             }
@@ -352,6 +361,16 @@ public class PaymentService {
         }
 
         throw new IllegalStateException("Unreachable: paymentMethod đã được validate ở đầu hàm");
+    }
+
+    /** Giảng viên không được mua khóa của chính mình (11/11/2026) — nếu không, tự mua bằng mã giới
+     * thiệu riêng sẽ nhận 97% doanh thu của chính đơn đó (lách chia sẻ doanh thu / rút tiền ảo). */
+    private void assertNotOwnCourse(Course course, User buyer) {
+        if (course.getInstructor() != null && buyer.getId() != null
+                && buyer.getId().equals(course.getInstructor().getId())) {
+            throw new BusinessRuleViolationException(
+                    "BR-PAY-06: Bạn không thể mua khóa học do chính mình tạo.");
+        }
     }
 
     private RevenueSource resolveRevenueSource(Course course, String referralCode) {
@@ -511,18 +530,29 @@ public class PaymentService {
             payment.setGatewayTxnNo(gatewayTxnNo);
             payment.setPaidAt(LocalDateTime.now());
 
-            // BR-PAY-05 (chia doanh thu 2 mức, 20/09/2026): tỷ lệ theo revenueSource đã chốt
-            // lúc TẠO đơn (resolveRevenueSource) — ORGANIC 63% nền tảng, INSTRUCTOR_REFERRAL
-            // 3% nền tảng. Chốt cứng fee lúc PAID, không tính lại lúc hiển thị.
-            BigDecimal platformRate = payment.getRevenueSource() == RevenueSource.INSTRUCTOR_REFERRAL
-                    ? new BigDecimal("0.03")
-                    : new BigDecimal("0.63");
-            BigDecimal platformFee = payment.getAmount().multiply(platformRate);
+            // BR-PAY-05 (chia doanh thu 2 mức, 20/09/2026; tỷ lệ thành cấu hình admin 11/11/2026):
+            // tỷ lệ theo revenueSource đã chốt lúc TẠO đơn (resolveRevenueSource). Mặc định ORGANIC
+            // giảng viên 37%, INSTRUCTOR_REFERRAL 97%. Chốt cứng fee + tỷ lệ lúc PAID, không tính
+            // lại lúc hiển thị; đổi cấu hình chỉ ảnh hưởng đơn PAID SAU ĐÓ. Làm tròn VND (scale 0).
+            BigDecimal instructorPct = payment.getRevenueSource() == RevenueSource.INSTRUCTOR_REFERRAL
+                    ? systemConfigService.getDecimal(FinanceConfigKeys.REVENUE_REFERRAL_INSTRUCTOR_PCT,
+                            FinanceConfigKeys.DEFAULT_REFERRAL_INSTRUCTOR_PCT)
+                    : systemConfigService.getDecimal(FinanceConfigKeys.REVENUE_ORGANIC_INSTRUCTOR_PCT,
+                            FinanceConfigKeys.DEFAULT_ORGANIC_INSTRUCTOR_PCT);
+            BigDecimal platformRate = BigDecimal.ONE
+                    .subtract(instructorPct.movePointLeft(2))
+                    .setScale(4, RoundingMode.HALF_UP);
+            BigDecimal platformFee = payment.getAmount().multiply(platformRate).setScale(0, RoundingMode.HALF_UP);
             BigDecimal instructorEarning = payment.getAmount().subtract(platformFee);
+            payment.setPlatformRate(platformRate);
             payment.setPlatformFee(platformFee);
             payment.setInstructorEarning(instructorEarning);
 
             paymentRepository.save(payment);
+
+            // Sổ cái thu nhập giảng viên (11/11/2026): cùng transaction với việc đánh dấu PAID →
+            // không bao giờ có đơn PAID mà thiếu dòng EARNING (hoặc ngược lại). Idempotent.
+            ledgerService.recordEarning(payment);
 
             // Phụ thuộc F3.1
             enrollmentService.createFromPayment(payment);
@@ -589,7 +619,8 @@ public class PaymentService {
                         p.getOriginalAmount(),
                         p.getDiscountAmount(),
                         p.getCoupon() != null ? p.getCoupon().getCode() : null,
-                        p.getRevenueSource()
+                        p.getRevenueSource(),
+                        p.getPlatformRate()
                 )).toList();
     }
 }

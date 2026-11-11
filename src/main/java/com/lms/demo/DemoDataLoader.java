@@ -241,6 +241,7 @@ public class DemoDataLoader {
                         BigDecimal platformShare = e.referral() ? new BigDecimal("0.03") : new BigDecimal("0.63");
                         BigDecimal fee = course.getPrice().multiply(platformShare).setScale(2, RoundingMode.HALF_UP);
                         p.setRevenueSource(source);
+                        p.setPlatformRate(platformShare);
                         p.setPlatformFee(fee);
                         p.setInstructorEarning(course.getPrice().subtract(fee));
                         p.setPaymentMethod(e.method());

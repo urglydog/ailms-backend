@@ -65,6 +65,8 @@ class PaymentServiceTest {
     @Mock private com.lms.payment.repository.CartItemRepository cartItemRepository;
     @Mock private com.lms.bundle.repository.CourseBundleRepository bundleRepository;
     @Mock private com.lms.catalog.service.CourseAccessService courseAccessService;
+    @Mock private com.lms.common.service.SystemConfigService systemConfigService;
+    @Mock private com.lms.finance.service.LedgerService ledgerService;
 
     @InjectMocks
     private PaymentService paymentService;
@@ -103,6 +105,10 @@ class PaymentServiceTest {
         lenient().when(paymentRepository.save(any(Payment.class))).thenAnswer(inv -> inv.getArgument(0));
         // Coupon (15/09/2026, mở rộng) — mặc định KHÔNG có coupon nào áp dụng, giữ đúng amount
         // = giá gốc cho các test hiện có; có test riêng cho coupon ở CouponServiceTest.
+        // Tỷ lệ chia lấy từ cấu hình (11/11/2026): mặc định mock trả đúng giá trị mặc định người gọi
+        // truyền vào → giữ nguyên hành vi cũ 37/63 và 97/3 cho các test hiện có.
+        lenient().when(systemConfigService.getDecimal(org.mockito.ArgumentMatchers.anyString(), any()))
+                .thenAnswer(inv -> inv.getArgument(1));
         lenient().when(payOS.paymentRequests()).thenReturn(paymentRequestsService);
         lenient().when(paymentRequestsService.create(any())).thenReturn(stubPayosLink());
         lenient().when(couponService.resolveBestPrice(any(Course.class), any(), any())).thenAnswer(inv -> {
@@ -432,6 +438,121 @@ class PaymentServiceTest {
         paymentService.cancelPending(EMAIL, "txn-1");
 
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PAID);
+    }
+
+    // ── Tỷ lệ chia lấy từ cấu hình + sổ cái (11/11/2026) ───────────────
+
+    @Test
+    void processIpn_defaultConfig_storesPlatformRateAndRecordsLedgerEarning() {
+        Payment payment = pendingPayment("txn-1", null, courseA, new BigDecimal("200000"));
+        when(paymentRepository.findByOrderGroupRef("txn-1")).thenReturn(List.of());
+        when(paymentRepository.findByTxnRef("txn-1")).thenReturn(Optional.of(payment));
+
+        paymentService.processIpn("txn-1", "GW-1", true);
+
+        assertThat(payment.getPlatformRate()).isEqualByComparingTo("0.63");
+        verify(ledgerService).recordEarning(payment);
+    }
+
+    @Test
+    void processIpn_adminChangedOrganicShareTo70_appliesNewRateToNewOrder() {
+        // Admin đổi organic sang giảng viên 70% → nền tảng 30%.
+        when(systemConfigService.getDecimal(
+                com.lms.finance.FinanceConfigKeys.REVENUE_ORGANIC_INSTRUCTOR_PCT,
+                com.lms.finance.FinanceConfigKeys.DEFAULT_ORGANIC_INSTRUCTOR_PCT))
+                .thenReturn(new BigDecimal("70"));
+        Payment payment = pendingPayment("txn-1", null, courseA, new BigDecimal("200000"));
+        when(paymentRepository.findByOrderGroupRef("txn-1")).thenReturn(List.of());
+        when(paymentRepository.findByTxnRef("txn-1")).thenReturn(Optional.of(payment));
+
+        paymentService.processIpn("txn-1", "GW-1", true);
+
+        assertThat(payment.getPlatformRate()).isEqualByComparingTo("0.30");
+        assertThat(payment.getPlatformFee()).isEqualByComparingTo("60000");
+        assertThat(payment.getInstructorEarning()).isEqualByComparingTo("140000");
+    }
+
+    @Test
+    void processIpn_referralOrder_usesReferralShareFromConfig() {
+        when(systemConfigService.getDecimal(
+                com.lms.finance.FinanceConfigKeys.REVENUE_REFERRAL_INSTRUCTOR_PCT,
+                com.lms.finance.FinanceConfigKeys.DEFAULT_REFERRAL_INSTRUCTOR_PCT))
+                .thenReturn(new BigDecimal("90"));
+        Payment payment = pendingPayment("txn-1", null, courseA, new BigDecimal("200000"));
+        payment.setRevenueSource(com.lms.common.enums.RevenueSource.INSTRUCTOR_REFERRAL);
+        when(paymentRepository.findByOrderGroupRef("txn-1")).thenReturn(List.of());
+        when(paymentRepository.findByTxnRef("txn-1")).thenReturn(Optional.of(payment));
+
+        paymentService.processIpn("txn-1", "GW-1", true);
+
+        assertThat(payment.getPlatformRate()).isEqualByComparingTo("0.10");
+        assertThat(payment.getPlatformFee()).isEqualByComparingTo("20000");
+        assertThat(payment.getInstructorEarning()).isEqualByComparingTo("180000");
+    }
+
+    @Test
+    void processIpn_oddAmount_roundsPlatformFeeHalfUpToWholeVnd() {
+        // 100001 x 0.63 = 63000.63 -> 63001 ; giảng viên = 100001 - 63001 = 37000
+        Payment payment = pendingPayment("txn-1", null, courseA, new BigDecimal("100001"));
+        when(paymentRepository.findByOrderGroupRef("txn-1")).thenReturn(List.of());
+        when(paymentRepository.findByTxnRef("txn-1")).thenReturn(Optional.of(payment));
+
+        paymentService.processIpn("txn-1", "GW-1", true);
+
+        assertThat(payment.getPlatformFee()).isEqualByComparingTo("63001");
+        assertThat(payment.getInstructorEarning()).isEqualByComparingTo("37000");
+        assertThat(payment.getPlatformFee().scale()).isZero();
+    }
+
+    @Test
+    void processIpn_failedPayment_doesNotRecordLedger() {
+        Payment payment = pendingPayment("txn-1", null, courseA, new BigDecimal("200000"));
+        when(paymentRepository.findByOrderGroupRef("txn-1")).thenReturn(List.of());
+        when(paymentRepository.findByTxnRef("txn-1")).thenReturn(Optional.of(payment));
+
+        paymentService.processIpn("txn-1", "GW-1", false);
+
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.FAILED);
+        assertThat(payment.getPlatformRate()).isNull();
+        verify(ledgerService, never()).recordEarning(any());
+    }
+
+    @Test
+    void processIpn_calledTwice_recordsLedgerOnlyOnce() {
+        Payment payment = pendingPayment("txn-1", null, courseA, new BigDecimal("200000"));
+        when(paymentRepository.findByOrderGroupRef("txn-1")).thenReturn(List.of());
+        when(paymentRepository.findByTxnRef("txn-1")).thenReturn(Optional.of(payment));
+
+        paymentService.processIpn("txn-1", "GW-1", true);
+        paymentService.processIpn("txn-1", "GW-1", true);
+
+        verify(ledgerService, times(1)).recordEarning(payment);
+    }
+
+    // ── Giảng viên không được tự mua khóa của mình (11/11/2026) ────────
+
+    @Test
+    void createPayment_instructorBuysOwnCourse_isRejectedBeforeAnyPayment() {
+        courseA.setInstructor(user);
+
+        assertThatThrownBy(() -> paymentService.createPayment(
+                EMAIL, new CreateReq(10L, "PAYOS", null, null, null, null, "ref-course-a")))
+                .isInstanceOf(BusinessRuleViolationException.class)
+                .hasMessageContaining("BR-PAY-06");
+
+        verify(paymentRepository, never()).save(any());
+    }
+
+    @Test
+    void createBatchPayment_containsOwnCourse_isRejectedWithoutSavingAnyPayment() {
+        courseB.setInstructor(user);
+
+        assertThatThrownBy(() -> paymentService.createBatchPayment(
+                EMAIL, new CreateBatchReq(List.of(10L, 20L), "PAYOS", null, null, null, null, null)))
+                .isInstanceOf(BusinessRuleViolationException.class)
+                .hasMessageContaining("BR-PAY-06");
+
+        verify(paymentRepository, never()).save(any());
     }
 
     private Payment pendingPayment(String txnRef, String orderGroupRef, Course course, BigDecimal amount) {

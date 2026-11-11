@@ -2,6 +2,7 @@ package com.lms.common.controller;
 
 import com.lms.common.entity.SystemConfig;
 import com.lms.common.service.SystemConfigService;
+import java.security.Principal;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
@@ -31,7 +32,8 @@ public class SystemConfigController {
     }
 
     @PutMapping
-    public ResponseEntity<List<ConfigRes>> update(@RequestBody UpdateReq req) {
-        return ResponseEntity.ok(systemConfigService.updateValues(req.values()).stream().map(ConfigRes::from).toList());
+    public ResponseEntity<List<ConfigRes>> update(@RequestBody UpdateReq req, Principal principal) {
+        return ResponseEntity.ok(systemConfigService.updateValues(req.values(), principal.getName()).stream()
+                .map(ConfigRes::from).toList());
     }
 }

@@ -28,9 +28,11 @@ import lombok.Setter;
  * và {@code instructorEarning} được tính và <b>chốt cứng tại thời điểm PAID</b>, không
  * tính lại lúc hiển thị — để số liệu thống kê không lệch nếu tỷ lệ % thay đổi trong tương
  * lai. Tỷ lệ áp dụng phụ thuộc {@link #revenueSource}, chốt SẴN lúc tạo đơn (trước PAID):
- * {@code ORGANIC} → Giảng viên 37% / nền tảng 63%; {@code INSTRUCTOR_REFERRAL} (mua qua
- * liên kết giới thiệu riêng của Giảng viên, {@code Course.referralCode}) → Giảng viên
- * 97% / nền tảng 3%. Xem {@code PaymentService.resolveRevenueSource}/{@code applyOutcome}.
+ * {@code ORGANIC} → Giảng viên 37% / nền tảng 63% (mặc định); {@code INSTRUCTOR_REFERRAL}
+ * (mua qua liên kết giới thiệu riêng của Giảng viên, {@code Course.referralCode}) → Giảng viên
+ * 97% / nền tảng 3% (mặc định). Từ 11/11/2026 hai tỷ lệ là cấu hình admin ({@code system_configs},
+ * khóa {@code REVENUE_*_INSTRUCTOR_PCT}) và tỷ lệ thật của từng đơn lưu ở {@link #platformRate}.
+ * Xem {@code PaymentService.resolveRevenueSource}/{@code applyOutcome}.
  */
 @Entity
 @Table(name = "payments")
@@ -82,6 +84,13 @@ public class Payment extends BaseEntity {
      * này với {@link #platformFee}, xem thực tế tại {@code PaymentService.applyOutcome}. */
     @Column(name = "instructor_earning", nullable = false, precision = 12, scale = 2)
     private BigDecimal instructorEarning = BigDecimal.ZERO;
+
+    /** Tỷ lệ phần nền tảng ĐÃ áp dụng cho đơn này (0.0000–1.0000), chốt cứng lúc PAID cùng
+     * {@link #platformFee}/{@link #instructorEarning} (11/11/2026, V154). Tỷ lệ là cấu hình admin
+     * nên đổi được theo thời gian — cột này giữ lại tỷ lệ thật của từng đơn để báo cáo/hiển thị
+     * không bao giờ lệch. NULL ở đơn chưa PAID hoặc 0đ. */
+    @Column(name = "platform_rate", precision = 5, scale = 4)
+    private BigDecimal platformRate;
 
     /** Chốt lúc TẠO đơn (không đổi được sau đó) — quyết định tỷ lệ ăn chia áp dụng lúc PAID,
      * xem docblock lớp. */

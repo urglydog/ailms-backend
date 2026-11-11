@@ -146,8 +146,6 @@ lms:
     max-course-resubmit: 5                   # BR-COURSE-04
     min-reject-reason-length: 20             # BR-COURSE-04
     payment-expire-minutes: 15               # BR-PAY-03
-    platform-fee-percent: 30                 # BR-PAY-05
-    instructor-earning-percent: 70           # BR-PAY-05
     notification-retention-days: 90          # BR-NOTIFY-01
     max-tutor-attachments-per-turn: 3        # UC30 mở rộng
     max-tutor-attachment-size-mb: 8          # UC30 mở rộng

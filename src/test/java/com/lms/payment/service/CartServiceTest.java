@@ -94,6 +94,17 @@ class CartServiceTest {
     }
 
     @Test
+    void addItem_instructorAddsOwnCourse_isRejected() {
+        paidCourse.setInstructor(user); // người mua chính là chủ khóa
+
+        assertThatThrownBy(() -> cartService.addItem(EMAIL, 10L))
+                .isInstanceOf(BusinessRuleViolationException.class)
+                .hasMessageContaining("BR-PAY-06");
+
+        verify(cartItemRepository, never()).save(any(CartItem.class));
+    }
+
+    @Test
     void addItem_paidPublishedNotOwned_savesAndReturnsItem() {
         when(enrollmentRepository.existsByUser_IdAndCourse_Id(1L, 10L)).thenReturn(false);
         when(cartItemRepository.findByUser_IdAndCourse_Id(1L, 10L)).thenReturn(Optional.empty());

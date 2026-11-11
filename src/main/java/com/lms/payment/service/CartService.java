@@ -63,6 +63,12 @@ public class CartService {
 
         courseAccessService.verifyCanAddToCart(course, email);
 
+        // 11/11/2026 — giảng viên không tự mua khóa của chính mình (xem PaymentService.assertNotOwnCourse).
+        if (course.getInstructor() != null && user.getId() != null
+                && user.getId().equals(course.getInstructor().getId())) {
+            throw new BusinessRuleViolationException("BR-PAY-06: Bạn không thể thêm khóa học do chính mình tạo vào giỏ hàng.");
+        }
+
         if (course.getStatus() != CourseStatus.PUBLISHED) {
             throw new BusinessRuleViolationException("BR-CART-01: Chỉ có thể thêm khóa học đã xuất bản vào giỏ hàng.");
         }

@@ -114,6 +114,8 @@ public class PaymentDto {
             BigDecimal discountAmount,
             String couponCode,
             /** Chia doanh thu 2 mức (20/09/2026) — tỷ lệ ĐÃ áp dụng cho platformFee/instructorEarning ở trên. */
-            RevenueSource revenueSource
+            RevenueSource revenueSource,
+            /** Tỷ lệ phần nền tảng thực tế đã áp dụng cho đơn (11/11/2026) — FE hiển thị %, không hard-code. */
+            BigDecimal platformRate
     ) {}
 }
