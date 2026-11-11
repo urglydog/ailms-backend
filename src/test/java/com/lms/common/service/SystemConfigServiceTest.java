@@ -99,8 +99,13 @@ class SystemConfigServiceTest {
         when(repository.findByConfigKey("REFUND_WINDOW_DAYS")).thenReturn(Optional.of(good));
         when(repository.findByConfigKey("REVENUE_ORGANIC_INSTRUCTOR_PCT")).thenReturn(Optional.of(bad));
 
-        assertThatThrownBy(() -> service.updateValues(
-                Map.of("REFUND_WINDOW_DAYS", "10", "REVENUE_ORGANIC_INSTRUCTOR_PCT", "150"), "admin@lms.local"))
+        // LinkedHashMap (KHÔNG dùng Map.of nhiều phần tử): thứ tự duyệt Map.of đổi theo từng lần chạy
+        // JVM → stub của khóa hợp lệ lúc dùng lúc không → UnnecessaryStubbing ngẫu nhiên trên CI.
+        Map<String, String> batch = new java.util.LinkedHashMap<>();
+        batch.put("REFUND_WINDOW_DAYS", "10");
+        batch.put("REVENUE_ORGANIC_INSTRUCTOR_PCT", "150");
+
+        assertThatThrownBy(() -> service.updateValues(batch, "admin@lms.local"))
                 .isInstanceOf(InvalidRequestException.class);
 
         assertThat(good.getConfigValue()).isEqualTo("7");
