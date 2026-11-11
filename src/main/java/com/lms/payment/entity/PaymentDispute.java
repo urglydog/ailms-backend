@@ -85,4 +85,34 @@ public class PaymentDispute extends BaseEntity {
      * resolve thứ 2 (sau khi dispute bị reopen). */
     @Column(name = "previous_admin_note", columnDefinition = "TEXT")
     private String previousAdminNote;
+
+    // ── Khiếu nại v2 (11/11/2026, V160) — các cột NULL ở 3 khiếu nại cũ ───────────────────────
+
+    /** Lý do chuẩn hóa; null ở khiếu nại cũ. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "category", length = 30)
+    private com.lms.common.enums.DisputeCategory category;
+
+    /** Tính lúc gửi (trong hạn + tiến độ ≤ ngưỡng...). Admin vẫn quyết định cuối. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "eligibility", length = 20)
+    private com.lms.common.enums.DisputeEligibility eligibility;
+
+    /** Tiến độ học (%) của học viên lúc gửi khiếu nại. */
+    @Column(name = "progress_pct_at_filing", precision = 5, scale = 2)
+    private java.math.BigDecimal progressPctAtFiling;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "instructor_decision", length = 20)
+    private com.lms.common.enums.InstructorDecision instructorDecision;
+
+    @Column(name = "instructor_response", columnDefinition = "TEXT")
+    private String instructorResponse;
+
+    @Column(name = "instructor_responded_at")
+    private LocalDateTime instructorRespondedAt;
+
+    /** Hạn để giảng viên phản hồi; quá hạn mà chưa phản hồi → NO_RESPONSE (job quét). */
+    @Column(name = "instructor_deadline_at")
+    private LocalDateTime instructorDeadlineAt;
 }

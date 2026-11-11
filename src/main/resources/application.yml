@@ -107,6 +107,11 @@ google:
 
 # ── Cấu hình riêng của ứng dụng ─────────────────────────────────
 lms:
+  security:
+    # Khóa mã hóa số tài khoản ngân hàng của giảng viên (Giai đoạn C, 11/11/2026): 32 byte base64
+    # (tạo bằng `openssl rand -base64 32`). ĐỂ TRỐNG = tính năng tài khoản nhận tiền/rút tiền tắt (backend vẫn chạy).
+    # MẤT KHÓA = MẤT số tài khoản đã lưu → phải sao lưu khóa. Cần thêm vào `environment` của service backend trong docker-compose.
+    payout-encryption-key: ${LMS_PAYOUT_ENCRYPTION_KEY:}
   jwt:
     secret: ${JWT_SECRET}
     # BR-AUTH-04: access 15 phút, refresh 7 ngày

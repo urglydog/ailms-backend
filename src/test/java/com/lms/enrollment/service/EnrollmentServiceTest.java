@@ -35,6 +35,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
@@ -257,5 +258,69 @@ class EnrollmentServiceTest {
         assertThatThrownBy(() -> enrollmentService.enrollFreeCourse(EMAIL, 10L, null))
                 .isInstanceOf(AccessDeniedDomainException.class);
         verify(enrollmentRepository, never()).save(any());
+    }
+
+    // ── Hoàn tiền: thu hồi mềm + kích hoạt lại khi mua lại (11/11/2026, Giai đoạn B) ──────────
+
+    private com.lms.payment.entity.Payment paidPayment() {
+        com.lms.payment.entity.Payment payment = new com.lms.payment.entity.Payment();
+        payment.setId(55L);
+        payment.setUser(student);
+        payment.setCourse(freeCourse);
+        return payment;
+    }
+
+    @Test
+    void createFromPayment_afterRefund_reactivatesOldRowAndRestoresCertificate() {
+        com.lms.certificate.entity.Certificate certificate = new com.lms.certificate.entity.Certificate();
+        certificate.setStatus(com.lms.common.enums.CertificateStatus.REVOKED);
+        when(enrollmentRepository.reactivate(eq(1L), eq(10L), any(LocalDateTime.class))).thenReturn(1);
+        when(certificateRepository.findByStudent_IdAndCourse_Id(1L, 10L)).thenReturn(Optional.of(certificate));
+
+        enrollmentService.createFromPayment(paidPayment());
+
+        assertThat(certificate.getStatus()).isEqualTo(com.lms.common.enums.CertificateStatus.ACTIVE);
+        verify(enrollmentRepository, never()).save(any(Enrollment.class)); // không chèn dòng mới (UNIQUE user+course)
+        verify(cartItemRepository).deleteByUser_IdAndCourse_Id(1L, 10L);
+    }
+
+    @Test
+    void createFromPayment_firstPurchase_createsNewEnrollment() {
+        // reactivate mặc định trả 0 (không có dòng nào bị thu hồi)
+        enrollmentService.createFromPayment(paidPayment());
+
+        ArgumentCaptor<Enrollment> captor = ArgumentCaptor.forClass(Enrollment.class);
+        verify(enrollmentRepository).save(captor.capture());
+        assertThat(captor.getValue().getUser()).isSameAs(student);
+        assertThat(captor.getValue().getCourse()).isSameAs(freeCourse);
+    }
+
+    @Test
+    void createFromPayment_alreadyEnrolled_isIdempotent() {
+        when(enrollmentRepository.existsByUser_IdAndCourse_Id(1L, 10L)).thenReturn(true);
+
+        enrollmentService.createFromPayment(paidPayment());
+
+        verify(enrollmentRepository, never()).save(any(Enrollment.class));
+    }
+
+    @Test
+    void revokeForRefund_revokesEnrollmentAndActiveCertificate() {
+        com.lms.certificate.entity.Certificate certificate = new com.lms.certificate.entity.Certificate();
+        certificate.setStatus(com.lms.common.enums.CertificateStatus.ACTIVE);
+        when(enrollmentRepository.revoke(eq(1L), eq(10L), eq(55L), eq("Hoàn tiền"), any(LocalDateTime.class))).thenReturn(1);
+        when(certificateRepository.findByStudent_IdAndCourse_Id(1L, 10L)).thenReturn(Optional.of(certificate));
+
+        boolean revoked = enrollmentService.revokeForRefund(paidPayment(), "Hoàn tiền");
+
+        assertThat(revoked).isTrue();
+        assertThat(certificate.getStatus()).isEqualTo(com.lms.common.enums.CertificateStatus.REVOKED);
+    }
+
+    @Test
+    void revokeForRefund_noActiveEnrollment_returnsFalse() {
+        when(enrollmentRepository.revoke(eq(1L), eq(10L), eq(55L), any(), any(LocalDateTime.class))).thenReturn(0);
+
+        assertThat(enrollmentService.revokeForRefund(paidPayment(), "x")).isFalse();
     }
 }

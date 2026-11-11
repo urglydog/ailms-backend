@@ -113,6 +113,10 @@ public class Payment extends BaseEntity {
     @Column(name = "paid_at")
     private LocalDateTime paidAt;
 
+    /** Thời điểm hoàn tiền (11/11/2026, V159) — != null cùng với status = REFUNDED. */
+    @Column(name = "refunded_at")
+    private LocalDateTime refundedAt;
+
     @Column(name = "billing_name", length = 100)
     private String billingName;
 

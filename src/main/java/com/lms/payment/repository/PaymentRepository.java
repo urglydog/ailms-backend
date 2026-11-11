@@ -21,6 +21,11 @@ import org.springframework.data.repository.query.Param;
 @Repository
 public interface PaymentRepository extends JpaRepository<Payment, Long> {
     Optional<Payment> findByTxnRef(String txnRef);
+
+    /** Khóa dòng khi hoàn tiền (11/11/2026) — chặn 2 admin cùng duyệt hoàn 1 giao dịch. */
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @org.springframework.data.jpa.repository.Query("SELECT p FROM Payment p WHERE p.id = :id")
+    Optional<Payment> findByIdForUpdate(@org.springframework.data.repository.query.Param("id") Long id);
     List<Payment> findByUser_EmailOrderByCreatedAtDesc(String email);
     List<Payment> findByStatusAndCreatedAtBefore(PaymentStatus status, LocalDateTime before);
 
@@ -74,4 +79,35 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"course", "coupon"})
     List<Payment> findByCourse_Instructor_EmailAndStatusAndPaidAtAfterOrderByPaidAtDesc(
             String email, PaymentStatus status, LocalDateTime after);
+
+    /** Đối soát sổ cái (11/11/2026): đơn PAID có thu nhập nhưng chưa có dòng EARNING. */
+    @org.springframework.data.jpa.repository.Query("SELECT p FROM Payment p WHERE p.status = com.lms.common.enums.PaymentStatus.PAID "
+            + "AND p.instructorEarning > 0 AND NOT EXISTS (SELECT 1 FROM InstructorLedgerEntry e WHERE e.payment = p "
+            + "AND e.entryType = com.lms.common.enums.LedgerEntryType.EARNING) ORDER BY p.id")
+    List<Payment> findPaidMissingLedgerEarning(org.springframework.data.domain.Pageable pageable);
+
+    /**
+     * Số đơn + doanh thu + thu nhập giảng viên của các khóa của 1 giảng viên, gộp theo (khóa, nguồn) trong [start, end)
+     * (11/11/2026, trang Chia sẻ). Mỗi dòng: [courseId, revenueSource, count, sum(amount)... ] — xem ShareStatsService.
+     * Chỉ PAID nên đơn đã hoàn tiền tự bị loại.
+     */
+    @org.springframework.data.jpa.repository.Query("SELECT p.course.id, p.revenueSource, COUNT(p), COALESCE(SUM(p.instructorEarning), 0) "
+            + "FROM Payment p WHERE p.course.instructor.email = :email AND p.status = com.lms.common.enums.PaymentStatus.PAID "
+            + "AND p.paidAt >= :start AND p.paidAt < :end GROUP BY p.course.id, p.revenueSource")
+    List<Object[]> aggregateSalesBySource(@org.springframework.data.repository.query.Param("email") String email,
+                                          @org.springframework.data.repository.query.Param("start") java.time.LocalDateTime start,
+                                          @org.springframework.data.repository.query.Param("end") java.time.LocalDateTime end);
+
+    /** Số đơn đã thanh toán của 1 khóa trong [start, end) — thống kê hiệu quả quảng bá (Giai đoạn E). */
+    @org.springframework.data.jpa.repository.Query("SELECT COUNT(p) FROM Payment p WHERE p.course.id = :courseId "
+            + "AND p.status = com.lms.common.enums.PaymentStatus.PAID AND p.paidAt >= :start AND p.paidAt < :end")
+    long countPaidBetween(@org.springframework.data.repository.query.Param("courseId") Long courseId,
+                          @org.springframework.data.repository.query.Param("start") java.time.LocalDateTime start,
+                          @org.springframework.data.repository.query.Param("end") java.time.LocalDateTime end);
+
+    @org.springframework.data.jpa.repository.Query("SELECT COALESCE(SUM(p.amount), 0) FROM Payment p WHERE p.course.id = :courseId "
+            + "AND p.status = com.lms.common.enums.PaymentStatus.PAID AND p.paidAt >= :start AND p.paidAt < :end")
+    java.math.BigDecimal sumPaidBetween(@org.springframework.data.repository.query.Param("courseId") Long courseId,
+                                        @org.springframework.data.repository.query.Param("start") java.time.LocalDateTime start,
+                                        @org.springframework.data.repository.query.Param("end") java.time.LocalDateTime end);
 }

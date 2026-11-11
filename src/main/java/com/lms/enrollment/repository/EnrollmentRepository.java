@@ -67,4 +67,31 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, Long> {
     @EntityGraph(attributePaths = {"course", "course.category", "course.instructor"})
     List<Enrollment> findWithCourseByUser_Email(String email);
 
+
+    /**
+     * Thu hồi MỀM ghi danh khi hoàn tiền (11/11/2026). Native vì entity có {@code @SQLRestriction}.
+     * Trả số dòng đã thu hồi (0 nếu học viên không còn ghi danh đang hiệu lực — idempotent).
+     */
+    @org.springframework.data.jpa.repository.Modifying(flushAutomatically = true, clearAutomatically = true)
+    @org.springframework.data.jpa.repository.Query(nativeQuery = true, value =
+            "UPDATE enrollments SET revoked_at = :now, revoked_reason = :reason, revoked_payment_id = :paymentId "
+                    + "WHERE user_id = :userId AND course_id = :courseId AND revoked_at IS NULL")
+    int revoke(@org.springframework.data.repository.query.Param("userId") Long userId,
+               @org.springframework.data.repository.query.Param("courseId") Long courseId,
+               @org.springframework.data.repository.query.Param("paymentId") Long paymentId,
+               @org.springframework.data.repository.query.Param("reason") String reason,
+               @org.springframework.data.repository.query.Param("now") java.time.LocalDateTime now);
+
+    /**
+     * Mua lại sau khi đã bị thu hồi: KÍCH HOẠT LẠI đúng dòng cũ (UNIQUE user+course không cho chèn dòng
+     * mới). Giữ nguyên progress_pct/completed_at (không cộng lại XP hoàn thành khóa). Trả 0 nếu không có
+     * dòng nào đang bị thu hồi.
+     */
+    @org.springframework.data.jpa.repository.Modifying(flushAutomatically = true, clearAutomatically = true)
+    @org.springframework.data.jpa.repository.Query(nativeQuery = true, value =
+            "UPDATE enrollments SET revoked_at = NULL, revoked_reason = NULL, revoked_payment_id = NULL, "
+                    + "enrolled_at = :now WHERE user_id = :userId AND course_id = :courseId AND revoked_at IS NOT NULL")
+    int reactivate(@org.springframework.data.repository.query.Param("userId") Long userId,
+                   @org.springframework.data.repository.query.Param("courseId") Long courseId,
+                   @org.springframework.data.repository.query.Param("now") java.time.LocalDateTime now);
 }

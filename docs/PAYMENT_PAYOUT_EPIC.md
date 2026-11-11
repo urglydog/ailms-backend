@@ -56,63 +56,76 @@ Số hiệu migration thực tế (khác bảng dự kiến ban đầu): V154 `p
 | A14 | Test FE `payments/page.test.tsx` | ⛔ BỊ CHẶN — môi trường thiếu gói `motion` trong `node_modules` (lỗi có từ trước, `tsc` cũng báo); cần `npm ci` rồi chạy lại |
 
 ### Giai đoạn B — Hoàn tiền & khiếu nại
+Số hiệu migration thực tế: V159 `refund_core` (payments.refunded_at, enrollments.revoked_*, bảng `payment_refunds`) · V160 `dispute_v2` (category/eligibility/instructor_*, `dispute_attachments.side`). Đã kiểm trên MySQL 8 tạm: chỉ thêm cột/bảng, dữ liệu cũ nguyên vẹn, DB chặn hoàn trùng (`uk_pr_payment`), Hibernate `validate` qua, thu hồi mềm/kích hoạt lại chạy đúng với Hibernate+MySQL thật.
+
 | ID | Hạng mục | Trạng thái |
 |---|---|---|
-| B1 | V155 soft-revoke ghi danh + `@SQLRestriction`; kích hoạt lại khi mua lại | ⏳ CHƯA LÀM |
-| B2 | V156 `payment_refunds` + cột mới của `payment_disputes` / `dispute_attachments` | ⏳ CHƯA LÀM |
-| B3 | `RefundService.approve` (REFUNDED, thu hồi ghi danh, chứng chỉ REVOKED, ẩn review, sổ cái REVERSAL, cache) | ⏳ CHƯA LÀM |
-| B4 | `DisputeService` v2: chặn trùng, category, eligibility, hạn 48h cho giảng viên, validate status | ⏳ CHƯA LÀM |
-| B5 | API giảng viên: danh sách/chi tiết/phản hồi khiếu nại (ẩn thông tin ngân hàng học viên) | ⏳ CHƯA LÀM |
-| B6 | Đánh dấu đã chuyển tiền hoàn (`markTransferred`) + email học viên/giảng viên (escape HTML) | ⏳ CHƯA LÀM |
-| B7 | Job quá hạn phản hồi → NO_RESPONSE + nhắc admin | ⏳ CHƯA LÀM |
+| B1 | V159 soft-revoke ghi danh + `@SQLRestriction("revoked_at IS NULL")`; mua lại → `EnrollmentRepository.reactivate` (giữ progress/completedAt, chứng chỉ ACTIVE lại) | ✅ BE XONG 11/11/2026 (verify xanh 585 test) |
+| B2 | V159/V160: `payment_refunds`, cột mới `payment_disputes`/`dispute_attachments` | ✅ BE XONG |
+| B3 | `RefundService.approve` (REFUNDED, thu hồi ghi danh+chứng chỉ, ẩn review, sổ cái REVERSAL, xóa cache, audit, báo giảng viên, cảnh báo ≥3 lần hoàn/90 ngày); 3 chế độ trách nhiệm | ✅ BE XONG |
+| B4 | `DisputeService` v2: 1 khiếu nại/giao dịch, category (mặc định OTHER cho client cũ), eligibility theo `RefundPolicyService` (hạn 7 ngày + gia hạn T7/CN/lễ, tiến độ ≤ 20%), hạn 48h cho giảng viên, validate status resolve | ✅ BE XONG |
+| B5 | API giảng viên `/api/v1/instructor/disputes` (list/get/respond, ẩn thông tin cá nhân học viên) | ✅ BE XONG |
+| B6 | `markTransferred` + email học viên (đã escape HTML) + thông báo | ✅ BE XONG |
+| B7 | `DisputeDeadlineJob` (hằng giờ) → NO_RESPONSE + nhắc admin | ✅ BE XONG |
 | B8 | FE giảng viên: tab "Yêu cầu hoàn tiền" | ⏳ CHƯA LÀM |
 | B9 | FE admin: trang dispute nâng cấp (chế độ trách nhiệm + xem trước số tiền + mã chuyển khoản) | ⏳ CHƯA LÀM |
 | B10 | FE học viên: category, trạng thái từng bước, thấy `adminNote`, REFUNDED | ⏳ CHƯA LÀM |
-| B11 | Báo cáo các dispute `RESOLVED_REFUNDED` cũ để admin xử lý tay | ⏳ CHƯA LÀM |
-| B12 | Viết lại `/legal/refund`, `/legal/revenue-share`, `/legal/terms` (mục giảng viên) | ⏳ CHƯA LÀM |
+| B11 | Báo cáo 3 khiếu nại `RESOLVED_REFUNDED` cũ để admin xử lý tay (giao dịch vẫn PAID, chưa thu hồi) | ⏳ CHƯA LÀM — chờ chủ dự án duyệt từng ca |
+| B12 | Viết lại `/legal/refund`, `/legal/revenue-share`, `/legal/terms` | ⏳ CHƯA LÀM |
+| B13 | Mobile: category, trạng thái mới, `adminNote`, REFUNDED (BE tương thích ngược nên app cũ vẫn chạy) | ⏳ CHƯA LÀM |
 
 ### Giai đoạn C — Tài khoản nhận tiền & chi trả
+Số hiệu migration thực tế: V161 (`instructor_payout_accounts`, `instructor_payouts`). Đã kiểm trên MySQL 8 tạm: chỉ thêm bảng; Hibernate `validate` qua; các truy vấn số dư (khả dụng/đang giữ/đóng băng) và đối soát chạy đúng trên MySQL thật. `mvn clean verify` xanh 649 test (11/11/2026), nhánh `feat/payout-epic`.
+
+**Bật tính năng (chủ dự án làm, tôi không sửa `.env`/compose):** (1) tạo khóa `openssl rand -base64 32`, SAO LƯU khóa ở nơi an toàn (mất khóa = mất số tài khoản đã lưu); (2) thêm `LMS_PAYOUT_ENCRYPTION_KEY=<khóa>` vào `be/.env`; (3) thêm dòng `LMS_PAYOUT_ENCRYPTION_KEY: ${LMS_PAYOUT_ENCRYPTION_KEY:-}` vào mục `environment` của service `backend` trong `docker-compose.yml` (service này không có `env_file` nên biến chỉ nằm trong `.env` sẽ KHÔNG vào container); (4) khởi động lại backend. Thiếu khóa: backend vẫn chạy bình thường, chỉ API tài khoản nhận tiền/rút tiền báo lỗi rõ ràng và trang Thu nhập hiện cảnh báo.
+
 | ID | Hạng mục | Trạng thái |
 |---|---|---|
-| C1 | V157 (phần còn lại): `instructor_payout_accounts`, `instructor_payouts` | ⏳ CHƯA LÀM |
-| C2 | Mã hóa số tài khoản AES-GCM + `BankDirectory` | ⛔ BỊ CHẶN — chờ bạn thêm biến môi trường khóa mã hóa |
-| C3 | Liên kết tài khoản: xác nhận email (token hash, GETDEL, TTL 30'), khớp tên, khóa 3 ngày khi đổi | ⏳ CHƯA LÀM |
-| C4 | `PayoutService`: yêu cầu rút, idempotency, xác nhận email, máy trạng thái | ⏳ CHƯA LÀM |
-| C5 | API admin chi trả: duyệt, xuất CSV, đã chi, từ chối; email các mốc | ⏳ CHƯA LÀM |
-| C6 | Đối soát hàng đêm + trang Đối soát | ⏳ CHƯA LÀM |
-| C7 | FE giảng viên "Thu nhập" (số dư, tài khoản, rút tiền, lịch sử, sao kê) | ⏳ CHƯA LÀM |
-| C8 | FE admin "Chi trả" + huy hiệu + nhật ký tài chính | ⏳ CHƯA LÀM |
-| C9 | Tự động chi qua PayOS `payouts()` | 🅿️ HOÃN — cần bạn kiểm tra kênh PayOS có bật chi hộ; đã thiết kế `PayoutExecutor` để nối sau |
+| C1 | V161 `instructor_payout_accounts` + `instructor_payouts` | ✅ BE XONG 11/11/2026 |
+| C2 | Mã hóa số tài khoản AES-256-GCM (`PayoutCrypto`), HMAC dò trùng, danh mục ngân hàng (`BankDirectory`) | ⛔ CODE XONG — chờ chủ dự án cấu hình khóa (xem trên). 🔧 BIN ngân hàng cần đối chiếu danh sách VietQR trước khi dùng cho chi trả tự động |
+| C3 | Liên kết tài khoản: chỉ giảng viên đã xác minh, email xác nhận (token băm SHA-256 trong Redis, GETDEL, TTL 30'), khớp tên chủ tài khoản, khóa rút 3 ngày khi ĐỔI, cảnh báo trùng số tài khoản | ✅ BE XONG |
+| C4 | `PayoutService`: yêu cầu rút (Idempotency-Key, khóa dòng giảng viên, giữ chỗ sổ cái, email xác nhận bắt buộc), xác nhận email, hủy, máy trạng thái PENDING_EMAIL→REQUESTED→APPROVED→PAID / REJECTED / CANCELLED / FAILED | ✅ BE XONG |
+| C5 | API admin `/api/v1/admin/payouts` (duyệt, đã chi + mã giao dịch, từ chối, thất bại, xem số tài khoản đầy đủ có nhật ký, xuất CSV chống công thức Excel) + 6 email các mốc | ✅ BE XONG |
+| C6 | Việc nền: hủy yêu cầu quá 30' chưa xác nhận (5 phút/lần); đối soát đêm ghi bù dòng EARNING còn thiếu (≤200 đơn/lần) và báo admin | ✅ BE XONG. 🔧 chưa có trang "Đối soát" riêng cho admin |
+| C7 | FE giảng viên "Thu nhập" `/instructor/earnings` (số dư, tài khoản nhận tiền, yêu cầu rút có Idempotency-Key, lịch sử, sao kê) + trang xác nhận `/instructor/earnings/confirm` (cố ý cần bấm nút, tránh trình quét email ăn token) | ✅ FE XONG 11/11/2026 (commit local, chưa push chờ BE deploy). 🔧 chuỗi chữ viết cứng tiếng Việt (chưa i18n 4 ngôn ngữ) |
+| C8 | FE admin "Chi trả" `/admin/transactions/payouts` (duyệt, đã chuyển + mã giao dịch, từ chối, thất bại, xem số TK, xuất CSV) | ✅ FE XONG 11/11/2026. 🔧 còn: huy hiệu số yêu cầu chờ ở sidebar, trang xem nhật ký tài chính |
+| C9 | Tự động chi qua PayOS `payouts()` | 🅿️ HOÃN — cần bạn kiểm tra kênh PayOS có bật chi hộ; đã tách logic nên nối thêm `PayoutExecutor` được |
 
 ### Giai đoạn D — Chia sẻ khóa học
+Không thêm API công khai nào. Số liệu chia sẻ chỉ đo **đơn mua** (đã đăng nhập). `mvn clean verify` xanh 665 test (11/11/2026, gồm cả Giai đoạn E).
+
 | ID | Hạng mục | Trạng thái |
 |---|---|---|
-| D1 | SEO/OG: `generateMetadata`, `metadataBase`, `sitemap.ts`, `robots.ts` | ⏳ CHƯA LÀM |
-| D2 | `lib/referral.ts`: hết hạn 30 ngày, đọc định dạng cũ; `buildShareUrl` | ⏳ CHƯA LÀM |
-| D3 | `ShareCourseDialog` (copy, `navigator.share` có fallback, Facebook/X/LinkedIn/Telegram/email) + điểm đặt | ⏳ CHƯA LÀM |
-| D4 | Thống kê chia sẻ theo đơn mua (số đơn, doanh thu, chuyển đổi theo link) | ⏳ CHƯA LÀM |
+| D1 | SEO/OG: `generateMetadata` (OpenGraph/Twitter/canonical) cho trang khóa học, `metadataBase` (lấy từ biến Vercel tự cấp, không cần env mới), `app/sitemap.ts`, `app/robots.ts` | ✅ FE XONG 11/11/2026 (commit local, chưa push) |
+| D2 | `lib/referral.ts` lưu kèm thời điểm, hết hạn 30 ngày, đọc được định dạng cũ, last-click; có test (`referral.test.ts`) | ✅ FE XONG |
+| D3 | `ShareCourseDialog` (sao chép, Web Share API có dò hỗ trợ, Facebook/X/LinkedIn/Telegram/Email, link gắn `ref`+kênh) + nút ở panel cài đặt khóa và trang `/instructor/share` | ✅ FE XONG. 🔧 chưa có Zalo |
+| D4 | Thống kê theo đơn mua: `GET /api/v1/instructor/share/courses` (khóa + mã giới thiệu + đơn/thu nhập theo nguồn, cần đăng nhập) + trang `/instructor/share` | ✅ BE + FE XONG. 🔧 chưa có tỷ lệ chuyển đổi (cần đo lượt xem, D6) |
 | D5 | Mã QR | ⛔ BỊ CHẶN — chờ bạn chọn có thêm thư viện `qrcode.react` không |
-| D6 | `POST /referrals/visit` (đếm lượt mở link) | 🅿️ HOÃN — API công khai ghi dữ liệu, chỉ làm với đủ lớp bảo vệ, sau khi A–C xong |
+| D6 | `POST /referrals/visit` (đếm lượt mở link) | 🅿️ HOÃN — API công khai ghi dữ liệu, chỉ làm với đủ 9 lớp bảo vệ |
 | D7 | Link ngắn `/r/{code}` | 🅿️ HOÃN |
 | D8 | Mobile: hết hạn mã giới thiệu + chia sẻ native | ⏳ CHƯA LÀM |
 
 ### Giai đoạn E — Quảng bá của nền tảng
+Số hiệu migration thực tế: V162 (`course_promotions`). Đã kiểm trên MySQL 8 tạm: Hibernate `validate` qua; truy vấn kệ nổi bật chạy đúng (đúng thứ tự ưu tiên, loại khóa nháp/riêng tư/đợt hết hạn, theo danh mục); thống kê loại đơn REFUNDED. Kệ dùng `GET /api/v1/courses/featured` — nằm sẵn dưới `PUBLIC_GET_ENDPOINTS` (`/api/v1/courses/**`) nên KHÔNG sửa `SecurityConfig`; chỉ đọc, đầu vào kiểm chặt (enum, slug theo mẫu, size kẹp 1–24), cache 15 phút.
+
 | ID | Hạng mục | Trạng thái |
 |---|---|---|
-| E1 | V160 `course_promotions` (+ `promotion_daily_stats`) | ⏳ CHƯA LÀM |
-| E2 | Giảng viên đăng ký, admin duyệt (vị trí, thời gian, ưu tiên) | ⏳ CHƯA LÀM |
-| E3 | Kệ "Khóa học nổi bật" qua tham số mới của `GET /api/v1/courses` (không thêm endpoint công khai), nhãn "Được đề xuất", boost tìm kiếm + xóa cache | ⏳ CHƯA LÀM |
-| E4 | Thống kê quảng bá theo đơn mua (`payments.promotion_id`) cho giảng viên/admin | ⏳ CHƯA LÀM |
+| E1 | V162 `course_promotions` | ✅ BE XONG 11/11/2026 |
+| E2 | Giảng viên đăng ký/hủy, admin duyệt (khung thời gian ≤ 90 ngày, độ ưu tiên)/từ chối/kết thúc sớm; điều kiện: khóa đã xuất bản + công khai + có ảnh bìa + ≥ 3 bài | ✅ BE + FE XONG (`/instructor/share`, `/admin/promotions`) |
+| E3 | Kệ "Được đề xuất" trang chủ (nhãn rõ ràng) qua `GET /courses/featured` | ✅ BE + FE XONG. 🔧 chưa có kệ đầu trang danh mục ở FE (BE đã hỗ trợ `CATEGORY_FEATURED`) |
+| E3b | Boost thứ hạng tìm kiếm + nhãn "Được đề xuất" trên thẻ khóa | 🅿️ HOÃN — phải sửa 3 truy vấn tìm kiếm phức tạp và cache 15 phút; rủi ro cao so với lợi ích |
+| E4 | Thống kê hiệu quả: đơn/doanh thu khi chạy so với khoảng bằng nhau ngay trước đó (ước tính) | ✅ BE + FE XONG. Quy kết chính xác theo `payments.promotion_id` 🅿️ HOÃN (cần sửa luồng tạo đơn) |
 | E5 | `POST /promotions/{id}/click` + đếm hiển thị | 🅿️ HOÃN — như D6 |
 | E6 | Chiến dịch email/thông báo + `marketing_opt_out` + link hủy | 🅿️ HOÃN — làm sau cùng, có thể tách PR |
 
 ### Giai đoạn F — Hoàn thiện
 | ID | Hạng mục | Trạng thái |
 |---|---|---|
-| F1 | Mobile: dispute (category, trạng thái mới, `adminNote`), payments (REFUNDED) | ⏳ CHƯA LÀM |
-| F2 | Cập nhật `claude/*.md` (core-features, database, architecture) | ⏳ CHƯA LÀM |
+| F1 | Mobile: loại vấn đề, thông báo hoàn tiền/chuyển khoản, `REFUNDED`, mỗi giao dịch 1 khiếu nại (push `main` 8d044dc, tsc/lint sạch ở file đã sửa; các lỗi tsc/lint còn lại có từ trước) | ✅ XONG 11/11/2026 |
+| F2 | Cập nhật `claude/*.md` | ✅ XONG |
 | F3 | Ngày lễ nhập vào `REFUND_HOLIDAYS` | ⛔ BỊ CHẶN — admin nhập khi vận hành |
-| F4 | Kiểm thử đầu-cuối toàn bộ (mục "Kiểm chứng") | ⏳ CHƯA LÀM |
+| F4 | Kiểm thử đầu-cuối: `mvn clean verify` 665 test; áp V1→V162 trên MySQL 8 tạm; Hibernate `validate`; JPQL chạy thật; **khởi động đủ bean toàn ứng dụng (48s) + gọi thử API mới** (công khai chỉ đọc, còn lại 401 khi không token, đầu vào độc 400) | ✅ XONG phần tự động. 🔧 chưa thử luồng thật trên Vercel/PayOS (cần deploy) |
+| F5 | **Deploy**: BE nhánh `feat/payout-epic` (B–E) chưa merge vào nhánh chạy thật; FE commit local chưa push | ⛔ CHỜ chủ dự án duyệt deploy B (+C–E) |
 
 ## Bảo mật API công khai
 Chỉ làm khi đủ **tất cả** lớp sau (áp dụng cho D6, E5 và mọi API công khai thêm sau này):

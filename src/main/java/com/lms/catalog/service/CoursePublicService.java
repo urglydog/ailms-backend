@@ -212,6 +212,12 @@ public class CoursePublicService {
      * bằng @EntityGraph; số đánh giá, số bài + tổng thời lượng và giá sau coupon lấy THEO LÔ cho cả trang
      * (vài truy vấn cố định) thay vì 5–6 truy vấn cho MỖI khóa như trước.
      */
+    /** Dựng danh sách tóm tắt công khai (giá/giảm giá/đánh giá...) cho các khóa đã nạp sẵn — dùng bởi kệ "Được đề xuất" (Giai đoạn E). */
+    @Transactional(readOnly = true)
+    public List<SummaryRes> summariesOf(List<Course> courses) {
+        return mapSummaries(courses);
+    }
+
     private List<SummaryRes> mapSummaries(List<Course> courses) {
         if (courses.isEmpty()) {
             return List.of();

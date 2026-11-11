@@ -349,7 +349,7 @@ public class CouponService {
 
     /** Các trạng thái Payment được tính là "đang giữ suất" coupon — PENDING cũng phải tính vì
      * mục đích của hàm này là giữ suất ngay khi tạo đơn, không chờ tới lúc PAID. */
-    private static final List<PaymentStatus> RESERVING_STATUSES = List.of(PaymentStatus.PENDING, PaymentStatus.PAID);
+    private static final List<PaymentStatus> RESERVING_STATUSES = List.of(PaymentStatus.PENDING, PaymentStatus.PAID, PaymentStatus.REFUNDED); // REFUNDED vẫn tính 1 lượt dùng: chặn mua–hoàn–mua để lách giới hạn mã
 
     /**
      * BUG THẬT (03/10/2026) — chống race condition hạn mức coupon: {@link #resolveBestPrice}

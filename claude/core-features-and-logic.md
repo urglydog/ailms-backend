@@ -168,3 +168,12 @@ AiJob: UNIQUE(lesson_id, target_language, active_flag=1)
 - **KHÔNG** tự động build/lint FE khi đang sửa — hỏi trước
 - **Soft delete** `course_resources`: luôn filter `is_deleted = false` trong query
 - Mọi endpoint AI Worker → gọi qua Backend (FE không gọi trực tiếp `ai-api:8000`)
+
+## Hoàn tiền – Chi trả giảng viên – Quảng bá – Chia sẻ (Epic 11/11/2026)
+Chi tiết + tiến độ từng hạng mục: `docs/PAYMENT_PAYOUT_EPIC.md`.
+- **Tỷ lệ chia** là cấu hình admin (`system_configs`, khóa `REVENUE_*_INSTRUCTOR_PCT`), chốt cứng vào `payments.platform_rate/platform_fee/instructor_earning` lúc PAID. Mặc định 37/63 (organic), 97/3 (referral).
+- **Sổ cái** `instructor_ledger_entries` (chỉ thêm dòng, `amount` có dấu): EARNING (cùng transaction với PAID), REFUND_REVERSAL, PAYOUT_RESERVE/RELEASE. Số dư = khả dụng (`available_at <= now`) / đang giữ / đóng băng (đơn có khiếu nại mở). `finance_audit_logs` ghi mọi thay đổi tiền.
+- **Hoàn tiền** (`RefundService.approve`): `PaymentStatus.REFUNDED` (mọi truy vấn doanh thu lọc `status = PAID` nên tự loại), thu hồi ghi danh MỀM (`enrollments.revoked_at` + `@SQLRestriction`, mua lại thì `reactivate`), thu hồi chứng chỉ, ẩn review, 3 chế độ trách nhiệm (STANDARD / PLATFORM_COMPENSATES / INSTRUCTOR_FAULT). Mỗi giao dịch 1 khiếu nại, 1 hoàn tiền (UNIQUE ở DB). Giảng viên phản hồi trong 48h, admin quyết định cuối.
+- **Rút tiền** (`PayoutService`): tài khoản mã hóa AES-GCM (`LMS_PAYOUT_ENCRYPTION_KEY`, thiếu thì tắt tính năng chứ không vỡ backend), email xác nhận (token băm trong Redis), Idempotency-Key, khóa dòng giảng viên, đổi tài khoản khóa rút 3 ngày. Máy trạng thái PENDING_EMAIL→REQUESTED→APPROVED→PAID / REJECTED / CANCELLED / FAILED; admin chuyển khoản tay.
+- **Quảng bá** (`PromotionService`): giảng viên đăng ký, admin duyệt ≤ 90 ngày; kệ qua `GET /api/v1/courses/featured` (chỉ đọc, nằm dưới `PUBLIC_GET_ENDPOINTS`, cache 15 phút).
+

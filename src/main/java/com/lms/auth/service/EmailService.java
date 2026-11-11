@@ -166,14 +166,144 @@ public class EmailService {
         }
     }
 
+    /** Báo học viên: admin đã chuyển khoản tiền hoàn (11/11/2026, Giai đoạn B). Best-effort: lỗi gửi mail không làm hỏng việc ghi nhận. */
+    public void sendRefundTransferredEmail(String toEmail, String txnRef, String courseTitle,
+                                           BigDecimal amount, String transferRef) {
+        try {
+            sendHtmlMail(toEmail, "Đã chuyển tiền hoàn cho giao dịch " + txnRef,
+                    "Chúng tôi đã chuyển khoản số tiền hoàn " + formatVnd(amount) + " cho giao dịch " + txnRef
+                            + " (khóa học: " + courseTitle + "). Mã chuyển khoản: " + transferRef
+                            + ". Nếu sau vài giờ bạn chưa nhận được tiền, hãy mở lại khiếu nại trong mục Khiếu nại giao dịch.",
+                    supportMailShell("Đã chuyển tiền hoàn",
+                            paragraph("Chúng tôi đã chuyển khoản số tiền hoàn cho giao dịch của bạn.")
+                                    + summaryTable(new String[][]{
+                                            {"Mã giao dịch", HtmlUtils.htmlEscape(txnRef)},
+                                            {"Khóa học", HtmlUtils.htmlEscape(courseTitle)},
+                                            {"Số tiền hoàn", formatVnd(amount)},
+                                            {"Mã chuyển khoản", HtmlUtils.htmlEscape(transferRef)}})
+                                    + paragraph("Nếu sau vài giờ bạn chưa nhận được tiền, hãy mở lại khiếu nại trong mục "
+                                            + "<strong>Khiếu nại giao dịch</strong>.")));
+            log.info("Da gui email chuyen tien hoan den {} cho giao dich {}", toEmail, txnRef);
+        } catch (Exception e) {
+            log.error("Loi khi gui email chuyen tien hoan den {}: {}", toEmail, e.getMessage());
+        }
+    }
+
+    // ── Chi trả giảng viên (11/11/2026, Giai đoạn C) ─────────────────────────────────────
+
+    /** Email xác nhận liên kết tài khoản nhận tiền. BẮT BUỘC gửi được: lỗi thì ném để bên gọi rollback. */
+    public void sendPayoutAccountConfirmEmail(String toEmail, String bankName, String last4, String token) {
+        String link = frontendBaseUrl + "/instructor/earnings/confirm?token=" + token;
+        try {
+            sendHtmlMail(toEmail, "Xác nhận tài khoản nhận tiền - LinguaLearn",
+                    "Bạn vừa yêu cầu liên kết tài khoản " + bankName + " •••• " + last4 + " để nhận tiền. Mở liên kết để xác nhận "
+                            + "(hiệu lực 30 phút): " + link + "\nNếu không phải bạn, hãy bỏ qua email này và đổi mật khẩu.",
+                    supportMailShell("Xác nhận tài khoản nhận tiền",
+                            paragraph("Bạn vừa yêu cầu liên kết tài khoản <strong>" + HtmlUtils.htmlEscape(bankName) + " •••• "
+                                    + HtmlUtils.htmlEscape(last4) + "</strong> để nhận tiền từ nền tảng.")
+                                    + paragraph("<a href=\"" + link + "\" style=\"display:inline-block;padding:10px 20px;background:#1A6FE0;"
+                                            + "color:#ffffff;border-radius:8px;text-decoration:none;font-weight:600;\">Xác nhận tài khoản</a>")
+                                    + paragraph("Liên kết có hiệu lực 30 phút và chỉ dùng được một lần. Nếu không phải bạn thực hiện, hãy bỏ qua "
+                                            + "email này và đổi mật khẩu ngay.")));
+        } catch (Exception e) {
+            log.error("Loi khi gui email xac nhan tai khoan nhan tien den {}: {}", toEmail, e.getMessage());
+            throw new RuntimeException("Không gửi được email xác nhận, vui lòng thử lại sau", e);
+        }
+    }
+
+    /** Email xác nhận yêu cầu rút tiền. BẮT BUỘC gửi được (lỗi thì ném để rollback). */
+    public void sendPayoutRequestConfirmEmail(String toEmail, String code, BigDecimal amount, String token) {
+        String link = frontendBaseUrl + "/instructor/earnings/confirm?token=" + token;
+        try {
+            sendHtmlMail(toEmail, "Xác nhận yêu cầu rút tiền " + code + " - LinguaLearn",
+                    "Bạn vừa yêu cầu rút " + formatVnd(amount) + " (mã " + code + "). Mở liên kết để xác nhận (hiệu lực 30 phút): "
+                            + link + "\nNếu không phải bạn, hãy bỏ qua email này và đổi mật khẩu.",
+                    supportMailShell("Xác nhận yêu cầu rút tiền",
+                            paragraph("Bạn vừa yêu cầu rút <strong>" + formatVnd(amount) + "</strong> (mã <span style=\"font-family:monospace;\">"
+                                    + HtmlUtils.htmlEscape(code) + "</span>).")
+                                    + paragraph("<a href=\"" + link + "\" style=\"display:inline-block;padding:10px 20px;background:#1A6FE0;"
+                                            + "color:#ffffff;border-radius:8px;text-decoration:none;font-weight:600;\">Xác nhận yêu cầu</a>")
+                                    + paragraph("Liên kết có hiệu lực 30 phút. Nếu quá hạn, yêu cầu tự hủy và số tiền được trả lại vào số dư của bạn.")));
+        } catch (Exception e) {
+            log.error("Loi khi gui email xac nhan yeu cau rut tien den {}: {}", toEmail, e.getMessage());
+            throw new RuntimeException("Không gửi được email xác nhận, vui lòng thử lại sau", e);
+        }
+    }
+
+    /** Đã nhận yêu cầu rút, kèm ngày chi dự kiến. Best-effort. */
+    public void sendPayoutRequestedEmail(String toEmail, String code, BigDecimal amount, java.time.LocalDate scheduledFor) {
+        String date = scheduledFor == null ? "sớm nhất có thể" : scheduledFor.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"));
+        try {
+            sendHtmlMail(toEmail, "Đã nhận yêu cầu rút tiền " + code,
+                    "Chúng tôi đã nhận yêu cầu rút " + formatVnd(amount) + " (mã " + code + "). Dự kiến chuyển khoản trong đợt " + date + ".",
+                    supportMailShell("Đã nhận yêu cầu rút tiền",
+                            summaryTable(new String[][]{{"Mã yêu cầu", HtmlUtils.htmlEscape(code)}, {"Số tiền", formatVnd(amount)},
+                                    {"Dự kiến chi", HtmlUtils.htmlEscape(date)}})
+                                    + paragraph("Chúng tôi sẽ báo lại ngay khi đã chuyển khoản.")));
+        } catch (Exception e) {
+            log.error("Loi khi gui email da nhan yeu cau rut tien den {}: {}", toEmail, e.getMessage());
+        }
+    }
+
+    /** Đã chuyển khoản. Best-effort. */
+    public void sendPayoutPaidEmail(String toEmail, String code, BigDecimal amount, String transferRef) {
+        try {
+            sendHtmlMail(toEmail, "Đã chuyển tiền cho yêu cầu " + code,
+                    "Chúng tôi đã chuyển khoản " + formatVnd(amount) + " cho yêu cầu " + code + ". Mã chuyển khoản: " + transferRef + ".",
+                    supportMailShell("Đã chuyển tiền cho bạn",
+                            summaryTable(new String[][]{{"Mã yêu cầu", HtmlUtils.htmlEscape(code)}, {"Số tiền", formatVnd(amount)},
+                                    {"Mã chuyển khoản", HtmlUtils.htmlEscape(transferRef)}})
+                                    + paragraph("Nếu sau vài giờ bạn chưa thấy tiền về tài khoản, hãy liên hệ hỗ trợ kèm mã yêu cầu.")));
+        } catch (Exception e) {
+            log.error("Loi khi gui email da chi tien den {}: {}", toEmail, e.getMessage());
+        }
+    }
+
+    /** Yêu cầu rút bị từ chối hoặc chuyển khoản thất bại — tiền đã được trả lại vào số dư. Best-effort. */
+    public void sendPayoutRejectedEmail(String toEmail, String code, BigDecimal amount, String reason, boolean transferFailed) {
+        try {
+            String title = transferFailed ? "Chuyển tiền thất bại" : "Yêu cầu rút tiền bị từ chối";
+            sendHtmlMail(toEmail, title + " - " + code,
+                    title + " (mã " + code + ", " + formatVnd(amount) + "). Lý do: " + reason + ". Số tiền đã được trả lại vào số dư của bạn.",
+                    supportMailShell(title,
+                            summaryTable(new String[][]{{"Mã yêu cầu", HtmlUtils.htmlEscape(code)}, {"Số tiền", formatVnd(amount)}})
+                                    + section("Lý do", quotedBox(HtmlUtils.htmlEscape(reason == null ? "" : reason)))
+                                    + paragraph("Số tiền đã được trả lại vào số dư của bạn, bạn có thể gửi yêu cầu rút mới.")));
+        } catch (Exception e) {
+            log.error("Loi khi gui email tu choi rut tien den {}: {}", toEmail, e.getMessage());
+        }
+    }
+
+    /** Báo tài khoản nhận tiền vừa được ĐỔI (kể cả khi không phải chính chủ thực hiện). Best-effort. */
+    public void sendPayoutAccountChangedEmail(String toEmail, String bankName, String last4, java.time.LocalDateTime usableFrom) {
+        String when = usableFrom == null ? "" : usableFrom.format(DateTimeFormatter.ofPattern("HH:mm dd/MM/yyyy"));
+        try {
+            sendHtmlMail(toEmail, "Tài khoản nhận tiền của bạn đã được thay đổi",
+                    "Tài khoản nhận tiền đã đổi sang " + bankName + " •••• " + last4 + ". Tài khoản mới dùng để rút tiền được từ " + when
+                            + ". Nếu không phải bạn, hãy đổi mật khẩu và liên hệ hỗ trợ ngay.",
+                    supportMailShell("Tài khoản nhận tiền đã thay đổi",
+                            paragraph("Tài khoản nhận tiền của bạn vừa đổi sang <strong>" + HtmlUtils.htmlEscape(bankName) + " •••• "
+                                    + HtmlUtils.htmlEscape(last4) + "</strong>. Để an toàn, tài khoản mới chỉ dùng để rút tiền được từ <strong>"
+                                    + HtmlUtils.htmlEscape(when) + "</strong>.")
+                                    + paragraph("Nếu không phải bạn thực hiện, hãy đổi mật khẩu và liên hệ hỗ trợ ngay.")));
+        } catch (Exception e) {
+            log.error("Loi khi gui email doi tai khoan nhan tien den {}: {}", toEmail, e.getMessage());
+        }
+    }
+
     private String buildDisputeResolutionHtml(
             boolean refunded, String txnRef, String courseTitle, BigDecimal amount,
             String reason, String adminNote, String refundBankAccount) {
         String statusColor = refunded ? "#16A34A" : "#64748B";
         String statusText = refunded ? "Đã chấp nhận hoàn tiền" : "Không chấp nhận hoàn tiền";
+        // Escape HTML mọi nội dung người dùng/admin nhập (11/11/2026) — trước đây chèn thẳng vào email.
+        txnRef = HtmlUtils.htmlEscape(txnRef);
+        courseTitle = HtmlUtils.htmlEscape(courseTitle);
+        reason = HtmlUtils.htmlEscape(reason == null ? "" : reason);
+        adminNote = HtmlUtils.htmlEscape(adminNote == null ? "" : adminNote);
         String refundRow = refunded && refundBankAccount != null
                 ? "<tr><td style=\"padding:6px 0;color:#64748B;\">Hoàn tiền tới</td><td style=\"padding:6px 0;color:#0F172A;text-align:right;font-weight:600;\">"
-                        + refundBankAccount + "</td></tr>"
+                        + HtmlUtils.htmlEscape(refundBankAccount) + "</td></tr>"
                 : "";
         return "<div style=\"font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;background:#ffffff;\">"
                 + "<div style=\"text-align:center;margin-bottom:24px;\">"
