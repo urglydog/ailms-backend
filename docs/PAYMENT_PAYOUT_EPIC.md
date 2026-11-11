@@ -75,17 +75,21 @@ Số hiệu migration thực tế: V159 `refund_core` (payments.refunded_at, enr
 | B13 | Mobile: category, trạng thái mới, `adminNote`, REFUNDED (BE tương thích ngược nên app cũ vẫn chạy) | ⏳ CHƯA LÀM |
 
 ### Giai đoạn C — Tài khoản nhận tiền & chi trả
+Số hiệu migration thực tế: V161 (`instructor_payout_accounts`, `instructor_payouts`). Đã kiểm trên MySQL 8 tạm: chỉ thêm bảng; Hibernate `validate` qua; các truy vấn số dư (khả dụng/đang giữ/đóng băng) và đối soát chạy đúng trên MySQL thật. `mvn clean verify` xanh 649 test (11/11/2026), nhánh `feat/payout-epic`.
+
+**Bật tính năng (chủ dự án làm, tôi không sửa `.env`/compose):** (1) tạo khóa `openssl rand -base64 32`, SAO LƯU khóa ở nơi an toàn (mất khóa = mất số tài khoản đã lưu); (2) thêm `LMS_PAYOUT_ENCRYPTION_KEY=<khóa>` vào `be/.env`; (3) thêm dòng `LMS_PAYOUT_ENCRYPTION_KEY: ${LMS_PAYOUT_ENCRYPTION_KEY:-}` vào mục `environment` của service `backend` trong `docker-compose.yml` (service này không có `env_file` nên biến chỉ nằm trong `.env` sẽ KHÔNG vào container); (4) khởi động lại backend. Thiếu khóa: backend vẫn chạy bình thường, chỉ API tài khoản nhận tiền/rút tiền báo lỗi rõ ràng và trang Thu nhập hiện cảnh báo.
+
 | ID | Hạng mục | Trạng thái |
 |---|---|---|
-| C1 | V157 (phần còn lại): `instructor_payout_accounts`, `instructor_payouts` | ⏳ CHƯA LÀM |
-| C2 | Mã hóa số tài khoản AES-GCM + `BankDirectory` | ⛔ BỊ CHẶN — chờ bạn thêm biến môi trường khóa mã hóa |
-| C3 | Liên kết tài khoản: xác nhận email (token hash, GETDEL, TTL 30'), khớp tên, khóa 3 ngày khi đổi | ⏳ CHƯA LÀM |
-| C4 | `PayoutService`: yêu cầu rút, idempotency, xác nhận email, máy trạng thái | ⏳ CHƯA LÀM |
-| C5 | API admin chi trả: duyệt, xuất CSV, đã chi, từ chối; email các mốc | ⏳ CHƯA LÀM |
-| C6 | Đối soát hàng đêm + trang Đối soát | ⏳ CHƯA LÀM |
-| C7 | FE giảng viên "Thu nhập" (số dư, tài khoản, rút tiền, lịch sử, sao kê) | ⏳ CHƯA LÀM |
-| C8 | FE admin "Chi trả" + huy hiệu + nhật ký tài chính | ⏳ CHƯA LÀM |
-| C9 | Tự động chi qua PayOS `payouts()` | 🅿️ HOÃN — cần bạn kiểm tra kênh PayOS có bật chi hộ; đã thiết kế `PayoutExecutor` để nối sau |
+| C1 | V161 `instructor_payout_accounts` + `instructor_payouts` | ✅ BE XONG 11/11/2026 |
+| C2 | Mã hóa số tài khoản AES-256-GCM (`PayoutCrypto`), HMAC dò trùng, danh mục ngân hàng (`BankDirectory`) | ⛔ CODE XONG — chờ chủ dự án cấu hình khóa (xem trên). 🔧 BIN ngân hàng cần đối chiếu danh sách VietQR trước khi dùng cho chi trả tự động |
+| C3 | Liên kết tài khoản: chỉ giảng viên đã xác minh, email xác nhận (token băm SHA-256 trong Redis, GETDEL, TTL 30'), khớp tên chủ tài khoản, khóa rút 3 ngày khi ĐỔI, cảnh báo trùng số tài khoản | ✅ BE XONG |
+| C4 | `PayoutService`: yêu cầu rút (Idempotency-Key, khóa dòng giảng viên, giữ chỗ sổ cái, email xác nhận bắt buộc), xác nhận email, hủy, máy trạng thái PENDING_EMAIL→REQUESTED→APPROVED→PAID / REJECTED / CANCELLED / FAILED | ✅ BE XONG |
+| C5 | API admin `/api/v1/admin/payouts` (duyệt, đã chi + mã giao dịch, từ chối, thất bại, xem số tài khoản đầy đủ có nhật ký, xuất CSV chống công thức Excel) + 6 email các mốc | ✅ BE XONG |
+| C6 | Việc nền: hủy yêu cầu quá 30' chưa xác nhận (5 phút/lần); đối soát đêm ghi bù dòng EARNING còn thiếu (≤200 đơn/lần) và báo admin | ✅ BE XONG. 🔧 chưa có trang "Đối soát" riêng cho admin |
+| C7 | FE giảng viên "Thu nhập" (số dư, tài khoản nhận tiền, yêu cầu rút, lịch sử, sao kê) | ⏳ CHƯA LÀM |
+| C8 | FE admin "Chi trả" + nhật ký tài chính | ⏳ CHƯA LÀM |
+| C9 | Tự động chi qua PayOS `payouts()` | 🅿️ HOÃN — cần bạn kiểm tra kênh PayOS có bật chi hộ; đã tách logic nên nối thêm `PayoutExecutor` được |
 
 ### Giai đoạn D — Chia sẻ khóa học
 | ID | Hạng mục | Trạng thái |

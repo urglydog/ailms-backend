@@ -69,4 +69,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     long countByIsSpamFlaggedTrue();
 
+
+    /** Khóa dòng giảng viên làm mutex cho các thao tác sổ cái/rút tiền (11/11/2026) — chặn 2 yêu cầu rút song song. */
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @org.springframework.data.jpa.repository.Query("SELECT u FROM User u WHERE u.id = :id")
+    java.util.Optional<User> findByIdForUpdate(@org.springframework.data.repository.query.Param("id") Long id);
 }

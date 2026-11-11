@@ -79,4 +79,10 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"course", "coupon"})
     List<Payment> findByCourse_Instructor_EmailAndStatusAndPaidAtAfterOrderByPaidAtDesc(
             String email, PaymentStatus status, LocalDateTime after);
+
+    /** Đối soát sổ cái (11/11/2026): đơn PAID có thu nhập nhưng chưa có dòng EARNING. */
+    @org.springframework.data.jpa.repository.Query("SELECT p FROM Payment p WHERE p.status = com.lms.common.enums.PaymentStatus.PAID "
+            + "AND p.instructorEarning > 0 AND NOT EXISTS (SELECT 1 FROM InstructorLedgerEntry e WHERE e.payment = p "
+            + "AND e.entryType = com.lms.common.enums.LedgerEntryType.EARNING) ORDER BY p.id")
+    List<Payment> findPaidMissingLedgerEarning(org.springframework.data.domain.Pageable pageable);
 }

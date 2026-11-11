@@ -173,4 +173,64 @@ class LedgerServiceTest {
 
         verify(repository, never()).save(org.mockito.ArgumentMatchers.any());
     }
+
+    // ── Số dư & giữ chỗ rút tiền (Giai đoạn C) ─────────────────────────────────────────────
+
+    @Test
+    void getBalance_withdrawableIsAvailableMinusFrozen_neverNegative() {
+        when(repository.sumAvailable(eq(5L), org.mockito.ArgumentMatchers.any())).thenReturn(new BigDecimal("500000"));
+        when(repository.sumPending(eq(5L), org.mockito.ArgumentMatchers.any())).thenReturn(new BigDecimal("120000"));
+        when(repository.sumFrozen(eq(5L), org.mockito.ArgumentMatchers.any())).thenReturn(new BigDecimal("150000"));
+
+        LedgerService.Balance b = ledgerService.getBalance(5L);
+
+        assertThat(b.available()).isEqualByComparingTo("500000");
+        assertThat(b.pending()).isEqualByComparingTo("120000");
+        assertThat(b.frozen()).isEqualByComparingTo("150000");
+        assertThat(b.withdrawable()).isEqualByComparingTo("350000");
+    }
+
+    @Test
+    void getBalance_negativeAvailableAfterRefundOfPaidOutMoney_hasZeroWithdrawable() {
+        when(repository.sumAvailable(eq(5L), org.mockito.ArgumentMatchers.any())).thenReturn(new BigDecimal("-74000"));
+        when(repository.sumPending(eq(5L), org.mockito.ArgumentMatchers.any())).thenReturn(BigDecimal.ZERO);
+        when(repository.sumFrozen(eq(5L), org.mockito.ArgumentMatchers.any())).thenReturn(BigDecimal.ZERO);
+
+        LedgerService.Balance b = ledgerService.getBalance(5L);
+
+        assertThat(b.available()).isEqualByComparingTo("-74000");
+        assertThat(b.withdrawable()).isEqualByComparingTo("0");
+    }
+
+    @Test
+    void recordPayoutReserve_writesNegativeEntryForThePayout_idempotently() {
+        when(repository.existsByPayoutIdAndEntryType(90L, LedgerEntryType.PAYOUT_RESERVE)).thenReturn(false);
+
+        ledgerService.recordPayoutReserve(instructor, new BigDecimal("200000"), 90L, "PO-1");
+
+        ArgumentCaptor<InstructorLedgerEntry> captor = ArgumentCaptor.forClass(InstructorLedgerEntry.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getEntryType()).isEqualTo(LedgerEntryType.PAYOUT_RESERVE);
+        assertThat(captor.getValue().getAmount()).isEqualByComparingTo("-200000");
+        assertThat(captor.getValue().getPayoutId()).isEqualTo(90L);
+
+        when(repository.existsByPayoutIdAndEntryType(91L, LedgerEntryType.PAYOUT_RESERVE)).thenReturn(true);
+        ledgerService.recordPayoutReserve(instructor, new BigDecimal("1"), 91L, "PO-2");
+        verify(repository, org.mockito.Mockito.times(1)).save(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void recordPayoutRelease_writesPositiveEntry_idempotently() {
+        when(repository.existsByPayoutIdAndEntryType(90L, LedgerEntryType.PAYOUT_RELEASE)).thenReturn(false);
+        ledgerService.recordPayoutRelease(instructor, new BigDecimal("200000"), 90L, "PO-1");
+
+        ArgumentCaptor<InstructorLedgerEntry> captor = ArgumentCaptor.forClass(InstructorLedgerEntry.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getEntryType()).isEqualTo(LedgerEntryType.PAYOUT_RELEASE);
+        assertThat(captor.getValue().getAmount()).isEqualByComparingTo("200000");
+
+        when(repository.existsByPayoutIdAndEntryType(90L, LedgerEntryType.PAYOUT_RELEASE)).thenReturn(true);
+        ledgerService.recordPayoutRelease(instructor, new BigDecimal("200000"), 90L, "PO-1");
+        verify(repository, org.mockito.Mockito.times(1)).save(org.mockito.ArgumentMatchers.any());
+    }
 }

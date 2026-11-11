@@ -6,6 +6,7 @@ import com.lms.finance.FinanceConfigKeys;
 import com.lms.finance.entity.InstructorLedgerEntry;
 import com.lms.finance.repository.InstructorLedgerEntryRepository;
 import com.lms.payment.entity.Payment;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -81,6 +82,60 @@ public class LedgerService {
         entry.setCreatedByUserId(actorUserId);
         entry.setNote("Hoàn tiền đơn " + payment.getTxnRef());
         repository.save(entry);
+    }
+
+    /** Số dư của giảng viên (11/11/2026, Giai đoạn C). {@code withdrawable = max(0, available - frozen)}. */
+    public record Balance(BigDecimal available, BigDecimal pending, BigDecimal frozen, BigDecimal withdrawable) {}
+
+    @Transactional(readOnly = true)
+    public Balance getBalance(Long instructorId) {
+        // +2s: DATETIME của MySQL làm tròn giây, dòng vừa ghi (giữ chỗ rút, hoàn tiền) có available_at = "bây giờ"
+        // có thể bị làm tròn lên 1s trong tương lai → bù để dòng đó luôn được tính ngay.
+        LocalDateTime now = LocalDateTime.now().plusSeconds(2);
+        BigDecimal available = repository.sumAvailable(instructorId, now);
+        BigDecimal pending = repository.sumPending(instructorId, now);
+        BigDecimal frozen = repository.sumFrozen(instructorId, now);
+        BigDecimal withdrawable = available.subtract(frozen).max(BigDecimal.ZERO);
+        return new Balance(available, pending, frozen, withdrawable);
+    }
+
+    /** Giữ chỗ số tiền giảng viên yêu cầu rút (dòng âm, hiệu lực ngay). Idempotent theo payout. */
+    @Transactional
+    public void recordPayoutReserve(com.lms.auth.entity.User instructor, BigDecimal amount, Long payoutId, String code) {
+        if (repository.existsByPayoutIdAndEntryType(payoutId, LedgerEntryType.PAYOUT_RESERVE)) {
+            return;
+        }
+        InstructorLedgerEntry entry = new InstructorLedgerEntry();
+        entry.setInstructor(instructor);
+        entry.setEntryType(LedgerEntryType.PAYOUT_RESERVE);
+        entry.setAmount(amount.negate());
+        entry.setAvailableAt(LocalDateTime.now());
+        entry.setPayoutId(payoutId);
+        entry.setNote("Giữ chỗ yêu cầu rút " + code);
+        repository.save(entry);
+    }
+
+    /** Trả lại khoản giữ chỗ khi yêu cầu rút bị hủy/từ chối/thất bại (dòng dương). Idempotent theo payout. */
+    @Transactional
+    public void recordPayoutRelease(com.lms.auth.entity.User instructor, BigDecimal amount, Long payoutId, String code) {
+        if (repository.existsByPayoutIdAndEntryType(payoutId, LedgerEntryType.PAYOUT_RELEASE)) {
+            return;
+        }
+        InstructorLedgerEntry entry = new InstructorLedgerEntry();
+        entry.setInstructor(instructor);
+        entry.setEntryType(LedgerEntryType.PAYOUT_RELEASE);
+        entry.setAmount(amount);
+        entry.setAvailableAt(LocalDateTime.now());
+        entry.setPayoutId(payoutId);
+        entry.setNote("Trả lại khoản giữ chỗ yêu cầu rút " + code);
+        repository.save(entry);
+    }
+
+    /** Các dòng sổ cái gần đây của giảng viên (sao kê). */
+    @Transactional(readOnly = true)
+    public org.springframework.data.domain.Page<InstructorLedgerEntry> getStatement(Long instructorId, int page, int size) {
+        return repository.findByInstructor_IdOrderByCreatedAtDescIdDesc(instructorId,
+                org.springframework.data.domain.PageRequest.of(Math.max(0, page), Math.min(Math.max(1, size), 100)));
     }
 
     /** Số ngày giữ tiền = hạn hoàn tiền + thời gian giữ thêm (cấu hình admin). */
