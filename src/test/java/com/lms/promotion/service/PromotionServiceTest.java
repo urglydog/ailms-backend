@@ -14,6 +14,7 @@ import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
 import com.lms.catalog.entity.Course;
 import com.lms.catalog.repository.CourseRepository;
+import com.lms.catalog.repository.LessonRepository;
 import com.lms.catalog.service.CoursePublicService;
 import com.lms.common.enums.CourseStatus;
 import com.lms.common.enums.CourseVisibility;
@@ -57,6 +58,7 @@ class PromotionServiceTest {
     @Mock private CacheEvictionHelper cacheEvictionHelper;
     @Mock private NotificationService notificationService;
     @Mock private FinanceAuditService auditService;
+    @Mock private LessonRepository lessonRepository;
 
     @InjectMocks
     private PromotionService service;
@@ -84,7 +86,8 @@ class PromotionServiceTest {
         course.setStatus(CourseStatus.PUBLISHED);
         course.setVisibility(CourseVisibility.PUBLIC);
         course.setThumbnailUrl("https://cdn/x.png");
-        course.setTotalLessons(12);
+        // cột total_lessons cố ý để 0 như dữ liệu thật; điều kiện phải dựa vào số bài đếm được
+        lenient().when(lessonRepository.countByChapter_CourseId(10L)).thenReturn(12L);
         course.setInstructor(instructor);
 
         lenient().when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(instructor));
@@ -159,7 +162,7 @@ class PromotionServiceTest {
         assertThatThrownBy(() -> service.request(EMAIL, createReq())).isInstanceOf(BusinessRuleViolationException.class);
 
         course.setThumbnailUrl("https://cdn/x.png");
-        course.setTotalLessons(2);
+        when(lessonRepository.countByChapter_CourseId(10L)).thenReturn(2L);
         assertThatThrownBy(() -> service.request(EMAIL, createReq())).isInstanceOf(BusinessRuleViolationException.class);
 
         verify(promotionRepository, never()).save(any(CoursePromotion.class));

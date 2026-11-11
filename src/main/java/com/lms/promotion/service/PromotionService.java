@@ -4,6 +4,7 @@ import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
 import com.lms.catalog.entity.Course;
 import com.lms.catalog.repository.CourseRepository;
+import com.lms.catalog.repository.LessonRepository;
 import com.lms.catalog.service.CoursePublicService;
 import com.lms.common.enums.CourseStatus;
 import com.lms.common.enums.CourseVisibility;
@@ -58,6 +59,7 @@ public class PromotionService {
     private final CacheEvictionHelper cacheEvictionHelper;
     private final NotificationService notificationService;
     private final FinanceAuditService auditService;
+    private final LessonRepository lessonRepository;
 
     // ── Giảng viên ──────────────────────────────────────────────────────
 
@@ -214,7 +216,9 @@ public class PromotionService {
         if (course.getThumbnailUrl() == null || course.getThumbnailUrl().isBlank()) {
             throw new BusinessRuleViolationException("Khóa cần có ảnh bìa trước khi đăng ký quảng bá");
         }
-        if (course.getTotalLessons() == null || course.getTotalLessons() < MIN_LESSONS) {
+        // Đếm bài thật: cột `courses.total_lessons` là số đã phi chuẩn hóa, không được cập nhật khi giảng viên
+        // thêm bài (khóa Unity/AI Agent có 4–6 bài mà cột này = 0 → bị từ chối oan).
+        if (lessonRepository.countByChapter_CourseId(course.getId()) < MIN_LESSONS) {
             throw new BusinessRuleViolationException("Khóa cần có ít nhất " + MIN_LESSONS + " bài học trước khi đăng ký quảng bá");
         }
     }
