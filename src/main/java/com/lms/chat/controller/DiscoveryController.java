@@ -49,7 +49,9 @@ public class DiscoveryController {
      * <ul>
      *   <li>Guest (no JWT): role = "GUEST", quota = 15 tin/IP/h (Redis counter)</li>
      *   <li>Student (JWT): role = "STUDENT", quota = 30 tin/ngày</li>
-     *   <li>Instructor (JWT): redirect → 403, dùng /api/v1/instructor/ai-assistant/chat thay thế</li>
+     *   <li>Instructor (JWT): dùng như Student (cùng hạn mức 30 tin/ngày) — 13/11/2026: trước đây bị 403 nên
+     *       tài khoản học viên được duyệt lên giảng viên không dùng được Discovery kể cả ở trang học viên.
+     *       Trợ lý riêng của giảng viên vẫn ở /api/v1/instructor/ai-assistant/chat</li>
      *   <li>Admin (JWT): 403 — admin không dùng Discovery Chat</li>
      * </ul>
      */
@@ -68,14 +70,7 @@ public class DiscoveryController {
                     .findFirst()
                     .orElse("ROLE_GUEST");
 
-            // Instructor và Admin không dùng Discovery — redirect về đúng agent
-            if (authority.contains("INSTRUCTOR")) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body(Map.of(
-                            "error", "Instructor nên dùng /api/v1/instructor/ai-assistant/chat",
-                            "redirect", "/api/v1/instructor/ai-assistant/chat"
-                        ));
-            }
+            // Admin không dùng Discovery. Instructor được dùng như Student (không còn 403).
             if (authority.contains("ADMIN")) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN)
                         .body(Map.of("error", "Admin không sử dụng Course Discovery Chat."));
