@@ -82,13 +82,16 @@ Số hiệu migration thực tế: V161 (`instructor_payout_accounts`, `instruct
 | ID | Hạng mục | Trạng thái |
 |---|---|---|
 | C1 | V161 `instructor_payout_accounts` + `instructor_payouts` | ✅ BE XONG 11/11/2026 |
-| C2 | Mã hóa số tài khoản AES-256-GCM (`PayoutCrypto`), HMAC dò trùng, danh mục ngân hàng (`BankDirectory`) | ⛔ CODE XONG — chờ chủ dự án cấu hình khóa (xem trên). 🔧 BIN ngân hàng cần đối chiếu danh sách VietQR trước khi dùng cho chi trả tự động |
-| C3 | Liên kết tài khoản: chỉ giảng viên đã xác minh, email xác nhận (token băm SHA-256 trong Redis, GETDEL, TTL 30'), khớp tên chủ tài khoản, khóa rút 3 ngày khi ĐỔI, cảnh báo trùng số tài khoản | ✅ BE XONG |
+| C2 | Mã hóa số tài khoản AES-256-GCM (`PayoutCrypto`), HMAC dò trùng, danh mục ngân hàng (`BankDirectory`) | ✅ XONG + ĐÃ CẤU HÌNH KHÓA, đã liên kết tài khoản thật ở môi trường chạy (14/11/2026). 🔧 BIN ngân hàng cần đối chiếu danh sách VietQR trước khi dùng cho chi trả tự động |
+| C3 | Liên kết tài khoản: chỉ giảng viên đã xác minh, email xác nhận (token băm SHA-256 trong Redis, GETDEL, TTL 30'), khớp tên chủ tài khoản, cảnh báo trùng số tài khoản. ~~Khóa rút 3 ngày khi ĐỔI~~ — BỎ ngày 14/11/2026 (xem C10) | ✅ BE XONG |
 | C4 | `PayoutService`: yêu cầu rút (Idempotency-Key, khóa dòng giảng viên, giữ chỗ sổ cái, email xác nhận bắt buộc), xác nhận email, hủy, máy trạng thái PENDING_EMAIL→REQUESTED→APPROVED→PAID / REJECTED / CANCELLED / FAILED | ✅ BE XONG |
 | C5 | API admin `/api/v1/admin/payouts` (duyệt, đã chi + mã giao dịch, từ chối, thất bại, xem số tài khoản đầy đủ có nhật ký, xuất CSV chống công thức Excel) + 6 email các mốc | ✅ BE XONG |
 | C6 | Việc nền: hủy yêu cầu quá 30' chưa xác nhận (5 phút/lần); đối soát đêm ghi bù dòng EARNING còn thiếu (≤200 đơn/lần) và báo admin | ✅ BE XONG. 🔧 chưa có trang "Đối soát" riêng cho admin |
 | C7 | FE giảng viên "Thu nhập" `/instructor/earnings` (số dư, tài khoản nhận tiền, yêu cầu rút có Idempotency-Key, lịch sử, sao kê) + trang xác nhận `/instructor/earnings/confirm` (cố ý cần bấm nút, tránh trình quét email ăn token) | ✅ FE XONG 11/11/2026 (commit local, chưa push chờ BE deploy). 🔧 chuỗi chữ viết cứng tiếng Việt (chưa i18n 4 ngôn ngữ) |
 | C8 | FE admin "Chi trả" `/admin/transactions/payouts` (duyệt, đã chuyển + mã giao dịch, từ chối, thất bại, xem số TK, xuất CSV) | ✅ FE XONG 11/11/2026. 🔧 còn: huy hiệu số yêu cầu chờ ở sidebar, trang xem nhật ký tài chính |
+| C10 | **Nhiều tài khoản nhận tiền** (V163: `is_default`, `replaces_account_id`; trạng thái `REMOVED`): tối đa 5 tài khoản ACTIVE, 1 mặc định; thêm mới cần email; sửa ngân hàng/số cần email (bản chờ thay thế bản cũ, bản cũ vẫn dùng tới khi xác nhận), sửa riêng tên chủ thì áp dụng ngay; đổi mặc định/gỡ không cần email; gỡ bị chặn khi có yêu cầu rút mở dùng tài khoản đó; BỎ khóa rút 3 ngày (quyết định 14/11/2026). API: `GET/PUT/DELETE /instructor/payout-accounts`, `POST …/{id}/default` | ✅ BE + FE XONG + ĐÃ DEPLOY 14/11/2026 (678 test xanh) |
+| C11 | Rút tiền chọn tài khoản (`accountId` tùy chọn, mặc định = tài khoản mặc định); `PUT /instructor/payouts/{id}/account` đổi tài khoản của yêu cầu CHƯA duyệt (PENDING_EMAIL/REQUESTED) — dùng khi ngân hàng bảo trì/nhập sai; yêu cầu chụp lại (snapshot) tài khoản lúc tạo nên đổi mặc định không ảnh hưởng yêu cầu đang chờ; thất bại do admin đánh dấu → tiền trả về số dư + thông báo gợi ý đổi tài khoản | ✅ XONG 14/11/2026 |
+| C12 | FE `/instructor/earnings`: danh sách tài khoản dạng thẻ nổi (sửa/thêm/gỡ/đặt mặc định NGAY TRÊN TRANG, không popup), ô "Nhận về tài khoản" khi rút, "Đổi tài khoản nhận" trong lịch sử rút. Chữ cảnh báo lệch tên đổi thành "tên tài khoản" (so với `users.full_name`, không phải tên CCCD) | ✅ XONG 14/11/2026 |
 | C9 | Tự động chi qua PayOS `payouts()` | 🅿️ HOÃN — cần bạn kiểm tra kênh PayOS có bật chi hộ; đã tách logic nên nối thêm `PayoutExecutor` được |
 
 ### Giai đoạn D — Chia sẻ khóa học
@@ -111,12 +114,16 @@ Số hiệu migration thực tế: V162 (`course_promotions`). Đã kiểm trên
 | ID | Hạng mục | Trạng thái |
 |---|---|---|
 | E1 | V162 `course_promotions` | ✅ BE XONG 11/11/2026 |
-| E2 | Giảng viên đăng ký/hủy, admin duyệt (khung thời gian ≤ 90 ngày, độ ưu tiên)/từ chối/kết thúc sớm; điều kiện: khóa đã xuất bản + công khai + có ảnh bìa + ≥ 3 bài | ✅ BE + FE XONG (`/instructor/share`, `/admin/promotions`) |
-| E3 | Kệ "Được đề xuất" trang chủ (nhãn rõ ràng) qua `GET /courses/featured` | ✅ BE + FE XONG. 🔧 chưa có kệ đầu trang danh mục ở FE (BE đã hỗ trợ `CATEGORY_FEATURED`) |
+| E2 | Giảng viên đăng ký/hủy, admin duyệt (khung thời gian ≤ 90 ngày; ĐÃ BỎ ô độ ưu tiên 14/11/2026 — xem E7)/từ chối/gỡ sớm có lý do bắt buộc (E8); điều kiện: khóa đã xuất bản + công khai + có ảnh bìa + ≥ 3 bài | ✅ BE + FE XONG (`/instructor/share`, `/admin/promotions`) |
+| E3 | Kệ "Được đề xuất" trang chủ (nhãn rõ ràng) qua `GET /courses/featured` | ✅ BE + FE XONG. Kệ đầu trang danh mục (`CATEGORY_FEATURED`) hiện ở `/courses?category=<slug>` từ 14/11/2026 (`CategoryFeaturedShelf`; chỉ hiện khi lọc 1 danh mục và không gõ từ khóa) |
 | E3b | Boost thứ hạng tìm kiếm + nhãn "Được đề xuất" trên thẻ khóa | 🅿️ HOÃN — phải sửa 3 truy vấn tìm kiếm phức tạp và cache 15 phút; rủi ro cao so với lợi ích |
 | E4 | Thống kê hiệu quả: đơn/doanh thu khi chạy so với khoảng bằng nhau ngay trước đó (ước tính) | ✅ BE + FE XONG. Quy kết chính xác theo `payments.promotion_id` 🅿️ HOÃN (cần sửa luồng tạo đơn) |
 | E5 | `POST /promotions/{id}/click` + đếm hiển thị | 🅿️ HOÃN — như D6 |
 | E6 | Chiến dịch email/thông báo + `marketing_opt_out` + link hủy | 🅿️ HOÃN — làm sau cùng, có thể tách PR |
+| E7 | Bỏ độ ưu tiên chấm tay (nguy cơ thiên vị): kệ lấy tối đa 100 khóa đang chạy, xáo theo GIỜ hiện tại (hạt giống = giờ + vị trí) rồi cắt theo `size`; `priority` bỏ khỏi API/FE, cột DB giữ nguyên (không migration) | ✅ XONG 14/11/2026 |
+| E8 | Gỡ quảng bá: admin "Gỡ quảng bá" BẮT BUỘC nêu lý do → giảng viên nhận thông báo `PROMOTION_ENDED`; giảng viên gỡ đợt đang chạy → admin nhận `PROMOTION_WITHDRAWN`; cả hai ghi audit; khóa bị ẩn/gỡ xuất bản tự biến khỏi kệ (truy vấn đã lọc) | ✅ XONG 14/11/2026 |
+| E9 | Thông báo `PROMOTION_SUBMITTED` cho giảng viên khi gửi đăng ký (trước đây chỉ admin được báo); định dạng ngày thông báo thống nhất `HH:mm dd/MM/yyyy` | ✅ XONG 14/11/2026 |
+| E10 | FE `/instructor/share`: tìm kiếm (bỏ dấu), lọc trạng thái, phân trang 5 khóa/trang, khối danh sách chiều cao tối thiểu cố định; ô chọn khóa quảng bá có tìm nhanh (`SearchableSelect`) | ✅ XONG 14/11/2026 |
 
 ### Giai đoạn F — Hoàn thiện
 | ID | Hạng mục | Trạng thái |
@@ -125,7 +132,7 @@ Số hiệu migration thực tế: V162 (`course_promotions`). Đã kiểm trên
 | F2 | Cập nhật `claude/*.md` | ✅ XONG |
 | F3 | Ngày lễ nhập vào `REFUND_HOLIDAYS` | ⛔ BỊ CHẶN — admin nhập khi vận hành |
 | F4 | Kiểm thử đầu-cuối: `mvn clean verify` 665 test; áp V1→V162 trên MySQL 8 tạm; Hibernate `validate`; JPQL chạy thật; **khởi động đủ bean toàn ứng dụng (48s) + gọi thử API mới** (công khai chỉ đọc, còn lại 401 khi không token, đầu vào độc 400) | ✅ XONG phần tự động. 🔧 chưa thử luồng thật trên Vercel/PayOS (cần deploy) |
-| F5 | **Deploy**: BE nhánh `feat/payout-epic` (B–E) chưa merge vào nhánh chạy thật; FE commit local chưa push | ⛔ CHỜ chủ dự án duyệt deploy B (+C–E) |
+| F5 | **Deploy**: BE nhánh `feat/payout-epic` (B–E) đã merge vào `feat/additional-features` và chạy thật; FE đã push | ✅ XONG 14/11/2026 (BE restart 2 lần: V162 trước đó, V163 lúc 10:38 14/11; chưa sao lưu DB trước V163 — chủ dự án sẽ sao lưu sau) |
 
 ## Bảo mật API công khai
 Chỉ làm khi đủ **tất cả** lớp sau (áp dụng cho D6, E5 và mọi API công khai thêm sau này):
@@ -181,8 +188,13 @@ Xem bảng D/E. Kệ nổi bật đi qua tham số mới của endpoint danh sá
 
 ## Việc chờ chủ dự án
 1. Sao lưu DB (`mysqldump`) trước khi deploy bất kỳ giai đoạn nào có migration.
-2. Biến môi trường khóa mã hóa số tài khoản + HMAC (C2).
+2. ~~Biến môi trường khóa mã hóa số tài khoản + HMAC (C2).~~ ĐÃ XONG.
 3. Chọn thư viện QR (D5).
 4. Kiểm tra kênh PayOS có bật chi hộ (C9).
 5. Nhập ngày lễ vào `REFUND_HOLIDAYS` (F3).
 6. Quyết định hạ tầng: `maxmemory` Redis, bỏ `--reload` ở ai-api, giới hạn bộ nhớ container, lớp lọc bot phía trước.
+
+## Nhật ký 14/11/2026 (quyết định + việc đã làm)
+- **Quyết định:** tối đa 5 tài khoản nhận tiền; thêm mới cần xác nhận email; sửa không khóa (đổi ngân hàng/số vẫn cần email, đổi tên chủ thì không); tài khoản được chọn (mặc định) dùng để nhận tiền; chi trả vẫn bất đồng bộ (theo đợt, 7–14 ngày) nên đổi tài khoản đúng lúc chi không gây nhầm nhờ snapshot; quảng bá bỏ ưu tiên chấm tay, xoay vòng công bằng theo giờ, có cơ chế gỡ vì vi phạm hoặc giảng viên tự gỡ.
+- **Lỗi đã sửa cùng đợt:** `/streak/me` 500 do retry khóa lạc quan nằm trong cùng transaction (nay mỗi lần thử 1 transaction riêng); WebSocket thông báo dùng token hết hạn nên lặp "Expired JWT" mỗi 3 giây (nay lấy token mới mỗi lần nối lại); nhắc flashcard trỏ `/materials` thiếu `courseId` + thông báo realtime `SRS_REMINDER` mất nội dung/liên kết (nay theo từng khóa, có tên khóa, tối đa 3 khóa/người/ngày); avatar học viên không hiện do `next/image` chặn domain lạ (nay dùng `<img>` thô ở Header/AccountMenu/ProfileBanner); điều kiện gửi duyệt "chưa xác minh định danh" nay có nút "Làm ngay" tới `/teaching/onboarding`.
+- **Lưu ý vận hành:** sao lưu DB sau V163 (chủ dự án làm); email chạy qua Gmail SMTP (`be/.env` đè mặc định Mailpit) nên tài khoản email giả không nhận được thư xác nhận — demo dùng cách bật tài khoản bằng SQL hoặc đổi sang email thật.

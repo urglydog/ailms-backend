@@ -24,6 +24,7 @@ import com.lms.common.service.NotificationService;
 import com.lms.finance.dto.PayoutDto;
 import com.lms.finance.entity.InstructorPayoutAccount;
 import com.lms.finance.repository.InstructorPayoutAccountRepository;
+import com.lms.finance.repository.InstructorPayoutRepository;
 import com.lms.instructor.repository.InstructorVerificationRepository;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -50,6 +51,7 @@ class PayoutAccountServiceTest {
     @Mock private EmailService emailService;
     @Mock private FinanceRateLimit rateLimit;
     @Mock private NotificationService notificationService;
+    @Mock private InstructorPayoutRepository payoutRepository;
 
     @InjectMocks
     private PayoutAccountService service;
@@ -100,7 +102,7 @@ class PayoutAccountServiceTest {
         assertThat(a.getNameMatchStatus()).isEqualTo(NameMatchStatus.MATCHED);
         assertThat(res.accountMask()).isEqualTo("•••• 6789").doesNotContain("0123");
         verify(emailService).sendPayoutAccountConfirmEmail(EMAIL, "Vietcombank", "6789", "token-abc");
-        verify(rateLimit).check("account-link", 7L, 5);
+        verify(rateLimit).check("account-link", 7L, 8);
     }
 
     @Test
@@ -202,20 +204,138 @@ class PayoutAccountServiceTest {
     }
 
     @Test
-    void confirm_replacingAnExistingAccount_locksWithdrawalsForThreeDays_andWarnsByEmail() {
-        InstructorPayoutAccount previous = new InstructorPayoutAccount();
-        previous.setStatus(PayoutAccountStatus.ACTIVE);
-        previous.setAccountLast4("1111");
-        when(accountRepository.findFirstByUser_IdAndStatus(7L, PayoutAccountStatus.ACTIVE)).thenReturn(Optional.of(previous));
+    void confirm_editOfAnActiveAccount_replacesItKeepsDefault_withoutAnyWithdrawalLock_andWarnsByEmail() {
+        InstructorPayoutAccount previous = active(99L, "1111", true);
+        when(accountRepository.findByUser_IdAndStatus(7L, PayoutAccountStatus.ACTIVE)).thenReturn(List.of(previous));
         InstructorPayoutAccount a = pending();
+        a.setReplacesAccountId(99L);
         LocalDateTime before = LocalDateTime.now();
 
         service.confirm(7L, 55L);
 
         assertThat(previous.getStatus()).isEqualTo(PayoutAccountStatus.REPLACED);
+        assertThat(previous.getIsDefault()).isFalse();
         assertThat(a.getStatus()).isEqualTo(PayoutAccountStatus.ACTIVE);
-        assertThat(a.getUsableFrom()).isBetween(before.plusDays(3), LocalDateTime.now().plusDays(3).plusSeconds(1));
+        assertThat(a.getIsDefault()).isTrue();
+        assertThat(a.getUsableFrom()).isBetween(before, LocalDateTime.now().plusSeconds(1)); // không khóa rút
         verify(emailService).sendPayoutAccountChangedEmail(eq(EMAIL), eq("Vietcombank"), eq("6789"), any());
+    }
+
+    @Test
+    void confirm_additionalAccount_keepsTheExistingOnesAndTheirDefault() {
+        InstructorPayoutAccount other = active(99L, "1111", true);
+        when(accountRepository.findByUser_IdAndStatus(7L, PayoutAccountStatus.ACTIVE)).thenReturn(List.of(other));
+        InstructorPayoutAccount a = pending();
+
+        service.confirm(7L, 55L);
+
+        assertThat(other.getStatus()).isEqualTo(PayoutAccountStatus.ACTIVE);
+        assertThat(other.getIsDefault()).isTrue();
+        assertThat(a.getIsDefault()).isFalse();
+        verify(emailService, never()).sendPayoutAccountChangedEmail(any(), any(), any(), any());
+    }
+
+    // ── nhiều tài khoản: giới hạn, sửa, mặc định, gỡ ──────────────────────
+
+    private InstructorPayoutAccount active(Long id, String last4, boolean isDefault) {
+        InstructorPayoutAccount a = new InstructorPayoutAccount();
+        a.setId(id);
+        a.setUser(instructor);
+        a.setStatus(PayoutAccountStatus.ACTIVE);
+        a.setBankCode("VCB");
+        a.setBankBin("970436");
+        a.setBankName("Vietcombank");
+        a.setAccountNumberEnc("v1:enc");
+        a.setAccountLast4(last4);
+        a.setAccountHash("hash-0123456789");
+        a.setHolderName("NGUYEN CHI THIEN");
+        a.setNameMatchStatus(NameMatchStatus.MATCHED);
+        a.setIsDefault(isDefault);
+        return a;
+    }
+
+    @Test
+    void link_beyondFiveAccounts_isRejected_andDuplicateNumberToo() {
+        when(accountRepository.countByUser_IdAndStatus(7L, PayoutAccountStatus.ACTIVE)).thenReturn(5L);
+        assertThatThrownBy(() -> service.link(EMAIL, req("vcb", "0123456789", "Nguyễn Chí Thiện")))
+                .isInstanceOf(BusinessRuleViolationException.class);
+
+        when(accountRepository.countByUser_IdAndStatus(7L, PayoutAccountStatus.ACTIVE)).thenReturn(1L);
+        when(accountRepository.existsByUser_IdAndAccountHashAndStatus(7L, "hash-0123456789", PayoutAccountStatus.ACTIVE)).thenReturn(true);
+        assertThatThrownBy(() -> service.link(EMAIL, req("vcb", "0123456789", "Nguyễn Chí Thiện")))
+                .isInstanceOf(BusinessRuleViolationException.class);
+        verify(emailService, never()).sendPayoutAccountConfirmEmail(any(), any(), any(), any());
+    }
+
+    @Test
+    void edit_holderNameOnly_onActiveAccount_appliesImmediately_withoutEmail() {
+        InstructorPayoutAccount a = active(99L, "6789", true);
+        when(accountRepository.findByIdAndUser_Id(99L, 7L)).thenReturn(Optional.of(a));
+        when(crypto.decrypt("v1:enc")).thenReturn("0123456789");
+
+        PayoutDto.AccountRes res = service.edit(EMAIL, 99L, new PayoutDto.EditAccountReq("VCB", "", "Tran Van B"));
+
+        assertThat(a.getHolderName()).isEqualTo("TRAN VAN B");
+        assertThat(a.getNameMatchStatus()).isEqualTo(NameMatchStatus.MISMATCH);
+        assertThat(res.primary()).isTrue();
+        verify(emailService, never()).sendPayoutAccountConfirmEmail(any(), any(), any(), any());
+        verify(accountRepository, never()).findByUser_IdAndStatus(any(), eq(PayoutAccountStatus.PENDING_CONFIRM));
+    }
+
+    @Test
+    void edit_numberOfActiveAccount_createsPendingCopyThatReplacesIt_andNeedsEmail() {
+        InstructorPayoutAccount a = active(99L, "6789", true);
+        when(accountRepository.findByIdAndUser_Id(99L, 7L)).thenReturn(Optional.of(a));
+        when(crypto.encrypt("0987654321")).thenReturn("v1:enc2");
+        when(crypto.hash("0987654321")).thenReturn("hash-0987654321");
+
+        service.edit(EMAIL, 99L, new PayoutDto.EditAccountReq("VCB", "0987 654 321", "Nguyễn Chí Thiện"));
+
+        ArgumentCaptor<InstructorPayoutAccount> captor = ArgumentCaptor.forClass(InstructorPayoutAccount.class);
+        verify(accountRepository).save(captor.capture());
+        InstructorPayoutAccount created = captor.getValue();
+        assertThat(created.getStatus()).isEqualTo(PayoutAccountStatus.PENDING_CONFIRM);
+        assertThat(created.getReplacesAccountId()).isEqualTo(99L);
+        assertThat(a.getStatus()).isEqualTo(PayoutAccountStatus.ACTIVE); // bản cũ vẫn dùng được tới khi xác nhận
+        verify(emailService).sendPayoutAccountConfirmEmail(EMAIL, "Vietcombank", "4321", "token-abc");
+    }
+
+    @Test
+    void setPrimary_movesTheFlag_onlyAmongActiveAccounts() {
+        InstructorPayoutAccount first = active(1L, "1111", true);
+        InstructorPayoutAccount second = active(2L, "2222", false);
+        when(accountRepository.findByIdAndUser_Id(2L, 7L)).thenReturn(Optional.of(second));
+        when(accountRepository.findByUser_IdAndStatus(7L, PayoutAccountStatus.ACTIVE)).thenReturn(List.of(first, second));
+
+        service.setPrimary(EMAIL, 2L);
+
+        assertThat(first.getIsDefault()).isFalse();
+        assertThat(second.getIsDefault()).isTrue();
+
+        InstructorPayoutAccount pending = active(55L, "6789", false);
+        pending.setStatus(PayoutAccountStatus.PENDING_CONFIRM);
+        when(accountRepository.findByIdAndUser_Id(55L, 7L)).thenReturn(Optional.of(pending));
+        assertThatThrownBy(() -> service.setPrimary(EMAIL, 55L)).isInstanceOf(BusinessRuleViolationException.class);
+    }
+
+    @Test
+    void remove_isBlockedWhileAnOpenPayoutUsesTheAccount_andPromotesAnotherDefaultOtherwise() {
+        InstructorPayoutAccount first = active(1L, "1111", true);
+        InstructorPayoutAccount second = active(2L, "2222", false);
+        when(accountRepository.findByIdAndUser_Id(1L, 7L)).thenReturn(Optional.of(first));
+        when(payoutRepository.existsByAccount_IdAndStatusIn(eq(1L), any())).thenReturn(true);
+        assertThatThrownBy(() -> service.remove(EMAIL, 1L)).isInstanceOf(BusinessRuleViolationException.class);
+        assertThat(first.getStatus()).isEqualTo(PayoutAccountStatus.ACTIVE);
+
+        when(payoutRepository.existsByAccount_IdAndStatusIn(eq(1L), any())).thenReturn(false);
+        when(accountRepository.findByUser_IdAndStatus(7L, PayoutAccountStatus.PENDING_CONFIRM)).thenReturn(List.of());
+        when(accountRepository.findByUser_IdAndStatus(7L, PayoutAccountStatus.ACTIVE)).thenReturn(List.of(second));
+
+        service.remove(EMAIL, 1L);
+
+        assertThat(first.getStatus()).isEqualTo(PayoutAccountStatus.REMOVED);
+        assertThat(first.getIsDefault()).isFalse();
+        assertThat(second.getIsDefault()).isTrue();
     }
 
     @Test

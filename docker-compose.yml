@@ -175,6 +175,7 @@ services:
       LIVEKIT_URL: ${LIVEKIT_URL:-}
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
+      LMS_PAYOUT_ENCRYPTION_KEY: ${LMS_PAYOUT_ENCRYPTION_KEY:-}
     volumes:
       - .:/app                              # hot-reload khi sửa code
       - backend_maven_cache:/root/.m2       # cache dependency Maven giữa các lần chạy
@@ -199,7 +200,15 @@ services:
       dockerfile: Dockerfile
     container_name: lms_ai_api
     restart: unless-stopped
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    # --reload-dir: chỉ theo dõi thư mục code `app/` (không theo dõi NCKH/, tests/ ...) để file thí nghiệm
+    # không làm API tự khởi động lại (NCKH N4, 13/11/2026).
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/app --reload-exclude "NCKH/experiments/*"
+    # Giới hạn dung lượng log để không phình đầy ổ đĩa (NCKH N4, 13/11/2026): tối đa 3 file x 10 MB / container.
+    logging: &ai_logging
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     ports:
       - "127.0.0.1:${AI_API_PORT:-8000}:8000"
     # Biến riêng của ai-worker (ASR/LLM/TTS/tham số pipeline/B2/Supabase) đọc từ
@@ -234,6 +243,7 @@ services:
     container_name: lms_ai_worker
     restart: unless-stopped
     command: celery -A app.celery_app worker --loglevel=info --concurrency=8
+    logging: *ai_logging
     env_file:
       - ../ai-worker/.env
     environment: *ai_env
@@ -254,6 +264,7 @@ services:
     container_name: lms_ai_beat
     restart: unless-stopped
     command: celery -A app.celery_app beat --loglevel=info
+    logging: *ai_logging
     env_file:
       - ../ai-worker/.env
     environment: *ai_env

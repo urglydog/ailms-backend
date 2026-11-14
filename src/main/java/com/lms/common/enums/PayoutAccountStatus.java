@@ -4,5 +4,7 @@ package com.lms.common.enums;
 public enum PayoutAccountStatus {
     PENDING_CONFIRM,
     ACTIVE,
-    REPLACED
+    REPLACED,
+    /** Giảng viên đã gỡ tài khoản này. */
+    REMOVED
 }

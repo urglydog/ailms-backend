@@ -28,6 +28,9 @@ public interface InstructorPayoutRepository extends JpaRepository<InstructorPayo
 
     boolean existsByCode(String code);
 
+    /** Có yêu cầu rút nào còn mở đang dùng tài khoản này không (chặn gỡ tài khoản giữa chừng). */
+    boolean existsByAccount_IdAndStatusIn(Long accountId, Collection<PayoutStatus> statuses);
+
     boolean existsByInstructor_IdAndStatusIn(Long instructorId, Collection<PayoutStatus> statuses);
 
     Optional<InstructorPayout> findByInstructor_IdAndIdempotencyKey(Long instructorId, String idempotencyKey);

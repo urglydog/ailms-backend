@@ -276,15 +276,12 @@ public class EmailService {
 
     /** Báo tài khoản nhận tiền vừa được ĐỔI (kể cả khi không phải chính chủ thực hiện). Best-effort. */
     public void sendPayoutAccountChangedEmail(String toEmail, String bankName, String last4, java.time.LocalDateTime usableFrom) {
-        String when = usableFrom == null ? "" : usableFrom.format(DateTimeFormatter.ofPattern("HH:mm dd/MM/yyyy"));
         try {
             sendHtmlMail(toEmail, "Tài khoản nhận tiền của bạn đã được thay đổi",
-                    "Tài khoản nhận tiền đã đổi sang " + bankName + " •••• " + last4 + ". Tài khoản mới dùng để rút tiền được từ " + when
-                            + ". Nếu không phải bạn, hãy đổi mật khẩu và liên hệ hỗ trợ ngay.",
+                    "Tài khoản nhận tiền đã đổi sang " + bankName + " •••• " + last4 + ". Nếu không phải bạn, hãy đổi mật khẩu và liên hệ hỗ trợ ngay.",
                     supportMailShell("Tài khoản nhận tiền đã thay đổi",
                             paragraph("Tài khoản nhận tiền của bạn vừa đổi sang <strong>" + HtmlUtils.htmlEscape(bankName) + " •••• "
-                                    + HtmlUtils.htmlEscape(last4) + "</strong>. Để an toàn, tài khoản mới chỉ dùng để rút tiền được từ <strong>"
-                                    + HtmlUtils.htmlEscape(when) + "</strong>.")
+                                    + HtmlUtils.htmlEscape(last4) + "</strong>.")
                                     + paragraph("Nếu không phải bạn thực hiện, hãy đổi mật khẩu và liên hệ hỗ trợ ngay.")));
         } catch (Exception e) {
             log.error("Loi khi gui email doi tai khoan nhan tien den {}: {}", toEmail, e.getMessage());
