@@ -16,5 +16,7 @@ public enum LedgerEntryType {
     /** Trả lại số tiền giữ chỗ khi yêu cầu rút bị hủy/từ chối/thất bại (dương). */
     PAYOUT_RELEASE,
     /** Điều chỉnh tay có lý do (admin). */
-    ADJUSTMENT
+    ADJUSTMENT,
+    /** Giảng viên trả nợ qua PayOS (dương, chống ghi trùng theo debt_payment_id). */
+    DEBT_REPAYMENT
 }

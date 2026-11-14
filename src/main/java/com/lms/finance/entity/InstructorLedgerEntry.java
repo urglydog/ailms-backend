@@ -55,6 +55,10 @@ public class InstructorLedgerEntry extends BaseEntity {
     @Column(name = "payout_id")
     private Long payoutId;
 
+    /** Có giá trị ở dòng DEBT_REPAYMENT — duy nhất, chống ghi trùng một lần trả nợ. */
+    @Column(name = "debt_payment_id")
+    private Long debtPaymentId;
+
     /** Dòng gốc mà dòng đảo này bù trừ (vd REFUND_REVERSAL → EARNING). */
     @Column(name = "ref_entry_id")
     private Long refEntryId;

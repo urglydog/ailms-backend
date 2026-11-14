@@ -50,6 +50,7 @@ class PromotionServiceTest {
     private static final String EMAIL = "gv@lms.local";
     private static final String ADMIN_EMAIL = "admin@lms.local";
 
+    @Mock private com.lms.finance.debt.DebtGuard debtGuard;
     @Mock private CoursePromotionRepository promotionRepository;
     @Mock private CourseRepository courseRepository;
     @Mock private UserRepository userRepository;

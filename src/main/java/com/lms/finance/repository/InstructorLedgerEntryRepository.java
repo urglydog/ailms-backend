@@ -20,6 +20,16 @@ public interface InstructorLedgerEntryRepository extends JpaRepository<Instructo
     java.math.BigDecimal sumAvailable(@org.springframework.data.repository.query.Param("instructorId") Long instructorId,
                                       @org.springframework.data.repository.query.Param("now") java.time.LocalDateTime now);
 
+    /** Các giảng viên có số dư khả dụng ÂM (đang nợ) và số nợ của họ — dùng cho việc nền theo dõi công nợ. */
+    @org.springframework.data.jpa.repository.Query("SELECT e.instructor.id, SUM(e.amount) FROM InstructorLedgerEntry e "
+            + "WHERE e.availableAt <= :now GROUP BY e.instructor.id HAVING SUM(e.amount) < 0")
+    java.util.List<Object[]> findDebtors(@org.springframework.data.repository.query.Param("now") java.time.LocalDateTime now);
+
+    boolean existsByDebtPaymentId(Long debtPaymentId);
+
+    java.util.List<InstructorLedgerEntry> findTop5ByInstructor_IdAndEntryTypeOrderByCreatedAtDescIdDesc(Long instructorId,
+            com.lms.common.enums.LedgerEntryType entryType);
+
     /** Đang giữ = các dòng chưa tới hạn (thu nhập mới trong thời gian hoàn tiền). */
     @org.springframework.data.jpa.repository.Query("SELECT COALESCE(SUM(e.amount), 0) FROM InstructorLedgerEntry e "
             + "WHERE e.instructor.id = :instructorId AND e.availableAt > :now")

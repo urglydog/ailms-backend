@@ -145,7 +145,8 @@ class InstructorDisputeServiceTest {
         when(disputeRepository.findByPayment_Course_Instructor_EmailOrderByCreatedAtDesc(OWNER))
                 .thenReturn(List.of(dispute, resolved));
         DisputeDto.InstructorRes stub = new DisputeDto.InstructorRes(500L, "txn-100", 10L, "c", "n", null, null, null,
-                "r", null, null, null, null, DisputeStatus.OPEN, null, List.of(), List.of(), null, null, null, null, null, null);
+                "r", null, null, null, null, DisputeStatus.OPEN, null, List.of(), List.of(), null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null);
         when(disputeService.toInstructorRes(dispute)).thenReturn(stub);
 
         assertThat(service.list(OWNER, DisputeStatus.OPEN, null)).containsExactly(stub);

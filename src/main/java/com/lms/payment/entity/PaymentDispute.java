@@ -54,6 +54,20 @@ public class PaymentDispute extends BaseEntity {
     @Column(name = "refund_bank_account", length = 100)
     private String refundBankAccount;
 
+    /** Tài khoản nhận hoàn tiền khai báo có cấu trúc (V165) — dùng cho chi tự động; null với khiếu nại cũ/client cũ. */
+    @Column(name = "refund_bank_code", length = 20)
+    private String refundBankCode;
+
+    @Column(name = "refund_account_number", length = 30)
+    private String refundAccountNumber;
+
+    @Column(name = "refund_account_holder", length = 100)
+    private String refundAccountHolder;
+
+    /** Học viên đã xác nhận đây là tài khoản của chính mình. */
+    @Column(name = "refund_account_confirmed", nullable = false)
+    private Boolean refundAccountConfirmed = false;
+
     @Column(name = "admin_note", columnDefinition = "TEXT")
     private String adminNote;
 

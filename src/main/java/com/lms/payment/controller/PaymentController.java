@@ -20,6 +20,7 @@ import vn.payos.model.webhooks.Webhook;
 public class PaymentController {
     private final PaymentService paymentService;
     private final PayOS payOS;
+    private final com.lms.finance.debt.DebtService debtService;
 
     @PostMapping("/create")
     @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
@@ -81,6 +82,10 @@ public class PaymentController {
             WebhookData data = payOS.webhooks().verify(webhookBody);
             
             // Xử lý IPN (lấy orderCode làm txnRef)
+            // Trả nợ của giảng viên dùng dải orderCode riêng (>= 1e12): xử lý riêng, không đi vào luồng đơn mua khóa.
+            if (debtService.handleWebhook(data.getOrderCode(), data.getAmount(), data.getPaymentLinkId(), data.getCode())) {
+                return ResponseEntity.ok(java.util.Map.of("success", true));
+            }
             String txnRef = String.valueOf(data.getOrderCode());
             String gatewayTxnNo = String.valueOf(data.getPaymentLinkId());
             

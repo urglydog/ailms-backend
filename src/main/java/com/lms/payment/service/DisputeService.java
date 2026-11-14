@@ -121,7 +121,7 @@ public class DisputeService {
         dispute.setFiledBy(user);
         dispute.setReason(req.reason());
         dispute.setDescription(req.description());
-        dispute.setRefundBankAccount(req.refundBankAccount());
+        applyRefundAccount(dispute, req, user);
         dispute.setStatus(DisputeStatus.OPEN);
         LocalDateTime now = LocalDateTime.now();
         dispute.setTermsAcceptedAt(now);
@@ -252,7 +252,7 @@ public class DisputeService {
         if (refunded) {
             // Hoàn tiền THẬT (11/11/2026): REFUNDED + thu hồi ghi danh + sổ cái... trong cùng transaction.
             // Lỗi ở đây (vd giao dịch không còn PAID) làm rollback cả việc đổi trạng thái khiếu nại.
-            refundService.approve(saved, adminEmail, req.responsibility(), req.note());
+            refundService.approve(saved, adminEmail, req.responsibility(), req.reasonCode(), req.note(), req.evidenceNote());
         } else {
             User instructor = dispute.getPayment().getCourse().getInstructor();
             if (instructor != null) {
@@ -268,7 +268,7 @@ public class DisputeService {
                 "DISPUTE_RESOLVED",
                 "Khiếu nại của bạn đã được xử lý",
                 refunded
-                        ? "Giao dịch " + dispute.getPayment().getTxnRef() + " đã được đánh dấu hoàn tiền."
+                        ? "Giao dịch " + dispute.getPayment().getTxnRef() + " đã được chấp nhận hoàn tiền. Chúng tôi sẽ chuyển khoản cho bạn và báo lại ngay khi đã chuyển."
                         : "Giao dịch " + dispute.getPayment().getTxnRef() + " không được chấp nhận hoàn tiền.",
                 "/payments"
         );
@@ -406,8 +406,53 @@ public class DisputeService {
                 refund != null ? refund.getInstructorCharge() : null,
                 refund != null ? refund.getPlatformShare() : null,
                 refund != null ? refund.getTransferStatus() : null,
-                refund != null ? refund.getTransferRef() : null
+                refund != null ? refund.getTransferRef() : null,
+                d.getRefundBankCode(),
+                d.getRefundAccountNumber(),
+                d.getRefundAccountHolder(),
+                Boolean.TRUE.equals(d.getRefundAccountConfirmed()),
+                refund != null ? refund.getReasonCode() : null,
+                refund != null ? refund.getEvidenceNote() : null,
+                refund != null ? refund.getAppealStatus() : null,
+                refund != null ? refund.getAppealReason() : null,
+                refund != null ? refund.getAppealAt() : null,
+                refund != null ? refund.getAppealDecisionNote() : null
         );
+    }
+
+    /**
+     * Ghi tài khoản nhận hoàn tiền. Có khai báo CÓ CẤU TRÚC (mới) thì phải đủ ngân hàng + số (6–20 chữ số) + tên chủ tài khoản và học viên phải
+     * xác nhận đây là tài khoản CỦA CHÍNH MÌNH (trách nhiệm về độ chính xác thuộc người khai). Không có thì giữ ô chữ tự do cũ (client cũ).
+     */
+    private void applyRefundAccount(PaymentDispute dispute, DisputeDto.FileReq req, User user) {
+        boolean structured = notBlank(req.refundBankCode()) || notBlank(req.refundAccountNumber()) || notBlank(req.refundAccountHolder());
+        if (!structured) {
+            dispute.setRefundBankAccount(req.refundBankAccount());
+            return;
+        }
+        var bank = com.lms.finance.BankDirectory.find(req.refundBankCode())
+                .orElseThrow(() -> new BusinessRuleViolationException("Ngân hàng nhận hoàn tiền không hợp lệ"));
+        String number = req.refundAccountNumber() == null ? "" : req.refundAccountNumber().replaceAll("\\s", "");
+        if (!number.matches("[0-9]{6,20}")) {
+            throw new BusinessRuleViolationException("Số tài khoản nhận hoàn tiền chỉ gồm chữ số (6–20 số)");
+        }
+        String holder = com.lms.finance.NameNormalizer.normalize(req.refundAccountHolder());
+        if (holder.isEmpty()) {
+            throw new BusinessRuleViolationException("Cần nhập tên chủ tài khoản nhận hoàn tiền");
+        }
+        if (!Boolean.TRUE.equals(req.refundAccountOwnConfirmed())) {
+            throw new BusinessRuleViolationException("Bạn cần xác nhận đây là tài khoản của chính bạn");
+        }
+        dispute.setRefundBankCode(bank.code());
+        dispute.setRefundAccountNumber(number);
+        dispute.setRefundAccountHolder(holder);
+        dispute.setRefundAccountConfirmed(true);
+        String shown = bank.name() + " " + number + " - " + holder;
+        dispute.setRefundBankAccount(shown.length() > 100 ? shown.substring(0, 100) : shown);
+    }
+
+    private static boolean notBlank(String s) {
+        return s != null && !s.isBlank();
     }
 
     /** Hình giảng viên xem — KHÔNG có email/SĐT/STK ngân hàng/ghi chú nội bộ admin của học viên. */
@@ -436,8 +481,31 @@ public class DisputeService {
                 d.getInstructorRespondedAt(),
                 d.getInstructorDeadlineAt(),
                 d.getResolvedAt(),
-                refund != null ? refund.getInstructorCharge() : null
+                refund != null ? refund.getInstructorCharge() : null,
+                refund != null ? refund.getResponsibility() : null,
+                refund != null ? refund.getReasonCode() : null,
+                refund != null ? refund.getNote() : null,
+                refund != null ? refund.getEvidenceNote() : null,
+                appealDeadline(refund),
+                refund != null ? refund.getAppealStatus() : null,
+                refund != null ? refund.getAppealReason() : null,
+                refund != null ? refund.getAppealDecisionNote() : null
         );
+    }
+
+    /** Một khiếu nại ở dạng admin xem (dùng sau khi quyết định khiếu nại của giảng viên). */
+    @Transactional(readOnly = true)
+    public DisputeDto.AdminRes getAdmin(Long disputeId) {
+        return toAdminRes(disputeRepository.findById(disputeId).orElseThrow(() -> new ResourceNotFoundException("PaymentDispute", disputeId)));
+    }
+
+    /** Hạn khiếu nại: chỉ khi quyết định là "giảng viên chịu toàn bộ" và chưa khiếu nại. */
+    private LocalDateTime appealDeadline(PaymentRefund refund) {
+        if (refund == null || refund.getResponsibility() != com.lms.common.enums.RefundResponsibility.INSTRUCTOR_FAULT
+                || refund.getAppealStatus() != com.lms.common.enums.AppealStatus.NONE || refund.getApprovedAt() == null) {
+            return null;
+        }
+        return refund.getApprovedAt().plusDays(systemConfigService.getInt(FinanceConfigKeys.DISPUTE_APPEAL_DAYS, 7));
     }
 
     private List<DisputeDto.AttachmentRes> attachmentsBySide(PaymentDispute d, AttachmentSide side) {

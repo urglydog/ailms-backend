@@ -144,6 +144,13 @@ public class PayosPayoutService {
         if (refund.getTransferStatus() != RefundTransferStatus.PENDING_TRANSFER) {
             throw new BusinessRuleViolationException("Khoản hoàn này không còn ở trạng thái chờ chuyển");
         }
+        // Ưu tiên tài khoản khai báo CÓ CẤU TRÚC và đã xác nhận chính chủ; khiếu nại cũ (chữ tự do) thì đọc chữ, mơ hồ thì từ chối.
+        if (dispute.getRefundBankCode() != null && Boolean.TRUE.equals(dispute.getRefundAccountConfirmed())) {
+            var bank = BankDirectory.find(dispute.getRefundBankCode())
+                    .orElseThrow(() -> new BusinessRuleViolationException("Ngân hàng nhận hoàn tiền không hợp lệ; hãy chuyển thủ công"));
+            return new Source(refund.getAmount().longValue(), bank.bin(), dispute.getRefundAccountNumber(),
+                    dispute.getRefundAccountHolder(), "LinguaLearn hoan tien");
+        }
         ParsedAccount parsed = parseRefundAccount(refund.getRefundBankInfo());
         return new Source(refund.getAmount().longValue(), parsed.bankBin(), parsed.number(), null, "LinguaLearn hoan tien");
     }

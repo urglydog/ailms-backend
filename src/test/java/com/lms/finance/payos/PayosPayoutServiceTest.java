@@ -29,6 +29,10 @@ import com.lms.finance.repository.PayosPayoutOrderRepository;
 import com.lms.finance.service.FinanceAuditService;
 import com.lms.finance.service.PayoutAccountService;
 import com.lms.finance.service.PayoutService;
+import com.lms.payment.entity.Payment;
+import com.lms.payment.entity.PaymentDispute;
+import com.lms.payment.entity.PaymentRefund;
+import com.lms.common.enums.RefundTransferStatus;
 import com.lms.payment.repository.PaymentDisputeRepository;
 import com.lms.payment.repository.PaymentRefundRepository;
 import com.lms.payment.service.DisputeService;
@@ -258,5 +262,36 @@ class PayosPayoutServiceTest {
             assertThatThrownBy(() -> PayosPayoutService.parseRefundAccount(bad)).as(String.valueOf(bad))
                     .isInstanceOf(BusinessRuleViolationException.class);
         }
+    }
+
+    @Test
+    void refund_withStructuredConfirmedAccount_sendsThatAccountAndTheHolderName() {
+        Payment payment = new Payment();
+        payment.setId(100L);
+        PaymentDispute dispute = new PaymentDispute();
+        dispute.setId(4L);
+        dispute.setPayment(payment);
+        dispute.setRefundBankCode("MB");
+        dispute.setRefundAccountNumber("0356307125");
+        dispute.setRefundAccountHolder("NGUYEN CHI THIEN");
+        dispute.setRefundAccountConfirmed(true);
+        PaymentRefund refund = new PaymentRefund();
+        refund.setAmount(new BigDecimal("200000"));
+        refund.setTransferStatus(RefundTransferStatus.PENDING_TRANSFER);
+        when(disputeRepository.findById(4L)).thenReturn(Optional.of(dispute));
+        when(refundRepository.findByPayment_Id(100L)).thenReturn(Optional.of(refund));
+        fundsOk();
+        when(gateway.create(any())).thenReturn(result("SUCCEEDED", "NGUYEN CHI THIEN"));
+
+        PayosDto.OrderRes res = service.transferRefund(ADMIN, 4L);
+
+        ArgumentCaptor<TransferRequest> req = ArgumentCaptor.forClass(TransferRequest.class);
+        verify(gateway).create(req.capture());
+        assertThat(req.getValue().bankBin()).isEqualTo("970422");
+        assertThat(req.getValue().accountNumber()).isEqualTo("0356307125");
+        assertThat(req.getValue().referenceId()).isEqualTo("LLR4-1");
+        assertThat(res.holderNameEntered()).isEqualTo("NGUYEN CHI THIEN");
+        assertThat(res.status()).isEqualTo(PayosOrderStatus.SUCCEEDED);
+        verify(disputeService).markTransferred(eq(ADMIN), eq(4L), any());
     }
 }

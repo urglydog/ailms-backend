@@ -68,6 +68,7 @@ public class PromotionService {
     private final NotificationService notificationService;
     private final FinanceAuditService auditService;
     private final LessonRepository lessonRepository;
+    private final com.lms.finance.debt.DebtGuard debtGuard;
 
     // ── Giảng viên ──────────────────────────────────────────────────────
 
@@ -80,6 +81,7 @@ public class PromotionService {
             throw new AccessDeniedDomainException("Bạn chỉ đăng ký quảng bá cho khóa học của chính mình");
         }
         assertEligible(course);
+        debtGuard.assertCanPromote(user.getId());
         if (promotionRepository.existsByCourse_IdAndPlacementAndStatusIn(course.getId(), req.placement(), OPEN_STATUSES)) {
             throw new BusinessRuleViolationException("Khóa này đã có đăng ký quảng bá cho vị trí này đang chờ duyệt hoặc đang chạy");
         }
@@ -230,7 +232,10 @@ public class PromotionService {
                 ? promotionRepository.findActive(placement, now, page)
                 : promotionRepository.findActiveInCategory(placement, categorySlug, now, page);
         // Một khóa chỉ xuất hiện 1 lần dù có nhiều đợt chồng nhau.
-        List<Course> pool = new ArrayList<>(active.stream().map(CoursePromotion::getCourse).distinct().toList());
+        // Giảng viên đang ở bậc công nợ "ngừng bán mới" thì khóa không lên kệ đề xuất.
+        java.util.Set<Long> suspended = new java.util.HashSet<>(debtGuard.suspendedInstructorIds());
+        List<Course> pool = new ArrayList<>(active.stream().map(CoursePromotion::getCourse).distinct()
+                .filter(c -> c.getInstructor() == null || !suspended.contains(c.getInstructor().getId())).toList());
         // Không có "độ ưu tiên" do admin chấm tay (tránh thiên vị): mọi khóa đang chạy đều có cơ hội như nhau, thứ tự xoay
         // vòng theo GIỜ (hạt giống = giờ hiện tại + vị trí) nên không khóa nào chiếm ô đầu mãi mãi.
         Collections.shuffle(pool, new Random(LocalDateTime.now().truncatedTo(java.time.temporal.ChronoUnit.HOURS).hashCode() * 31L + placement.ordinal()));

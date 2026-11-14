@@ -30,7 +30,12 @@ public class DisputeDto {
             @AssertTrue(message = "Bạn phải đồng ý với chính sách hoàn tiền trước khi gửi khiếu nại")
             boolean termsAccepted,
             /** Lý do chuẩn hóa — null (client cũ) được hiểu là OTHER. */
-            DisputeCategory category
+            DisputeCategory category,
+            /** Tài khoản nhận hoàn tiền CÓ CẤU TRÚC (tùy chọn; client cũ không gửi). Nếu gửi bất kỳ trường nào thì phải đủ cả 4 và xác nhận chính chủ. */
+            String refundBankCode,
+            String refundAccountNumber,
+            String refundAccountHolder,
+            Boolean refundAccountOwnConfirmed
     ) {}
 
     public record AttachmentRes(Long id, String fileUrl, String fileType, AttachmentSide side) {}
@@ -94,7 +99,18 @@ public class DisputeDto {
             BigDecimal refundInstructorCharge,
             BigDecimal refundPlatformShare,
             RefundTransferStatus refundTransferStatus,
-            String refundTransferRef
+            String refundTransferRef,
+            /** Tài khoản nhận hoàn tiền có cấu trúc (null với khiếu nại cũ) — đủ điều kiện để chi tự động. */
+            String refundBankCode,
+            String refundAccountNumber,
+            String refundAccountHolder,
+            boolean refundAccountConfirmed,
+            com.lms.common.enums.RefundReasonCode refundReasonCode,
+            String refundEvidenceNote,
+            com.lms.common.enums.AppealStatus appealStatus,
+            String appealReason,
+            LocalDateTime appealAt,
+            String appealDecisionNote
     ) {}
 
     /**
@@ -104,7 +120,11 @@ public class DisputeDto {
     public record ResolveReq(
             @NotNull DisputeStatus status,
             @NotBlank String note,
-            RefundResponsibility responsibility
+            RefundResponsibility responsibility,
+            /** Mã lý do chuẩn (bắt buộc với chế độ khác Chuẩn). */
+            com.lms.common.enums.RefundReasonCode reasonCode,
+            /** Minh chứng admin dẫn ra (bắt buộc với "giảng viên chịu toàn bộ"). */
+            @Size(max = 2000) String evidenceNote
     ) {}
 
     /** Admin đã chuyển khoản tiền hoàn cho học viên. */
@@ -140,8 +160,26 @@ public class DisputeDto {
             LocalDateTime instructorDeadlineAt,
             LocalDateTime resolvedAt,
             /** Số tiền bị trừ khỏi thu nhập của giảng viên nếu đã hoàn tiền (null nếu chưa/không hoàn). */
-            BigDecimal instructorCharge
+            BigDecimal instructorCharge,
+            /** Chế độ trách nhiệm + lý do + minh chứng của quyết định hoàn tiền (null nếu chưa hoàn) — giảng viên phải được biết vì sao bị trừ. */
+            RefundResponsibility refundResponsibility,
+            com.lms.common.enums.RefundReasonCode refundReasonCode,
+            String refundNote,
+            String refundEvidenceNote,
+            /** Hạn khiếu nại (chỉ khi INSTRUCTOR_FAULT và chưa khiếu nại); khiếu nại của giảng viên và kết quả. */
+            LocalDateTime appealDeadline,
+            com.lms.common.enums.AppealStatus appealStatus,
+            String appealReason,
+            String appealDecisionNote
     ) {}
+
+    /** Giảng viên khiếu nại quyết định "giảng viên chịu toàn bộ" (một lần). */
+    public record AppealReq(@NotBlank @Size(min = 20, max = 2000, message = "Hãy nêu lý do khiếu nại rõ ràng (tối thiểu 20 ký tự)") String reason) {}
+
+    public enum AppealDecision { UPHOLD, REDUCE_TO_STANDARD }
+
+    /** Admin quyết định khiếu nại: giữ nguyên hoặc giảm về chế độ Chuẩn (hoàn lại phần phạt vượt mức). */
+    public record AppealDecideReq(@NotNull AppealDecision decision, @NotBlank @Size(max = 1000) String note) {}
 
     public record InstructorRespondReq(
             /** Chỉ nhận AGREE_REFUND hoặc OBJECT. */

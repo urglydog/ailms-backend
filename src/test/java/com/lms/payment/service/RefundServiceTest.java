@@ -15,6 +15,7 @@ import com.lms.auth.repository.UserRepository;
 import com.lms.auth.service.EmailService;
 import com.lms.catalog.entity.Course;
 import com.lms.common.enums.PaymentStatus;
+import com.lms.common.enums.RefundReasonCode;
 import com.lms.common.enums.RefundResponsibility;
 import com.lms.common.enums.RefundTransferStatus;
 import com.lms.common.enums.Role;
@@ -58,6 +59,7 @@ class RefundServiceTest {
     @Mock private NotificationService notificationService;
     @Mock private EmailService emailService;
 
+    @Mock private com.lms.common.service.SystemConfigService systemConfigService;
     @InjectMocks
     private RefundService refundService;
 
@@ -114,7 +116,7 @@ class RefundServiceTest {
 
     @Test
     void approve_standard_refundsFullAmountAndChargesInstructorOnlyWhatTheyReceived() {
-        PaymentRefund refund = refundService.approve(dispute, ADMIN_EMAIL, RefundResponsibility.STANDARD, "đổi ý");
+        PaymentRefund refund = refundService.approve(dispute, ADMIN_EMAIL, RefundResponsibility.STANDARD, null, "đổi ý", null);
 
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.REFUNDED);
         assertThat(payment.getRefundedAt()).isNotNull();
@@ -138,7 +140,7 @@ class RefundServiceTest {
 
     @Test
     void approve_nullResponsibility_defaultsToStandard() {
-        PaymentRefund refund = refundService.approve(dispute, ADMIN_EMAIL, null, "ok");
+        PaymentRefund refund = refundService.approve(dispute, ADMIN_EMAIL, null, null, "ok", null);
 
         assertThat(refund.getResponsibility()).isEqualTo(RefundResponsibility.STANDARD);
         assertThat(refund.getInstructorCharge()).isEqualByComparingTo("370000");
@@ -146,7 +148,7 @@ class RefundServiceTest {
 
     @Test
     void approve_platformCompensates_instructorKeepsEarning() {
-        PaymentRefund refund = refundService.approve(dispute, ADMIN_EMAIL, RefundResponsibility.PLATFORM_COMPENSATES, "sự cố hệ thống");
+        PaymentRefund refund = refundService.approve(dispute, ADMIN_EMAIL, RefundResponsibility.PLATFORM_COMPENSATES, RefundReasonCode.TECHNICAL_ISSUE, "sự cố hệ thống", null);
 
         assertThat(refund.getInstructorCharge()).isEqualByComparingTo("0");
         assertThat(refund.getPlatformShare()).isEqualByComparingTo("1000000");
@@ -157,7 +159,8 @@ class RefundServiceTest {
 
     @Test
     void approve_instructorFault_instructorRepaysWholeAmount() {
-        PaymentRefund refund = refundService.approve(dispute, ADMIN_EMAIL, RefundResponsibility.INSTRUCTOR_FAULT, "mô tả sai");
+        PaymentRefund refund = refundService.approve(dispute, ADMIN_EMAIL, RefundResponsibility.INSTRUCTOR_FAULT, RefundReasonCode.CONTENT_MISMATCH,
+                "mô tả sai nghiêm trọng", "ảnh chụp nội dung bài giảng khác hẳn mô tả");
 
         assertThat(refund.getInstructorCharge()).isEqualByComparingTo("1000000");
         assertThat(refund.getPlatformShare()).isEqualByComparingTo("0");
@@ -165,7 +168,7 @@ class RefundServiceTest {
 
     @Test
     void approve_instructorFaultWithoutReason_isRejectedWithoutAnySideEffect() {
-        assertThatThrownBy(() -> refundService.approve(dispute, ADMIN_EMAIL, RefundResponsibility.INSTRUCTOR_FAULT, "  "))
+        assertThatThrownBy(() -> refundService.approve(dispute, ADMIN_EMAIL, RefundResponsibility.INSTRUCTOR_FAULT, RefundReasonCode.CONTENT_MISMATCH, "  ", "ảnh chụp nội dung bài giảng khác hẳn mô tả"))
                 .isInstanceOf(BusinessRuleViolationException.class);
 
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PAID);
@@ -179,7 +182,7 @@ class RefundServiceTest {
         PaymentRefund existing = new PaymentRefund();
         when(refundRepository.findByPayment_Id(100L)).thenReturn(Optional.of(existing));
 
-        PaymentRefund result = refundService.approve(dispute, ADMIN_EMAIL, RefundResponsibility.STANDARD, "lần 2");
+        PaymentRefund result = refundService.approve(dispute, ADMIN_EMAIL, RefundResponsibility.STANDARD, null, "lần 2", null);
 
         assertThat(result).isSameAs(existing);
         verify(paymentRepository, never()).findByIdForUpdate(any());
@@ -190,12 +193,12 @@ class RefundServiceTest {
     @Test
     void approve_paymentNotPaid_orZeroAmount_isRejected() {
         payment.setStatus(PaymentStatus.PENDING);
-        assertThatThrownBy(() -> refundService.approve(dispute, ADMIN_EMAIL, RefundResponsibility.STANDARD, "x"))
+        assertThatThrownBy(() -> refundService.approve(dispute, ADMIN_EMAIL, RefundResponsibility.STANDARD, null, "x", null))
                 .isInstanceOf(BusinessRuleViolationException.class);
 
         payment.setStatus(PaymentStatus.PAID);
         payment.setAmount(BigDecimal.ZERO);
-        assertThatThrownBy(() -> refundService.approve(dispute, ADMIN_EMAIL, RefundResponsibility.STANDARD, "x"))
+        assertThatThrownBy(() -> refundService.approve(dispute, ADMIN_EMAIL, RefundResponsibility.STANDARD, null, "x", null))
                 .isInstanceOf(BusinessRuleViolationException.class);
 
         verify(refundRepository, never()).save(any(PaymentRefund.class));
@@ -206,7 +209,7 @@ class RefundServiceTest {
         when(refundRepository.countByPayment_User_IdAndApprovedAtAfter(eq(2L), any())).thenReturn(3L);
         when(userRepository.findByRole(Role.ADMIN)).thenReturn(List.of(admin));
 
-        refundService.approve(dispute, ADMIN_EMAIL, RefundResponsibility.STANDARD, "x");
+        refundService.approve(dispute, ADMIN_EMAIL, RefundResponsibility.STANDARD, null, "x", null);
 
         verify(notificationService).notify(eq(1L), eq("REFUND_ABUSE_SUSPECT"), anyString(), anyString(), anyString());
     }
@@ -261,5 +264,35 @@ class RefundServiceTest {
         assertThat(RefundService.instructorCharge(RefundResponsibility.INSTRUCTOR_FAULT, payment)).isEqualByComparingTo("1000000");
         payment.setInstructorEarning(null);
         assertThat(RefundService.instructorCharge(RefundResponsibility.STANDARD, payment)).isEqualByComparingTo("0");
+    }
+
+    @Test
+    void policy_reasonCodeMustMatchTheResponsibilityMode_andNonStandardModesNeedACode() {
+        assertThatThrownBy(() -> refundService.approve(dispute, ADMIN_EMAIL, RefundResponsibility.PLATFORM_COMPENSATES,
+                RefundReasonCode.COPYRIGHT_VIOLATION, "ghi chú đầy đủ", null)).isInstanceOf(BusinessRuleViolationException.class);
+        assertThatThrownBy(() -> refundService.approve(dispute, ADMIN_EMAIL, RefundResponsibility.PLATFORM_COMPENSATES,
+                null, "ghi chú đầy đủ", null)).isInstanceOf(BusinessRuleViolationException.class);
+        assertThatThrownBy(() -> refundService.approve(dispute, ADMIN_EMAIL, RefundResponsibility.STANDARD,
+                RefundReasonCode.PROHIBITED_CONTENT, "ghi chú đầy đủ", null)).isInstanceOf(BusinessRuleViolationException.class);
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PAID);
+        verify(enrollmentService, never()).revokeForRefund(any(), any());
+    }
+
+    @Test
+    void policy_instructorFault_needsEvidence_andTheInstructorMustHaveHadAChanceToRespond() {
+        assertThatThrownBy(() -> refundService.approve(dispute, ADMIN_EMAIL, RefundResponsibility.INSTRUCTOR_FAULT,
+                RefundReasonCode.COPYRIGHT_VIOLATION, "sao chép nguyên văn nội dung", "ngắn")).isInstanceOf(BusinessRuleViolationException.class);
+
+        dispute.setInstructorDeadlineAt(java.time.LocalDateTime.now().plusHours(10)); // còn hạn, chưa phản hồi
+        assertThatThrownBy(() -> refundService.approve(dispute, ADMIN_EMAIL, RefundResponsibility.INSTRUCTOR_FAULT,
+                RefundReasonCode.COPYRIGHT_VIOLATION, "sao chép nguyên văn nội dung", "so sánh với khóa gốc tại đường dẫn X"))
+                .isInstanceOf(BusinessRuleViolationException.class).hasMessageContaining("chưa phản hồi");
+
+        dispute.setInstructorDeadlineAt(java.time.LocalDateTime.now().minusHours(1)); // đã hết hạn phản hồi
+        PaymentRefund refund = refundService.approve(dispute, ADMIN_EMAIL, RefundResponsibility.INSTRUCTOR_FAULT,
+                RefundReasonCode.COPYRIGHT_VIOLATION, "sao chép nguyên văn nội dung", "so sánh với khóa gốc tại đường dẫn X");
+        assertThat(refund.getReasonCode()).isEqualTo(RefundReasonCode.COPYRIGHT_VIOLATION);
+        assertThat(refund.getEvidenceNote()).contains("khóa gốc");
+        assertThat(refund.getInstructorCharge()).isEqualByComparingTo("1000000");
     }
 }

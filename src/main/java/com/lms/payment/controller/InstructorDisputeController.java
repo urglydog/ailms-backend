@@ -13,6 +13,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
@@ -27,6 +28,7 @@ import org.springframework.web.multipart.MultipartFile;
 public class InstructorDisputeController {
 
     private final InstructorDisputeService instructorDisputeService;
+    private final com.lms.payment.service.RefundAppealService appealService;
 
     @GetMapping
     public ResponseEntity<List<DisputeDto.InstructorRes>> list(
@@ -38,6 +40,14 @@ public class InstructorDisputeController {
 
     @GetMapping("/{id}")
     public ResponseEntity<DisputeDto.InstructorRes> get(Principal principal, @PathVariable Long id) {
+        return ResponseEntity.ok(instructorDisputeService.get(principal.getName(), id));
+    }
+
+    /** Giảng viên khiếu nại quyết định "giảng viên chịu toàn bộ" (một lần, trong hạn). */
+    @PostMapping("/{id}/appeal")
+    public ResponseEntity<DisputeDto.InstructorRes> appeal(
+            Principal principal, @PathVariable Long id, @Valid @RequestBody DisputeDto.AppealReq req) {
+        appealService.appeal(principal.getName(), id, req.reason());
         return ResponseEntity.ok(instructorDisputeService.get(principal.getName(), id));
     }
 
