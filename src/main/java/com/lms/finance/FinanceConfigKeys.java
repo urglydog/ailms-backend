@@ -23,6 +23,8 @@ public final class FinanceConfigKeys {
     public static final String PAYOUT_MIN_AMOUNT = "PAYOUT_MIN_AMOUNT";
     public static final String PAYOUT_DAYS_OF_MONTH = "PAYOUT_DAYS_OF_MONTH";
     public static final String DISPUTE_INSTRUCTOR_RESPONSE_HOURS = "DISPUTE_INSTRUCTOR_RESPONSE_HOURS";
+    public static final String PAYOS_PAYOUT_ENABLED = "PAYOS_PAYOUT_ENABLED";
+    public static final String PAYOS_PAYOUT_MAX_AMOUNT = "PAYOS_PAYOUT_MAX_AMOUNT";
 
     public static final BigDecimal DEFAULT_ORGANIC_INSTRUCTOR_PCT = new BigDecimal("37");
     public static final BigDecimal DEFAULT_REFERRAL_INSTRUCTOR_PCT = new BigDecimal("97");
@@ -55,6 +57,10 @@ public final class FinanceConfigKeys {
         } else if (PAYOUT_HOLD_EXTRA_DAYS.equals(key)) {
             requireIntRange(key, v, 0, 60);
         } else if (PAYOUT_MIN_AMOUNT.equals(key)) {
+            requireIntRange(key, v, 0, 100_000_000);
+        } else if (PAYOS_PAYOUT_ENABLED.equals(key)) {
+            requireIntRange(key, v, 0, 1);
+        } else if (PAYOS_PAYOUT_MAX_AMOUNT.equals(key)) {
             requireIntRange(key, v, 0, 100_000_000);
         } else if (DISPUTE_INSTRUCTOR_RESPONSE_HOURS.equals(key)) {
             requireIntRange(key, v, 1, 720);
