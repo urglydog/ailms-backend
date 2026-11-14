@@ -59,6 +59,7 @@ public class PaymentService {
     private final PayOS payOS;
     private final SystemConfigService systemConfigService;
     private final LedgerService ledgerService;
+    private final com.lms.finance.debt.DebtGuard debtGuard;
 
     @Value("${payment.payos.returnUrl:http://localhost:3000/payments/callback}")
     private String payosReturnUrl;
@@ -75,6 +76,7 @@ public class PaymentService {
 
         courseAccessService.verifyCanEnroll(course, email, req.courseAccessPassword());
         assertNotOwnCourse(course, user);
+        debtGuard.assertCanSell(course.getInstructor() == null ? null : course.getInstructor().getId());
 
         if (course.getStatus() != CourseStatus.PUBLISHED) {
             throw new BusinessRuleViolationException("BR-PAY-01: Chỉ có thể thanh toán khóa học PUBLISHED.");
@@ -208,6 +210,7 @@ public class PaymentService {
 
             for (Course course : bundleCourses) {
                 assertNotOwnCourse(course, user);
+                debtGuard.assertCanSell(course.getInstructor() == null ? null : course.getInstructor().getId());
                 if (processedCourseIds.contains(course.getId())) continue;
                 if (enrollmentRepository.existsByUser_IdAndCourse_Id(user.getId(), course.getId())) continue; // Pro-rated: Khách đã sở hữu
                 
@@ -263,6 +266,7 @@ public class PaymentService {
             
             courseAccessService.verifyCanAddToCart(course, email);
             assertNotOwnCourse(course, user);
+            debtGuard.assertCanSell(course.getInstructor() == null ? null : course.getInstructor().getId());
             if (course.getStatus() != CourseStatus.PUBLISHED) {
                 throw new BusinessRuleViolationException("BR-PAY-01: Khóa học \"" + course.getTitle() + "\" chưa được xuất bản.");
             }

@@ -54,6 +54,7 @@ class PaymentServiceTest {
 
     private static final String EMAIL = "student@lms.local";
 
+    @Mock private com.lms.finance.debt.DebtGuard debtGuard;
     @Mock private PaymentRepository paymentRepository;
     @Mock private UserRepository userRepository;
     @Mock private CourseRepository courseRepository;

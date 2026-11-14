@@ -71,6 +71,7 @@ public class CourseService {
     private final com.lms.wishlist.service.WishlistPriceDropService wishlistPriceDropService;
     private final CacheEvictionHelper cacheEvictionHelper;
     private final Tika tika = new Tika();
+    private final com.lms.finance.debt.DebtGuard debtGuard;
 
     @Transactional
     public DetailRes create(String instructorEmail, CreateReq req) {
@@ -422,6 +423,10 @@ public class CourseService {
         // đó, nên 1 khi đã xác minh thì mọi khóa (kể cả khóa đầu tiên tiếp theo) đều qua được.
         if (!instructorVerificationRepository.existsByUser_Id(course.getInstructor().getId())) {
             missing.add("Chưa hoàn tất xác minh thông tin định danh (BR-VERIFY-01)");
+        }
+        // Công nợ quá hạn (14/11/2026): chưa xuất bản khóa mới cho tới khi trả nợ.
+        if (debtGuard.levelOf(course.getInstructor().getId()) >= 2) {
+            missing.add("Còn công nợ quá hạn, hãy trả nợ ở trang Thu nhập (DEBT-01)");
         }
         if (course.getTitle() == null || course.getTitle().isBlank()) {
             missing.add("Chưa có tiêu đề");

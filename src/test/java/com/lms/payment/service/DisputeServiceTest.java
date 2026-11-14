@@ -127,7 +127,7 @@ class DisputeServiceTest {
     }
 
     private DisputeDto.FileReq fileReq(DisputeCategory category) {
-        return new DisputeDto.FileReq("txn-100", "Không phù hợp", "mô tả", "VCB 0123", true, category);
+        return new DisputeDto.FileReq("txn-100", "Không phù hợp", "mô tả", "VCB 0123", true, category, null, null, null, null);
     }
 
     // ── fileDispute ─────────────────────────────────────────────────────
@@ -148,6 +148,39 @@ class DisputeServiceTest {
         assertThat(d.getInstructorDeadlineAt()).isBetween(before.plusHours(48), LocalDateTime.now().plusHours(48).plusSeconds(1));
         verify(notificationService).notify(eq(3L), eq("DISPUTE_FILED_INSTRUCTOR"), anyString(), anyString(), anyString());
         verify(notificationService).notify(eq(1L), eq("DISPUTE_FILED"), anyString(), anyString(), anyString());
+    }
+
+    private DisputeDto.FileReq structuredReq(String bank, String number, String holder, Boolean own) {
+        return new DisputeDto.FileReq("txn-100", "Không phù hợp", "mô tả", null, true, DisputeCategory.CHANGED_MIND, bank, number, holder, own);
+    }
+
+    @Test
+    void fileDispute_structuredRefundAccount_isValidatedNormalizedAndStored() {
+        disputeService.fileDispute(LEARNER_EMAIL, structuredReq("tcb", "1907 0154 183018", "Nguyễn Chí Thiện", true), null);
+
+        ArgumentCaptor<PaymentDispute> captor = ArgumentCaptor.forClass(PaymentDispute.class);
+        verify(disputeRepository).save(captor.capture());
+        PaymentDispute d = captor.getValue();
+        assertThat(d.getRefundBankCode()).isEqualTo("TCB");
+        assertThat(d.getRefundAccountNumber()).isEqualTo("19070154183018");
+        assertThat(d.getRefundAccountHolder()).isEqualTo("NGUYEN CHI THIEN");
+        assertThat(d.getRefundAccountConfirmed()).isTrue();
+        assertThat(d.getRefundBankAccount()).isEqualTo("Techcombank 19070154183018 - NGUYEN CHI THIEN");
+    }
+
+    @Test
+    void fileDispute_structuredRefundAccount_requiresOwnershipConfirmationValidBankAndNumber() {
+        for (DisputeDto.FileReq bad : new DisputeDto.FileReq[] {
+                structuredReq("TCB", "19070154183018", "Nguyen A", false),
+                structuredReq("TCB", "19070154183018", "Nguyen A", null),
+                structuredReq("XXX", "19070154183018", "Nguyen A", true),
+                structuredReq("TCB", "12ab", "Nguyen A", true),
+                structuredReq("TCB", "19070154183018", " ", true),
+                structuredReq(null, "19070154183018", "Nguyen A", true)}) {
+            assertThatThrownBy(() -> disputeService.fileDispute(LEARNER_EMAIL, bad, null))
+                    .isInstanceOf(BusinessRuleViolationException.class);
+        }
+        verify(disputeRepository, never()).save(any(PaymentDispute.class));
     }
 
     @Test
@@ -208,12 +241,12 @@ class DisputeServiceTest {
         PaymentDispute d = openDispute();
 
         DisputeDto.AdminRes res = disputeService.resolve(ADMIN_EMAIL, 500L,
-                new DisputeDto.ResolveReq(DisputeStatus.RESOLVED_REFUNDED, "Đồng ý hoàn", RefundResponsibility.PLATFORM_COMPENSATES));
+                new DisputeDto.ResolveReq(DisputeStatus.RESOLVED_REFUNDED, "Đồng ý hoàn", RefundResponsibility.PLATFORM_COMPENSATES, null, null));
 
         assertThat(d.getStatus()).isEqualTo(DisputeStatus.RESOLVED_REFUNDED);
         assertThat(d.getResolvedBy()).isSameAs(admin);
         assertThat(res.status()).isEqualTo(DisputeStatus.RESOLVED_REFUNDED);
-        verify(refundService).approve(d, ADMIN_EMAIL, RefundResponsibility.PLATFORM_COMPENSATES, "Đồng ý hoàn");
+        verify(refundService).approve(d, ADMIN_EMAIL, RefundResponsibility.PLATFORM_COMPENSATES, null, "Đồng ý hoàn", null);
         verify(emailService).sendDisputeResolutionEmail(eq(LEARNER_EMAIL), eq(true), eq("txn-100"), eq("Unity co ban"),
                 eq(new BigDecimal("1000000")), anyString(), eq("Đồng ý hoàn"), any());
     }
@@ -223,20 +256,20 @@ class DisputeServiceTest {
         PaymentDispute d = openDispute();
 
         disputeService.resolve(ADMIN_EMAIL, 500L,
-                new DisputeDto.ResolveReq(DisputeStatus.RESOLVED_REJECTED, "Ngoài chính sách", null));
+                new DisputeDto.ResolveReq(DisputeStatus.RESOLVED_REJECTED, "Ngoài chính sách", null, null, null));
 
         assertThat(d.getStatus()).isEqualTo(DisputeStatus.RESOLVED_REJECTED);
-        verify(refundService, never()).approve(any(), any(), any(), any());
+        verify(refundService, never()).approve(any(), any(), any(), any(), any(), any());
         verify(notificationService).notify(eq(3L), eq("DISPUTE_REJECTED_INSTRUCTOR"), anyString(), anyString(), anyString());
     }
 
     @Test
     void resolve_statusThatIsNotAFinalDecision_isRejectedBeforeAnyLookup() {
         assertThatThrownBy(() -> disputeService.resolve(ADMIN_EMAIL, 500L,
-                new DisputeDto.ResolveReq(DisputeStatus.OPEN, "x", null)))
+                new DisputeDto.ResolveReq(DisputeStatus.OPEN, "x", null, null, null)))
                 .isInstanceOf(BusinessRuleViolationException.class);
         assertThatThrownBy(() -> disputeService.resolve(ADMIN_EMAIL, 500L,
-                new DisputeDto.ResolveReq(DisputeStatus.REOPENED, "x", null)))
+                new DisputeDto.ResolveReq(DisputeStatus.REOPENED, "x", null, null, null)))
                 .isInstanceOf(BusinessRuleViolationException.class);
 
         verify(disputeRepository, never()).findById(any());
@@ -248,10 +281,10 @@ class DisputeServiceTest {
         d.setStatus(DisputeStatus.RESOLVED_REJECTED);
 
         assertThatThrownBy(() -> disputeService.resolve(ADMIN_EMAIL, 500L,
-                new DisputeDto.ResolveReq(DisputeStatus.RESOLVED_REFUNDED, "x", null)))
+                new DisputeDto.ResolveReq(DisputeStatus.RESOLVED_REFUNDED, "x", null, null, null)))
                 .isInstanceOf(BusinessRuleViolationException.class);
 
-        verify(refundService, never()).approve(any(), any(), any(), any());
+        verify(refundService, never()).approve(any(), any(), any(), any(), any(), any());
     }
 
     @Test

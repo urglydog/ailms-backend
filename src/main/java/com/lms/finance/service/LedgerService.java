@@ -131,6 +131,35 @@ public class LedgerService {
         repository.save(entry);
     }
 
+    /** Ghi một lần trả nợ qua PayOS (dòng dương, hiệu lực ngay). Idempotent theo {@code debtPaymentId}. */
+    @Transactional
+    public void recordDebtRepayment(com.lms.auth.entity.User instructor, BigDecimal amount, Long debtPaymentId) {
+        if (repository.existsByDebtPaymentId(debtPaymentId)) {
+            return;
+        }
+        InstructorLedgerEntry entry = new InstructorLedgerEntry();
+        entry.setInstructor(instructor);
+        entry.setEntryType(LedgerEntryType.DEBT_REPAYMENT);
+        entry.setAmount(amount);
+        entry.setAvailableAt(LocalDateTime.now());
+        entry.setDebtPaymentId(debtPaymentId);
+        entry.setNote("Trả nợ qua PayOS");
+        repository.save(entry);
+    }
+
+    /** Điều chỉnh tay có lý do (admin xóa nợ, hoàn lại phần phạt khi khiếu nại thành công...). Số tiền có thể dương hoặc âm. */
+    @Transactional
+    public void recordAdjustment(com.lms.auth.entity.User instructor, BigDecimal amount, String note, Long actorUserId) {
+        InstructorLedgerEntry entry = new InstructorLedgerEntry();
+        entry.setInstructor(instructor);
+        entry.setEntryType(LedgerEntryType.ADJUSTMENT);
+        entry.setAmount(amount);
+        entry.setAvailableAt(LocalDateTime.now());
+        entry.setCreatedByUserId(actorUserId);
+        entry.setNote(note == null ? null : (note.length() > 255 ? note.substring(0, 255) : note));
+        repository.save(entry);
+    }
+
     /** Các dòng sổ cái gần đây của giảng viên (sao kê). */
     @Transactional(readOnly = true)
     public org.springframework.data.domain.Page<InstructorLedgerEntry> getStatement(Long instructorId, int page, int size) {

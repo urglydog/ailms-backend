@@ -23,6 +23,12 @@ public final class FinanceConfigKeys {
     public static final String PAYOUT_MIN_AMOUNT = "PAYOUT_MIN_AMOUNT";
     public static final String PAYOUT_DAYS_OF_MONTH = "PAYOUT_DAYS_OF_MONTH";
     public static final String DISPUTE_INSTRUCTOR_RESPONSE_HOURS = "DISPUTE_INSTRUCTOR_RESPONSE_HOURS";
+    public static final String DISPUTE_APPEAL_DAYS = "DISPUTE_APPEAL_DAYS";
+    public static final String REFUND_FLAG_RATE_PCT = "REFUND_FLAG_RATE_PCT";
+    public static final String REFUND_FLAG_MIN_COUNT = "REFUND_FLAG_MIN_COUNT";
+    public static final String DEBT_RESTRICT_DAYS = "DEBT_RESTRICT_DAYS";
+    public static final String DEBT_SUSPEND_DAYS = "DEBT_SUSPEND_DAYS";
+    public static final String DEBT_MIN_REPAY = "DEBT_MIN_REPAY";
     public static final String PAYOS_PAYOUT_ENABLED = "PAYOS_PAYOUT_ENABLED";
     public static final String PAYOS_PAYOUT_MAX_AMOUNT = "PAYOS_PAYOUT_MAX_AMOUNT";
 
@@ -58,6 +64,16 @@ public final class FinanceConfigKeys {
             requireIntRange(key, v, 0, 60);
         } else if (PAYOUT_MIN_AMOUNT.equals(key)) {
             requireIntRange(key, v, 0, 100_000_000);
+        } else if (DISPUTE_APPEAL_DAYS.equals(key)) {
+            requireIntRange(key, v, 1, 90);
+        } else if (REFUND_FLAG_RATE_PCT.equals(key)) {
+            requireIntRange(key, v, 1, 100);
+        } else if (REFUND_FLAG_MIN_COUNT.equals(key)) {
+            requireIntRange(key, v, 1, 1000);
+        } else if (DEBT_RESTRICT_DAYS.equals(key) || DEBT_SUSPEND_DAYS.equals(key)) {
+            requireIntRange(key, v, 1, 3650);
+        } else if (DEBT_MIN_REPAY.equals(key)) {
+            requireIntRange(key, v, 1000, 100_000_000);
         } else if (PAYOS_PAYOUT_ENABLED.equals(key)) {
             requireIntRange(key, v, 0, 1);
         } else if (PAYOS_PAYOUT_MAX_AMOUNT.equals(key)) {

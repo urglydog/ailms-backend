@@ -20,6 +20,7 @@ import org.springframework.web.multipart.MultipartFile;
 public class DisputeController {
 
     private final DisputeService disputeService;
+    private final com.lms.payment.service.RefundAppealService appealService;
 
     /** multipart thay vì JSON thuần (23/10/2026) — cho đính kèm minh chứng ảnh/video ngay lúc
      * gửi khiếu nại, field "files" optional (0-5 file). */
@@ -36,6 +37,14 @@ public class DisputeController {
     @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     public ResponseEntity<List<DisputeDto.Res>> getMine(Principal principal) {
         return ResponseEntity.ok(disputeService.getMine(principal.getName()));
+    }
+
+    /** Danh sách ngân hàng cho form khai báo tài khoản nhận hoàn tiền (học viên chọn từ danh sách, không gõ tự do). */
+    @GetMapping("/banks")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
+    public ResponseEntity<List<com.lms.finance.dto.PayoutDto.BankRes>> banks() {
+        return ResponseEntity.ok(com.lms.finance.BankDirectory.all().stream()
+                .map(b -> new com.lms.finance.dto.PayoutDto.BankRes(b.code(), b.name())).toList());
     }
 
     @GetMapping("/admin")
@@ -57,6 +66,15 @@ public class DisputeController {
     public ResponseEntity<DisputeDto.AdminRes> markTransferred(
             Principal principal, @PathVariable Long id, @Valid @RequestBody DisputeDto.MarkTransferredReq req) {
         return ResponseEntity.ok(disputeService.markTransferred(principal.getName(), id, req));
+    }
+
+    /** Admin quyết định khiếu nại của giảng viên với quyết định "giảng viên chịu toàn bộ" (14/11/2026). */
+    @PostMapping("/admin/{id}/appeal/decide")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<DisputeDto.AdminRes> decideAppeal(
+            Principal principal, @PathVariable Long id, @Valid @RequestBody DisputeDto.AppealDecideReq req) {
+        appealService.decide(principal.getName(), id, req.decision(), req.note());
+        return ResponseEntity.ok(disputeService.getAdmin(id));
     }
 
     /** User báo "chưa nhận được tiền" sau khi admin đã đánh dấu hoàn tiền (26/10/2026). */

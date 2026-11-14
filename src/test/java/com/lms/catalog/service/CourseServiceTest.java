@@ -50,6 +50,7 @@ class CourseServiceTest {
 
     private static final String OWNER_EMAIL = "instructor@lms.local";
 
+    @Mock private com.lms.finance.debt.DebtGuard debtGuard;
     @Mock private CourseRepository courseRepository;
     @Mock private com.lms.common.util.CacheEvictionHelper cacheEvictionHelper;
     @Mock private CategoryRepository categoryRepository;

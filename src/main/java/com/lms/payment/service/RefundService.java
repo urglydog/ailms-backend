@@ -4,6 +4,7 @@ import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
 import com.lms.auth.service.EmailService;
 import com.lms.common.enums.PaymentStatus;
+import com.lms.common.enums.RefundReasonCode;
 import com.lms.common.enums.RefundResponsibility;
 import com.lms.common.enums.RefundTransferStatus;
 import com.lms.common.enums.Role;
@@ -58,6 +59,7 @@ public class RefundService {
     private final CacheEvictionHelper cacheEvictionHelper;
     private final NotificationService notificationService;
     private final EmailService emailService;
+    private final com.lms.common.service.SystemConfigService systemConfigService;
 
     /** Phần giảng viên phải trả lại theo chế độ trách nhiệm (không âm). */
     public static BigDecimal instructorCharge(RefundResponsibility responsibility, Payment payment) {
@@ -73,8 +75,8 @@ public class RefundService {
      * thêm (khiếu nại được mở lại rồi duyệt lần 2 không hoàn tiền 2 lần).
      */
     @Transactional
-    public PaymentRefund approve(PaymentDispute dispute, String adminEmail,
-                                 RefundResponsibility responsibility, String note) {
+    public PaymentRefund approve(PaymentDispute dispute, String adminEmail, RefundResponsibility responsibility,
+                                 RefundReasonCode reasonCode, String note, String evidenceNote) {
         RefundResponsibility resp = responsibility == null ? RefundResponsibility.STANDARD : responsibility;
         Long paymentId = dispute.getPayment().getId();
 
@@ -91,9 +93,7 @@ public class RefundService {
         if (payment.getAmount() == null || payment.getAmount().signum() <= 0) {
             throw new BusinessRuleViolationException("Giao dịch 0đ không có gì để hoàn");
         }
-        if (resp == RefundResponsibility.INSTRUCTOR_FAULT && (note == null || note.isBlank())) {
-            throw new BusinessRuleViolationException("Chế độ \"Giảng viên chịu\" bắt buộc ghi lý do");
-        }
+        validatePolicy(dispute, resp, reasonCode, note, evidenceNote, LocalDateTime.now());
         User admin = userRepository.findByEmail(adminEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("User", adminEmail));
 
@@ -121,6 +121,8 @@ public class RefundService {
         refund.setApprovedBy(admin);
         refund.setApprovedAt(now);
         refund.setNote(note);
+        refund.setReasonCode(reasonCode);
+        refund.setEvidenceNote(evidenceNote == null || evidenceNote.isBlank() ? null : evidenceNote.trim());
         PaymentRefund saved = refundRepository.save(refund);
 
         cacheEvictionHelper.evictCourseCacheAfterCommit(payment.getCourse().getSlug());
@@ -135,7 +137,7 @@ public class RefundService {
         financeAuditService.record(adminEmail, "REFUND_APPROVED", "payment", payment.getTxnRef(),
                 Map.of("status", "PAID"), after);
 
-        notifyInstructor(payment, charge);
+        notifyInstructor(payment, charge, resp, reasonCode, note, evidenceNote);
         flagSuspectedAbuse(payment.getUser(), now);
         return saved;
     }
@@ -175,18 +177,74 @@ public class RefundService {
         return saved;
     }
 
-    private void notifyInstructor(Payment payment, BigDecimal charge) {
+    /**
+     * Chính sách chọn chế độ trách nhiệm (14/11/2026): mỗi mã lý do chỉ đi với đúng 1 chế độ; chế độ khác Chuẩn bắt buộc có mã lý do; "giảng
+     * viên chịu toàn bộ" còn cần ghi chú lý do, minh chứng, và giảng viên đã có cơ hội phản hồi (đã phản hồi hoặc đã hết hạn phản hồi).
+     */
+    static void validatePolicy(PaymentDispute dispute, RefundResponsibility resp, RefundReasonCode code, String note,
+                               String evidenceNote, LocalDateTime now) {
+        if (code != null && code.responsibility() != resp) {
+            throw new BusinessRuleViolationException("Mã lý do " + code.name() + " chỉ dùng cho chế độ " + code.responsibility().name());
+        }
+        if (resp != RefundResponsibility.STANDARD && code == null) {
+            throw new BusinessRuleViolationException("Cần chọn mã lý do cho chế độ này");
+        }
+        if (resp == RefundResponsibility.INSTRUCTOR_FAULT) {
+            if (note == null || note.trim().length() < 10) {
+                throw new BusinessRuleViolationException("Chế độ \"Giảng viên chịu\" bắt buộc ghi lý do rõ ràng (tối thiểu 10 ký tự)");
+            }
+            if (evidenceNote == null || evidenceNote.trim().length() < 20) {
+                throw new BusinessRuleViolationException("Chế độ \"Giảng viên chịu\" bắt buộc nêu minh chứng (tối thiểu 20 ký tự: bằng chứng nào, ở đâu)");
+            }
+            LocalDateTime deadline = dispute.getInstructorDeadlineAt();
+            boolean heardOut = dispute.getInstructorDecision() != null || deadline == null || !deadline.isAfter(now);
+            if (!heardOut) {
+                throw new BusinessRuleViolationException("Giảng viên chưa phản hồi và chưa hết hạn phản hồi; hãy chờ rồi mới quyết định giảng viên chịu trách nhiệm");
+            }
+        }
+    }
+
+    static String reasonLabel(RefundReasonCode code) {
+        if (code == null) {
+            return null;
+        }
+        return switch (code) {
+            case BUYER_REMORSE -> "học viên đổi ý trong hạn";
+            case OTHER -> "lý do khác";
+            case TECHNICAL_ISSUE -> "lỗi kỹ thuật từ phía hệ thống";
+            case DOUBLE_CHARGE -> "thanh toán trùng";
+            case NOT_ENROLLED -> "đã trừ tiền nhưng không ghi danh";
+            case PLATFORM_FAULT -> "lỗi từ phía nền tảng";
+            case COPYRIGHT_VIOLATION -> "vi phạm bản quyền";
+            case CONTENT_MISMATCH -> "nội dung sai khác nghiêm trọng so với mô tả";
+            case PROHIBITED_CONTENT -> "nội dung bị cấm";
+        };
+    }
+
+    private void notifyInstructor(Payment payment, BigDecimal charge, RefundResponsibility resp, RefundReasonCode code,
+                                  String note, String evidenceNote) {
         User instructor = payment.getCourse().getInstructor();
         if (instructor == null) {
             return;
         }
-        String detail = charge.signum() > 0
+        StringBuilder text = new StringBuilder("Giao dịch " + payment.getTxnRef() + " khóa \"" + payment.getCourse().getTitle() + "\" đã hoàn tiền. ");
+        text.append(charge.signum() > 0
                 ? "Thu nhập của bạn bị trừ " + charge.toBigInteger() + "đ."
-                : "Thu nhập của bạn không bị trừ (nền tảng chịu).";
+                : "Thu nhập của bạn không bị trừ (nền tảng chịu).");
+        if (code != null) {
+            text.append(" Lý do: ").append(reasonLabel(code)).append('.');
+        }
+        if (resp == RefundResponsibility.INSTRUCTOR_FAULT) {
+            text.append(" Ghi chú của quản trị viên: ").append(note == null ? "" : note.trim()).append('.');
+            text.append(" Minh chứng: ").append(evidenceNote == null ? "" : evidenceNote.trim()).append('.');
+            text.append(" Bạn có ").append(appealDays()).append(" ngày để khiếu nại quyết định này trong mục Hoàn tiền.");
+        }
         notificationService.notify(instructor.getId(), "REFUND_APPROVED_INSTRUCTOR",
-                "Một giao dịch khóa học của bạn đã được hoàn tiền",
-                "Giao dịch " + payment.getTxnRef() + " khóa \"" + payment.getCourse().getTitle() + "\" đã hoàn tiền. " + detail,
-                "/instructor/communication/refunds");
+                "Một giao dịch khóa học của bạn đã được hoàn tiền", text.toString(), "/instructor/communication/refunds");
+    }
+
+    private int appealDays() {
+        return systemConfigService.getInt(com.lms.finance.FinanceConfigKeys.DISPUTE_APPEAL_DAYS, 7);
     }
 
     private void flagSuspectedAbuse(User learner, LocalDateTime now) {

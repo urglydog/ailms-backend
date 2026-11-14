@@ -20,6 +20,13 @@ import org.springframework.data.repository.query.Param;
 
 @Repository
 public interface PaymentRepository extends JpaRepository<Payment, Long> {
+
+    /** Số đơn đã thanh toán (gồm cả đã hoàn) và số đơn đã hoàn theo khóa từ mốc {@code since}; chỉ các khóa có ≥ {@code minRefunded} đơn hoàn. */
+    @Query(nativeQuery = true, value = "SELECT p.course_id, COUNT(*) AS total, SUM(CASE WHEN p.status = 'REFUNDED' THEN 1 ELSE 0 END) AS refunded "
+            + "FROM payments p WHERE p.paid_at >= :since AND p.status IN ('PAID', 'REFUNDED') GROUP BY p.course_id "
+            + "HAVING SUM(CASE WHEN p.status = 'REFUNDED' THEN 1 ELSE 0 END) >= :minRefunded")
+    List<Object[]> refundRateByCourse(@org.springframework.data.repository.query.Param("since") java.time.LocalDateTime since,
+                                      @org.springframework.data.repository.query.Param("minRefunded") int minRefunded);
     Optional<Payment> findByTxnRef(String txnRef);
 
     /** Khóa dòng khi hoàn tiền (11/11/2026) — chặn 2 admin cùng duyệt hoàn 1 giao dịch. */

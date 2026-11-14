@@ -79,6 +79,31 @@ public class PaymentRefund extends BaseEntity {
     @Column(name = "transferred_at")
     private LocalDateTime transferredAt;
 
+    /** Mã lý do chuẩn (V167); null với hoàn tiền cũ. */
+    @jakarta.persistence.Enumerated(jakarta.persistence.EnumType.STRING)
+    @Column(name = "reason_code", length = 30)
+    private com.lms.common.enums.RefundReasonCode reasonCode;
+
+    /** Minh chứng admin dẫn ra khi chọn chế độ "giảng viên chịu toàn bộ" — giảng viên được xem. */
+    @Column(name = "evidence_note", columnDefinition = "TEXT")
+    private String evidenceNote;
+
+    @jakarta.persistence.Enumerated(jakarta.persistence.EnumType.STRING)
+    @Column(name = "appeal_status", nullable = false, length = 20)
+    private com.lms.common.enums.AppealStatus appealStatus = com.lms.common.enums.AppealStatus.NONE;
+
+    @Column(name = "appeal_reason", columnDefinition = "TEXT")
+    private String appealReason;
+
+    @Column(name = "appeal_at")
+    private LocalDateTime appealAt;
+
+    @Column(name = "appeal_decision_note", columnDefinition = "TEXT")
+    private String appealDecisionNote;
+
+    @Column(name = "appeal_decided_at")
+    private LocalDateTime appealDecidedAt;
+
     @Column(name = "note", columnDefinition = "TEXT")
     private String note;
 }
