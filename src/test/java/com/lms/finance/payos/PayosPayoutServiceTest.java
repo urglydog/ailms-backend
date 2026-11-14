@@ -294,4 +294,23 @@ class PayosPayoutServiceTest {
         assertThat(res.status()).isEqualTo(PayosOrderStatus.SUCCEEDED);
         verify(disputeService).markTransferred(eq(ADMIN), eq(4L), any());
     }
+
+    @Test
+    void manualRecording_isBlockedWhileAPayosOrderIsInFlightOrUnknown_butAllowedAfterFailure() {
+        for (PayosOrderStatus st : new PayosOrderStatus[] {PayosOrderStatus.PENDING, PayosOrderStatus.SUBMITTED, PayosOrderStatus.UNKNOWN}) {
+            PayosPayoutOrder o = new PayosPayoutOrder();
+            o.setReferenceId("LLP5-1");
+            o.setStatus(st);
+            when(orderRepository.findFirstByKindAndEntityIdOrderByAttemptDesc(PayosOrderKind.INSTRUCTOR_PAYOUT, 5L)).thenReturn(Optional.of(o));
+            assertThatThrownBy(() -> service.assertNoInFlightOrder(PayosOrderKind.INSTRUCTOR_PAYOUT, 5L))
+                    .as(st.name()).isInstanceOf(BusinessRuleViolationException.class);
+        }
+        PayosPayoutOrder failed = new PayosPayoutOrder();
+        failed.setReferenceId("LLP5-1");
+        failed.setStatus(PayosOrderStatus.FAILED);
+        when(orderRepository.findFirstByKindAndEntityIdOrderByAttemptDesc(PayosOrderKind.INSTRUCTOR_PAYOUT, 5L)).thenReturn(Optional.of(failed));
+        service.assertNoInFlightOrder(PayosOrderKind.INSTRUCTOR_PAYOUT, 5L);
+        when(orderRepository.findFirstByKindAndEntityIdOrderByAttemptDesc(PayosOrderKind.INSTRUCTOR_PAYOUT, 6L)).thenReturn(Optional.empty());
+        service.assertNoInFlightOrder(PayosOrderKind.INSTRUCTOR_PAYOUT, 6L);
+    }
 }

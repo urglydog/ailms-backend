@@ -21,6 +21,7 @@ public class DisputeController {
 
     private final DisputeService disputeService;
     private final com.lms.payment.service.RefundAppealService appealService;
+    private final com.lms.finance.payos.PayosPayoutService payosPayoutService;
 
     /** multipart thay vì JSON thuần (23/10/2026) — cho đính kèm minh chứng ảnh/video ngay lúc
      * gửi khiếu nại, field "files" optional (0-5 file). */
@@ -65,6 +66,7 @@ public class DisputeController {
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<DisputeDto.AdminRes> markTransferred(
             Principal principal, @PathVariable Long id, @Valid @RequestBody DisputeDto.MarkTransferredReq req) {
+        payosPayoutService.assertNoInFlightOrder(com.lms.common.enums.PayosOrderKind.DISPUTE_REFUND, id);
         return ResponseEntity.ok(disputeService.markTransferred(principal.getName(), id, req));
     }
 

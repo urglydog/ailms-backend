@@ -108,6 +108,19 @@ public class PayosPayoutService {
         return orderRepository.findByKindAndEntityIdOrderByAttemptDesc(kind, entityId).stream().map(PayosPayoutService::toRes).toList();
     }
 
+    /**
+     * Chặn ghi nhận chuyển KHOẢN TAY khi đang có lệnh chi PayOS chưa chốt (đang xử lý hoặc chưa rõ kết quả): admin chuyển tay lúc đó có thể làm
+     * tiền đi hai lần (một lần bằng tay, một lần qua PayOS). Gọi từ các endpoint ghi nhận thủ công; đường tự động không đi qua đây.
+     */
+    public void assertNoInFlightOrder(PayosOrderKind kind, Long entityId) {
+        orderRepository.findFirstByKindAndEntityIdOrderByAttemptDesc(kind, entityId).ifPresent(o -> {
+            if (IN_FLIGHT.contains(o.getStatus()) || o.getStatus() == PayosOrderStatus.UNKNOWN) {
+                throw new BusinessRuleViolationException("Đang có lệnh chi PayOS (" + o.getReferenceId()
+                        + ") chưa có kết quả; hãy chờ kết quả (hoặc bấm gửi lại) thay vì chuyển tay để tránh chuyển tiền hai lần");
+            }
+        });
+    }
+
     // ── khởi tạo lệnh chi ────────────────────────────────────────────────
 
     /** Chi tự động cho 1 yêu cầu rút ĐÃ DUYỆT của giảng viên. */
