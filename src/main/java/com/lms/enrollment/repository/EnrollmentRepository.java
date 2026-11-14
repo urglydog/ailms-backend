@@ -72,7 +72,10 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, Long> {
      * Thu hồi MỀM ghi danh khi hoàn tiền (11/11/2026). Native vì entity có {@code @SQLRestriction}.
      * Trả số dòng đã thu hồi (0 nếu học viên không còn ghi danh đang hiệu lực — idempotent).
      */
-    @org.springframework.data.jpa.repository.Modifying(flushAutomatically = true, clearAutomatically = true)
+    // KHÔNG clearAutomatically: câu lệnh native chỉ đụng bảng enrollments, còn clear() sẽ làm TÁCH hết entity đang dùng trong cùng giao dịch
+    // (Payment/Course/User...) → các dòng sau đó đọc proxy lazy bị LazyInitializationException "no session" (bug thật 14/11/2026: duyệt hoàn
+    // tiền báo 500 ở LedgerService.recordRefundReversal). Dòng enrollments đã lọc @SQLRestriction nên không nằm sẵn trong context để bị cũ.
+    @org.springframework.data.jpa.repository.Modifying(flushAutomatically = true)
     @org.springframework.data.jpa.repository.Query(nativeQuery = true, value =
             "UPDATE enrollments SET revoked_at = :now, revoked_reason = :reason, revoked_payment_id = :paymentId "
                     + "WHERE user_id = :userId AND course_id = :courseId AND revoked_at IS NULL")
@@ -87,7 +90,10 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, Long> {
      * mới). Giữ nguyên progress_pct/completed_at (không cộng lại XP hoàn thành khóa). Trả 0 nếu không có
      * dòng nào đang bị thu hồi.
      */
-    @org.springframework.data.jpa.repository.Modifying(flushAutomatically = true, clearAutomatically = true)
+    // KHÔNG clearAutomatically: câu lệnh native chỉ đụng bảng enrollments, còn clear() sẽ làm TÁCH hết entity đang dùng trong cùng giao dịch
+    // (Payment/Course/User...) → các dòng sau đó đọc proxy lazy bị LazyInitializationException "no session" (bug thật 14/11/2026: duyệt hoàn
+    // tiền báo 500 ở LedgerService.recordRefundReversal). Dòng enrollments đã lọc @SQLRestriction nên không nằm sẵn trong context để bị cũ.
+    @org.springframework.data.jpa.repository.Modifying(flushAutomatically = true)
     @org.springframework.data.jpa.repository.Query(nativeQuery = true, value =
             "UPDATE enrollments SET revoked_at = NULL, revoked_reason = NULL, revoked_payment_id = NULL, "
                     + "enrolled_at = :now WHERE user_id = :userId AND course_id = :courseId AND revoked_at IS NOT NULL")
