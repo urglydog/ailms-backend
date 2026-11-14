@@ -70,4 +70,12 @@ public class InstructorPayoutAccount extends BaseEntity {
 
     @Column(name = "replaced_at")
     private LocalDateTime replacedAt;
+
+    /** Tài khoản mặc định dùng để rút (mỗi giảng viên tối đa 1 tài khoản ACTIVE được đánh dấu). */
+    @Column(name = "is_default", nullable = false)
+    private Boolean isDefault = false;
+
+    /** Có giá trị = đây là bản chờ xác nhận do SỬA tài khoản đang ACTIVE có id này. */
+    @Column(name = "replaces_account_id")
+    private Long replacesAccountId;
 }

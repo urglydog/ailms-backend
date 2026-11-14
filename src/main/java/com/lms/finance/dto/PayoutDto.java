@@ -33,8 +33,22 @@ public class PayoutDto {
             PayoutAccountStatus status,
             NameMatchStatus nameMatchStatus,
             LocalDateTime usableFrom,
-            LocalDateTime confirmedAt
+            LocalDateTime confirmedAt,
+            /** Tài khoản mặc định dùng để rút. */
+            boolean primary,
+            /** Có giá trị = bản chờ xác nhận do sửa tài khoản có id này. */
+            Long replacesAccountId
     ) {}
+
+    /** Sửa tài khoản: {@code accountNumber} để trống = giữ số cũ. Đổi ngân hàng/số tài khoản cần xác nhận qua email, chỉ đổi tên chủ thì không. */
+    public record EditAccountReq(
+            @NotBlank String bankCode,
+            @Pattern(regexp = "^[0-9 ]{0,25}$", message = "Số tài khoản chỉ gồm chữ số (6–20 số)") String accountNumber,
+            @NotBlank @Size(max = 100) String holderName
+    ) {}
+
+    /** Đổi tài khoản nhận cho 1 yêu cầu rút CHƯA được duyệt (vd. ngân hàng bảo trì, nhập sai số). */
+    public record ChangePayoutAccountReq(@NotNull Long accountId) {}
 
     public record SummaryRes(
             BigDecimal available,
@@ -59,7 +73,8 @@ public class PayoutDto {
             LocalDateTime createdAt
     ) {}
 
-    public record RequestPayoutReq(@NotNull @DecimalMin("1") BigDecimal amount) {}
+    /** {@code accountId} trống = dùng tài khoản mặc định. */
+    public record RequestPayoutReq(@NotNull @DecimalMin("1") BigDecimal amount, Long accountId) {}
 
     public record ConfirmReq(@NotBlank @Size(max = 100) String token) {}
 

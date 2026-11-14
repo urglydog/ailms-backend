@@ -98,6 +98,12 @@ public class PayoutService {
      */
     @Transactional
     public PayoutDto.PayoutRes request(String email, BigDecimal amountInput, String idempotencyKey) {
+        return request(email, amountInput, idempotencyKey, null);
+    }
+
+    /** {@code accountId} trống = tài khoản mặc định. */
+    @Transactional
+    public PayoutDto.PayoutRes request(String email, BigDecimal amountInput, String idempotencyKey, Long accountId) {
         User user = requireUser(email);
         rateLimit.check("payout-request", user.getId(), 5);
         crypto.requireConfigured();
@@ -119,12 +125,7 @@ public class PayoutService {
         if (!Boolean.TRUE.equals(user.getIsActive()) || Boolean.TRUE.equals(user.getIsSpamFlagged())) {
             throw new BusinessRuleViolationException("Tài khoản của bạn đang bị hạn chế nên chưa thể rút tiền. Vui lòng liên hệ hỗ trợ.");
         }
-        InstructorPayoutAccount account = accountRepository.findFirstByUser_IdAndStatus(user.getId(), PayoutAccountStatus.ACTIVE)
-                .orElseThrow(() -> new BusinessRuleViolationException("Bạn chưa liên kết tài khoản nhận tiền"));
-        if (account.getUsableFrom() != null && account.getUsableFrom().isAfter(LocalDateTime.now())) {
-            throw new BusinessRuleViolationException("Tài khoản nhận tiền mới đổi sẽ dùng được từ "
-                    + account.getUsableFrom().format(DateTimeFormatter.ofPattern("HH:mm dd/MM/yyyy")));
-        }
+        InstructorPayoutAccount account = resolveAccount(user, accountId);
         if (payoutRepository.existsByInstructor_IdAndStatusIn(user.getId(), OPEN_STATUSES)) {
             throw new BusinessRuleViolationException("Bạn đang có một yêu cầu rút tiền chưa hoàn tất");
         }
@@ -163,6 +164,50 @@ public class PayoutService {
         String token = confirmations.issue(FinanceConfirmationService.TYPE_PAYOUT, saved.getId(), user.getId());
         // Email xác nhận BẮT BUỘC gửi được; lỗi thì ném → rollback cả yêu cầu lẫn khoản giữ chỗ.
         emailService.sendPayoutRequestConfirmEmail(user.getEmail(), saved.getCode(), amount, token);
+        return toRes(saved);
+    }
+
+    /** Tài khoản dùng để rút: theo {@code accountId} nếu có (phải của chính người đó và đã ACTIVE), không thì tài khoản mặc định. */
+    private InstructorPayoutAccount resolveAccount(User user, Long accountId) {
+        InstructorPayoutAccount account;
+        if (accountId != null) {
+            account = accountRepository.findByIdAndUser_Id(accountId, user.getId())
+                    .filter(a -> a.getStatus() == PayoutAccountStatus.ACTIVE)
+                    .orElseThrow(() -> new BusinessRuleViolationException("Tài khoản nhận tiền đã chọn không còn dùng được"));
+        } else {
+            account = accountRepository.findFirstByUser_IdAndStatusAndIsDefaultTrue(user.getId(), PayoutAccountStatus.ACTIVE)
+                    .or(() -> accountRepository.findFirstByUser_IdAndStatus(user.getId(), PayoutAccountStatus.ACTIVE))
+                    .orElseThrow(() -> new BusinessRuleViolationException("Bạn chưa liên kết tài khoản nhận tiền"));
+        }
+        if (account.getUsableFrom() != null && account.getUsableFrom().isAfter(LocalDateTime.now())) {
+            throw new BusinessRuleViolationException("Tài khoản nhận tiền này sẽ dùng được từ "
+                    + account.getUsableFrom().format(DateTimeFormatter.ofPattern("HH:mm dd/MM/yyyy")));
+        }
+        return account;
+    }
+
+    /**
+     * Đổi tài khoản nhận của một yêu cầu rút CHƯA được duyệt (vd. ngân hàng bảo trì, nhập sai số). Thông tin tài khoản trong yêu cầu là
+     * bản chụp lúc tạo nên phải chụp lại; đã duyệt rồi thì phải hủy/để admin từ chối để tránh đổi nơi nhận ngay lúc đang chuyển khoản.
+     */
+    @Transactional
+    public PayoutDto.PayoutRes changeAccount(String email, Long payoutId, Long accountId) {
+        User user = requireUser(email);
+        InstructorPayout payout = lock(payoutId);
+        if (!payout.getInstructor().getId().equals(user.getId())) {
+            throw new AccessDeniedDomainException("Bạn chỉ đổi được tài khoản của yêu cầu của chính mình");
+        }
+        requireStatus(payout, Set.of(PayoutStatus.PENDING_EMAIL, PayoutStatus.REQUESTED), "Chỉ đổi được tài khoản khi yêu cầu chưa được duyệt");
+        InstructorPayoutAccount account = resolveAccount(user, accountId);
+        Object before = snapshot(payout);
+        payout.setAccount(account);
+        payout.setBankCode(account.getBankCode());
+        payout.setBankName(account.getBankName());
+        payout.setAccountNumberEnc(account.getAccountNumberEnc());
+        payout.setAccountLast4(account.getAccountLast4());
+        payout.setHolderName(account.getHolderName());
+        InstructorPayout saved = payoutRepository.save(payout);
+        audit(email, "PAYOUT_ACCOUNT_CHANGED", saved, before, snapshot(saved));
         return toRes(saved);
     }
 
@@ -348,7 +393,9 @@ public class PayoutService {
                     reason, target == PayoutStatus.FAILED);
             notificationService.notify(saved.getInstructor().getId(), "PAYOUT_REJECTED",
                     target == PayoutStatus.FAILED ? "Chuyển tiền thất bại" : "Yêu cầu rút tiền bị từ chối",
-                    "Yêu cầu " + saved.getCode() + ": " + reason + ". Số tiền đã được trả lại vào số dư của bạn.", "/instructor/earnings");
+                    "Yêu cầu " + saved.getCode() + ": " + reason + ". Số tiền đã được trả lại vào số dư của bạn."
+                            + (target == PayoutStatus.FAILED ? " Bạn có thể kiểm tra hoặc đổi tài khoản nhận tiền rồi gửi yêu cầu rút lại." : ""),
+                    "/instructor/earnings");
         }
         return saved;
     }

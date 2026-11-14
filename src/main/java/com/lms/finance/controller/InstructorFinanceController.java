@@ -16,7 +16,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -74,6 +76,34 @@ public class InstructorFinanceController {
         return ResponseEntity.status(HttpStatus.CREATED).body(accountService.link(principal.getName(), req));
     }
 
+    @GetMapping("/payout-accounts")
+    public ResponseEntity<List<PayoutDto.AccountRes>> accounts(Principal principal) {
+        return ResponseEntity.ok(accountService.list(principal.getName()));
+    }
+
+    @PutMapping("/payout-accounts/{id}")
+    public ResponseEntity<PayoutDto.AccountRes> editAccount(
+            Principal principal, @PathVariable Long id, @Valid @RequestBody PayoutDto.EditAccountReq req) {
+        return ResponseEntity.ok(accountService.edit(principal.getName(), id, req));
+    }
+
+    @PostMapping("/payout-accounts/{id}/default")
+    public ResponseEntity<PayoutDto.AccountRes> setDefaultAccount(Principal principal, @PathVariable Long id) {
+        return ResponseEntity.ok(accountService.setPrimary(principal.getName(), id));
+    }
+
+    @DeleteMapping("/payout-accounts/{id}")
+    public ResponseEntity<Void> removeAccount(Principal principal, @PathVariable Long id) {
+        accountService.remove(principal.getName(), id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping("/payouts/{id}/account")
+    public ResponseEntity<PayoutDto.PayoutRes> changePayoutAccount(
+            Principal principal, @PathVariable Long id, @Valid @RequestBody PayoutDto.ChangePayoutAccountReq req) {
+        return ResponseEntity.ok(payoutService.changeAccount(principal.getName(), id, req.accountId()));
+    }
+
     /** Xác nhận bằng token trong email (tài khoản nhận tiền hoặc yêu cầu rút). Token chỉ dùng được với đúng người đã được gửi. */
     @PostMapping("/finance/confirm")
     public ResponseEntity<PayoutDto.ConfirmRes> confirm(Principal principal, @Valid @RequestBody PayoutDto.ConfirmReq req) {
@@ -92,7 +122,7 @@ public class InstructorFinanceController {
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
             @Valid @RequestBody PayoutDto.RequestPayoutReq req) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(payoutService.request(principal.getName(), req.amount(), idempotencyKey));
+                .body(payoutService.request(principal.getName(), req.amount(), idempotencyKey, req.accountId()));
     }
 
     @PostMapping("/payouts/{id}/cancel")
