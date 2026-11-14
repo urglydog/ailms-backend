@@ -115,7 +115,7 @@ Số hiệu migration thực tế: V162 (`course_promotions`). Đã kiểm trên
 |---|---|---|
 | E1 | V162 `course_promotions` | ✅ BE XONG 11/11/2026 |
 | E2 | Giảng viên đăng ký/hủy, admin duyệt (khung thời gian ≤ 90 ngày; ĐÃ BỎ ô độ ưu tiên 14/11/2026 — xem E7)/từ chối/gỡ sớm có lý do bắt buộc (E8); điều kiện: khóa đã xuất bản + công khai + có ảnh bìa + ≥ 3 bài | ✅ BE + FE XONG (`/instructor/share`, `/admin/promotions`) |
-| E3 | Kệ "Được đề xuất" trang chủ (nhãn rõ ràng) qua `GET /courses/featured` | ✅ BE + FE XONG. 🔧 chưa có kệ đầu trang danh mục ở FE (BE đã hỗ trợ `CATEGORY_FEATURED`) |
+| E3 | Kệ "Được đề xuất" trang chủ (nhãn rõ ràng) qua `GET /courses/featured` | ✅ BE + FE XONG. Kệ đầu trang danh mục (`CATEGORY_FEATURED`) hiện ở `/courses?category=<slug>` từ 14/11/2026 (`CategoryFeaturedShelf`; chỉ hiện khi lọc 1 danh mục và không gõ từ khóa) |
 | E3b | Boost thứ hạng tìm kiếm + nhãn "Được đề xuất" trên thẻ khóa | 🅿️ HOÃN — phải sửa 3 truy vấn tìm kiếm phức tạp và cache 15 phút; rủi ro cao so với lợi ích |
 | E4 | Thống kê hiệu quả: đơn/doanh thu khi chạy so với khoảng bằng nhau ngay trước đó (ước tính) | ✅ BE + FE XONG. Quy kết chính xác theo `payments.promotion_id` 🅿️ HOÃN (cần sửa luồng tạo đơn) |
 | E5 | `POST /promotions/{id}/click` + đếm hiển thị | 🅿️ HOÃN — như D6 |
