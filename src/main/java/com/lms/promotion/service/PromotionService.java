@@ -94,6 +94,9 @@ public class PromotionService {
         userRepository.findByRole(Role.ADMIN).forEach(a -> notificationService.notify(a.getId(), "PROMOTION_REQUESTED",
                 "Đăng ký quảng bá mới", user.getFullName() + " đăng ký quảng bá khóa \"" + course.getTitle() + "\".",
                 "/admin/promotions"));
+        // Giảng viên cũng nhận xác nhận đã gửi (trước đây chỉ admin được báo).
+        notificationService.notify(user.getId(), "PROMOTION_SUBMITTED", "Đã gửi đăng ký quảng bá",
+                "Đăng ký quảng bá khóa \"" + course.getTitle() + "\" đang chờ quản trị viên duyệt.", "/instructor/share");
         return toRes(saved, false);
     }
 
