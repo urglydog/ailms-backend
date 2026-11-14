@@ -2,8 +2,6 @@ package com.lms.promotion.dto;
 
 import com.lms.common.enums.PromotionPlacement;
 import com.lms.common.enums.PromotionStatus;
-import jakarta.validation.constraints.Max;
-import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -23,7 +21,6 @@ public class PromotionDto {
     public record ApproveReq(
             LocalDateTime startAt,
             @NotNull LocalDateTime endAt,
-            @Min(0) @Max(100) Integer priority,
             @Size(max = 500) String note
     ) {}
 
@@ -43,7 +40,6 @@ public class PromotionDto {
             String requestNote,
             LocalDateTime startAt,
             LocalDateTime endAt,
-            Integer priority,
             String adminNote,
             LocalDateTime createdAt,
             /** Đang hiển thị thật cho học viên ngay lúc này. */
