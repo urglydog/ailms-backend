@@ -14,7 +14,9 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -33,6 +35,7 @@ public class StreakService {
     private final UserRepository userRepository;
     private final XpService xpService;
     private final EntityManager entityManager;
+    private final PlatformTransactionManager transactionManager;
 
     /** Số lần retry tối đa khi gặp optimistic-lock conflict ở {@link #getStreak} (bug thật
      * 08/10/2026 — xem ghi chú tại nơi dùng). */
@@ -92,26 +95,23 @@ public class StreakService {
         userStreakRepository.save(streak);
     }
 
-    @Transactional
+    // KHÔNG @Transactional: getStreak() tự mở transaction riêng cho từng lần thử (xem ghi chú ở đó).
     public StreakResponse getStreakByEmail(String email, String clientTimezone) {
         User user = userRepository.findByEmail(email).orElseThrow(() -> new IllegalArgumentException("User not found"));
         return getStreak(user.getId(), clientTimezone);
     }
 
-    @Transactional
     public StreakResponse getStreak(Long userId, String clientTimezone) {
-        // Bug thật (08/10/2026): method này tên là "get" nhưng âm thầm ghi (đổi timezone,
-        // reset freeze theo tháng, xử lý streak hết hạn) — khi 2 transaction cùng lúc ghi
-        // chung 1 row user_streaks (vd. recordActivity() chạy REQUIRES_NEW ngay sau khi hoàn
-        // thành bài học, gần như đồng thời với FE gọi lại /streak/me), request đến sau bị
-        // Hibernate từ chối vì version đã đổi (ObjectOptimisticLockingFailureException), trả
-        // 500 cho user dù không có gì sai thật sự. Retry tối đa OPTIMISTIC_LOCK_MAX_RETRIES
-        // lần: entityManager.clear() để bỏ instance cũ trong persistence context (nếu không
-        // clear, findById() bên dưới trả lại đúng instance cũ đã lỗi thay vì đọc lại DB) rồi
-        // tính toán lại từ dữ liệu mới nhất.
+        // Bug thật (08/10 và 13/11/2026): method này tên "get" nhưng âm thầm ghi (đổi timezone, reset freeze theo
+        // tháng, xử lý streak hết hạn). Khi 2 request đồng thời cùng ghi 1 row user_streaks (vd. recordActivity()
+        // REQUIRES_NEW ngay sau khi hoàn thành bài, gần như cùng lúc FE gọi /streak/me), request đến sau bị
+        // ObjectOptimisticLockingFailureException → 500. Bản retry cũ nằm TRONG cùng 1 transaction nên vô dụng:
+        // lỗi nổ lúc COMMIT (ngoài try/catch) và MySQL REPEATABLE READ vẫn trả bản cũ khi đọc lại. Nay mỗi lần thử
+        // chạy trong 1 transaction riêng (commit nằm trong execute() nên bắt được), thử lại đọc snapshot mới.
+        TransactionTemplate tx = new TransactionTemplate(transactionManager);
         for (int attempt = 1; ; attempt++) {
             try {
-                return computeStreak(userId, clientTimezone);
+                return tx.execute(status -> computeStreak(userId, clientTimezone));
             } catch (OptimisticLockingFailureException e) {
                 if (attempt >= OPTIMISTIC_LOCK_MAX_RETRIES) {
                     throw e;

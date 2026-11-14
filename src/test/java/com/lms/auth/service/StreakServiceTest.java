@@ -15,6 +15,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.transaction.PlatformTransactionManager;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -39,6 +41,8 @@ class StreakServiceTest {
     private XpService xpService;
     @Mock
     private EntityManager entityManager;
+    @Mock
+    private PlatformTransactionManager transactionManager;
 
     @InjectMocks
     private StreakService streakService;
@@ -86,5 +90,34 @@ class StreakServiceTest {
 
         verify(userStreakRepository, never()).save(streak);
         assertThat(streak.getCurrentStreak()).isEqualTo(5); // Not changed
+    }
+
+    @Test
+    void getStreak_retriesInNewTransaction_whenCommitHitsOptimisticLock() {
+        when(userStreakRepository.findById(1L)).thenReturn(Optional.of(streak));
+        when(userLearningDayRepository
+                .findByUser_IdAndActivityDateBetweenOrderByActivityDateDesc(eq(1L), any(), any()))
+                .thenReturn(List.of());
+        // Lần commit đầu nổ khóa lạc quan (đúng như production), lần 2 thành công.
+        doThrow(new OptimisticLockingFailureException("stale")).doNothing().when(transactionManager).commit(any());
+
+        StreakResponse res = streakService.getStreak(1L, null);
+
+        assertThat(res.currentStreak()).isNotNull();
+        verify(entityManager).clear();
+        verify(transactionManager, times(2)).commit(any());
+    }
+
+    @Test
+    void getStreak_givesUp_afterMaxRetries() {
+        when(userStreakRepository.findById(1L)).thenReturn(Optional.of(streak));
+        when(userLearningDayRepository
+                .findByUser_IdAndActivityDateBetweenOrderByActivityDateDesc(eq(1L), any(), any()))
+                .thenReturn(List.of());
+        doThrow(new OptimisticLockingFailureException("stale")).when(transactionManager).commit(any());
+
+        org.junit.jupiter.api.Assertions.assertThrows(OptimisticLockingFailureException.class,
+                () -> streakService.getStreak(1L, null));
+        verify(transactionManager, times(3)).commit(any());
     }
 }
