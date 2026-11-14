@@ -22,7 +22,7 @@ public interface CoursePromotionRepository extends JpaRepository<CoursePromotion
             + "AND p.startAt <= :now AND p.endAt > :now "
             + "AND c.status = com.lms.common.enums.CourseStatus.PUBLISHED "
             + "AND c.visibility = com.lms.common.enums.CourseVisibility.PUBLIC "
-            + "ORDER BY p.priority DESC, p.startAt DESC")
+            + "ORDER BY p.startAt DESC, p.id")
     List<CoursePromotion> findActive(@Param("placement") PromotionPlacement placement,
                                      @Param("now") LocalDateTime now, Pageable pageable);
 
@@ -32,7 +32,7 @@ public interface CoursePromotionRepository extends JpaRepository<CoursePromotion
             + "AND p.startAt <= :now AND p.endAt > :now AND c.category.slug = :categorySlug "
             + "AND c.status = com.lms.common.enums.CourseStatus.PUBLISHED "
             + "AND c.visibility = com.lms.common.enums.CourseVisibility.PUBLIC "
-            + "ORDER BY p.priority DESC, p.startAt DESC")
+            + "ORDER BY p.startAt DESC, p.id")
     List<CoursePromotion> findActiveInCategory(@Param("placement") PromotionPlacement placement,
                                                @Param("categorySlug") String categorySlug,
                                                @Param("now") LocalDateTime now, Pageable pageable);

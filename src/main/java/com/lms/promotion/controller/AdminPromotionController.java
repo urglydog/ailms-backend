@@ -44,7 +44,8 @@ public class AdminPromotionController {
     }
 
     @PostMapping("/{id}/end")
-    public ResponseEntity<PromotionDto.Res> end(Principal principal, @PathVariable Long id) {
-        return ResponseEntity.ok(promotionService.end(principal.getName(), id));
+    public ResponseEntity<PromotionDto.Res> end(
+            Principal principal, @PathVariable Long id, @Valid @RequestBody PromotionDto.ReasonReq req) {
+        return ResponseEntity.ok(promotionService.end(principal.getName(), id, req.reason()));
     }
 }

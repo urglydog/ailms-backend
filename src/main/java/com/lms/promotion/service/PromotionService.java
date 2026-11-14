@@ -25,6 +25,10 @@ import com.lms.promotion.repository.CoursePromotionRepository;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Random;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -48,6 +52,10 @@ public class PromotionService {
     static final int MAX_DAYS = 90;
     static final int MIN_LESSONS = 3;
     static final int MAX_FEATURED_SIZE = 24;
+    /** Số khóa tối đa lấy ra làm "bể" để xoay vòng trước khi cắt theo `size`. */
+    static final int FEATURED_POOL_SIZE = 100;
+    /** Cùng định dạng các thông báo/email khác của hệ thống (vd. PayoutService, EmailService). */
+    private static final DateTimeFormatter NOTIFY_TIME = DateTimeFormatter.ofPattern("HH:mm dd/MM/yyyy");
     private static final Set<PromotionStatus> OPEN_STATUSES = Set.of(PromotionStatus.REQUESTED, PromotionStatus.APPROVED);
     private static final Pattern CATEGORY_SLUG = Pattern.compile("^[a-z0-9][a-z0-9-]{0,99}$");
 
@@ -102,9 +110,20 @@ public class PromotionService {
             throw new AccessDeniedDomainException("Bạn chỉ hủy được đăng ký của chính mình");
         }
         requireStatus(p, OPEN_STATUSES, "Chỉ hủy được đăng ký đang chờ duyệt hoặc đang chạy");
+        boolean wasRunning = p.getStatus() == PromotionStatus.APPROVED;
+        String before = p.getStatus().name();
         p.setStatus(PromotionStatus.CANCELLED);
+        if (wasRunning && p.getEndAt() != null && p.getEndAt().isAfter(LocalDateTime.now())) {
+            p.setEndAt(LocalDateTime.now());
+        }
         CoursePromotion saved = promotionRepository.save(p);
+        audit(email, "PROMOTION_CANCELLED_BY_INSTRUCTOR", saved, before);
         cacheEvictionHelper.evictCourseCacheAfterCommit(p.getCourse().getSlug());
+        if (wasRunning) { // giảng viên chủ động gỡ đợt đang chạy → báo admin biết
+            userRepository.findByRole(Role.ADMIN).forEach(a -> notificationService.notify(a.getId(), "PROMOTION_WITHDRAWN",
+                    "Giảng viên gỡ quảng bá", p.getRequestedBy().getFullName() + " đã gỡ quảng bá khóa \"" + p.getCourse().getTitle() + "\".",
+                    "/admin/promotions"));
+        }
         return toRes(saved, false);
     }
 
@@ -138,7 +157,6 @@ public class PromotionService {
         p.setStatus(PromotionStatus.APPROVED);
         p.setStartAt(start);
         p.setEndAt(req.endAt());
-        p.setPriority(req.priority() == null ? 0 : req.priority());
         p.setAdminNote(req.note() == null || req.note().isBlank() ? null : req.note().trim());
         p.setReviewedBy(admin);
         p.setReviewedAt(now);
@@ -147,7 +165,7 @@ public class PromotionService {
         audit(adminEmail, "PROMOTION_APPROVED", saved, "REQUESTED");
         cacheEvictionHelper.evictCourseCacheAfterCommit(p.getCourse().getSlug());
         notificationService.notify(p.getRequestedBy().getId(), "PROMOTION_APPROVED", "Khóa học của bạn được quảng bá",
-                "Khóa \"" + p.getCourse().getTitle() + "\" sẽ được đề xuất đến " + req.endAt() + ".", "/instructor/share");
+                "Khóa \"" + p.getCourse().getTitle() + "\" sẽ được đề xuất đến " + req.endAt().format(NOTIFY_TIME) + ".", "/instructor/share");
         return toRes(saved, true);
     }
 
@@ -170,16 +188,22 @@ public class PromotionService {
         return toRes(saved, true);
     }
 
-    /** Kết thúc sớm một đợt đang chạy. */
+    /** Gỡ sớm một đợt đang chạy (vd. phát hiện vi phạm). BẮT BUỘC có lý do — giảng viên được thông báo kèm lý do này. */
     @Transactional
-    public PromotionDto.Res end(String adminEmail, Long id) {
+    public PromotionDto.Res end(String adminEmail, Long id, String reason) {
         CoursePromotion p = require(id);
         requireStatus(p, Set.of(PromotionStatus.APPROVED), "Chỉ kết thúc được đợt đã duyệt");
+        if (reason == null || reason.isBlank()) {
+            throw new InvalidRequestException("Cần nhập lý do gỡ quảng bá");
+        }
         p.setStatus(PromotionStatus.ENDED);
+        p.setAdminNote(reason.trim());
         p.setEndAt(LocalDateTime.now());
         CoursePromotion saved = promotionRepository.save(p);
         audit(adminEmail, "PROMOTION_ENDED", saved, "APPROVED");
         cacheEvictionHelper.evictCourseCacheAfterCommit(p.getCourse().getSlug());
+        notificationService.notify(p.getRequestedBy().getId(), "PROMOTION_ENDED", "Quảng bá khóa học đã được gỡ",
+                "Khóa \"" + p.getCourse().getTitle() + "\": " + reason.trim(), "/instructor/share");
         return toRes(saved, true);
     }
 
@@ -196,13 +220,18 @@ public class PromotionService {
         if (categorySlug != null && !CATEGORY_SLUG.matcher(categorySlug).matches()) {
             throw new InvalidRequestException("Danh mục không hợp lệ");
         }
-        var page = PageRequest.of(0, Math.min(Math.max(size, 1), MAX_FEATURED_SIZE));
+        int limit = Math.min(Math.max(size, 1), MAX_FEATURED_SIZE);
+        var page = PageRequest.of(0, FEATURED_POOL_SIZE);
         LocalDateTime now = LocalDateTime.now();
         List<CoursePromotion> active = categorySlug == null
                 ? promotionRepository.findActive(placement, now, page)
                 : promotionRepository.findActiveInCategory(placement, categorySlug, now, page);
         // Một khóa chỉ xuất hiện 1 lần dù có nhiều đợt chồng nhau.
-        List<Course> courses = active.stream().map(CoursePromotion::getCourse).distinct().toList();
+        List<Course> pool = new ArrayList<>(active.stream().map(CoursePromotion::getCourse).distinct().toList());
+        // Không có "độ ưu tiên" do admin chấm tay (tránh thiên vị): mọi khóa đang chạy đều có cơ hội như nhau, thứ tự xoay
+        // vòng theo GIỜ (hạt giống = giờ hiện tại + vị trí) nên không khóa nào chiếm ô đầu mãi mãi.
+        Collections.shuffle(pool, new Random(LocalDateTime.now().truncatedTo(java.time.temporal.ChronoUnit.HOURS).hashCode() * 31L + placement.ordinal()));
+        List<Course> courses = pool.size() > limit ? List.copyOf(pool.subList(0, limit)) : List.copyOf(pool);
         return new PromotionDto.FeaturedRes(coursePublicService.summariesOf(courses));
     }
 
@@ -243,7 +272,6 @@ public class PromotionService {
         after.put("placement", p.getPlacement().name());
         after.put("startAt", String.valueOf(p.getStartAt()));
         after.put("endAt", String.valueOf(p.getEndAt()));
-        after.put("priority", p.getPriority());
         auditService.record(actorEmail, action, "course_promotion", String.valueOf(p.getId()), Map.of("status", before), after);
     }
 
@@ -270,7 +298,7 @@ public class PromotionService {
         Course c = p.getCourse();
         User requester = p.getRequestedBy();
         return new PromotionDto.Res(p.getId(), c.getId(), c.getTitle(), c.getSlug(), p.getPlacement(), p.getStatus(),
-                p.getRequestNote(), p.getStartAt(), p.getEndAt(), p.getPriority(), p.getAdminNote(), p.getCreatedAt(), active,
+                p.getRequestNote(), p.getStartAt(), p.getEndAt(), p.getAdminNote(), p.getCreatedAt(), active,
                 ordersDuring, revenueDuring, ordersBefore, revenueBefore,
                 withInstructor ? requester.getFullName() : null, withInstructor ? requester.getEmail() : null);
     }

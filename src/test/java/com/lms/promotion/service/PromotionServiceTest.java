@@ -179,16 +179,15 @@ class PromotionServiceTest {
     // ── admin ───────────────────────────────────────────────────────────
 
     @Test
-    void approve_setsWindowAndPriority_evictsCacheAuditsAndNotifiesTheInstructor() {
+    void approve_setsWindow_evictsCacheAuditsAndNotifiesTheInstructor() {
         CoursePromotion p = promotion(PromotionStatus.REQUESTED);
         LocalDateTime end = LocalDateTime.now().plusDays(14);
 
-        PromotionDto.Res res = service.approve(ADMIN_EMAIL, 300L, new PromotionDto.ApproveReq(null, end, 50, " ghi chú "));
+        PromotionDto.Res res = service.approve(ADMIN_EMAIL, 300L, new PromotionDto.ApproveReq(null, end, " ghi chú "));
 
         assertThat(p.getStatus()).isEqualTo(PromotionStatus.APPROVED);
         assertThat(p.getStartAt()).isBeforeOrEqualTo(LocalDateTime.now());
         assertThat(p.getEndAt()).isEqualTo(end);
-        assertThat(p.getPriority()).isEqualTo(50);
         assertThat(p.getAdminNote()).isEqualTo("ghi chú");
         assertThat(p.getReviewedBy()).isSameAs(admin);
         assertThat(res.active()).isTrue();
@@ -202,11 +201,11 @@ class PromotionServiceTest {
         promotion(PromotionStatus.REQUESTED);
         LocalDateTime now = LocalDateTime.now();
 
-        assertThatThrownBy(() -> service.approve(ADMIN_EMAIL, 300L, new PromotionDto.ApproveReq(now.plusDays(2), now.plusDays(1), 0, null)))
+        assertThatThrownBy(() -> service.approve(ADMIN_EMAIL, 300L, new PromotionDto.ApproveReq(now.plusDays(2), now.plusDays(1), null)))
                 .isInstanceOf(InvalidRequestException.class); // kết thúc trước bắt đầu
-        assertThatThrownBy(() -> service.approve(ADMIN_EMAIL, 300L, new PromotionDto.ApproveReq(now.minusDays(5), now.minusDays(1), 0, null)))
+        assertThatThrownBy(() -> service.approve(ADMIN_EMAIL, 300L, new PromotionDto.ApproveReq(now.minusDays(5), now.minusDays(1), null)))
                 .isInstanceOf(InvalidRequestException.class); // đã ở quá khứ
-        assertThatThrownBy(() -> service.approve(ADMIN_EMAIL, 300L, new PromotionDto.ApproveReq(null, now.plusDays(91), 0, null)))
+        assertThatThrownBy(() -> service.approve(ADMIN_EMAIL, 300L, new PromotionDto.ApproveReq(null, now.plusDays(91), null)))
                 .isInstanceOf(InvalidRequestException.class); // quá 90 ngày
         verify(cacheEvictionHelper, never()).evictCourseCacheAfterCommit(any());
     }
@@ -215,12 +214,12 @@ class PromotionServiceTest {
     void approve_onlyFromRequested_andOnlyIfCourseStillEligible() {
         CoursePromotion p = promotion(PromotionStatus.APPROVED);
         LocalDateTime end = LocalDateTime.now().plusDays(7);
-        assertThatThrownBy(() -> service.approve(ADMIN_EMAIL, 300L, new PromotionDto.ApproveReq(null, end, 0, null)))
+        assertThatThrownBy(() -> service.approve(ADMIN_EMAIL, 300L, new PromotionDto.ApproveReq(null, end, null)))
                 .isInstanceOf(BusinessRuleViolationException.class);
 
         p.setStatus(PromotionStatus.REQUESTED);
         course.setStatus(CourseStatus.DRAFT); // giảng viên gỡ xuất bản sau khi đăng ký
-        assertThatThrownBy(() -> service.approve(ADMIN_EMAIL, 300L, new PromotionDto.ApproveReq(null, end, 0, null)))
+        assertThatThrownBy(() -> service.approve(ADMIN_EMAIL, 300L, new PromotionDto.ApproveReq(null, end, null)))
                 .isInstanceOf(BusinessRuleViolationException.class);
     }
 
@@ -242,14 +241,18 @@ class PromotionServiceTest {
         p.setStartAt(LocalDateTime.now().minusDays(2));
         p.setEndAt(LocalDateTime.now().plusDays(5));
 
-        service.end(ADMIN_EMAIL, 300L);
+        assertThatThrownBy(() -> service.end(ADMIN_EMAIL, 300L, " ")).isInstanceOf(InvalidRequestException.class);
+
+        service.end(ADMIN_EMAIL, 300L, " Vi phạm bản quyền ");
 
         assertThat(p.getStatus()).isEqualTo(PromotionStatus.ENDED);
+        assertThat(p.getAdminNote()).isEqualTo("Vi phạm bản quyền");
+        verify(notificationService).notify(eq(7L), eq("PROMOTION_ENDED"), anyString(), anyString(), anyString());
         assertThat(p.getEndAt()).isBeforeOrEqualTo(LocalDateTime.now());
         verify(cacheEvictionHelper).evictCourseCacheAfterCommit("unity");
 
         p.setStatus(PromotionStatus.REQUESTED);
-        assertThatThrownBy(() -> service.end(ADMIN_EMAIL, 300L)).isInstanceOf(BusinessRuleViolationException.class);
+        assertThatThrownBy(() -> service.end(ADMIN_EMAIL, 300L, "x")).isInstanceOf(BusinessRuleViolationException.class);
     }
 
     @Test
@@ -329,12 +332,32 @@ class PromotionServiceTest {
 
         ArgumentCaptor<Pageable> homePage = ArgumentCaptor.forClass(Pageable.class);
         verify(promotionRepository).findActive(eq(PromotionPlacement.HOME_FEATURED), any(), homePage.capture());
-        assertThat(homePage.getValue().getPageSize()).isEqualTo(24);
+        assertThat(homePage.getValue().getPageSize()).isEqualTo(PromotionService.FEATURED_POOL_SIZE);
         ArgumentCaptor<Pageable> catPage = ArgumentCaptor.forClass(Pageable.class);
         verify(promotionRepository).findActiveInCategory(eq(PromotionPlacement.CATEGORY_FEATURED), eq("lap-trinh"), any(), catPage.capture());
-        assertThat(catPage.getValue().getPageSize()).isEqualTo(1);
+        assertThat(catPage.getValue().getPageSize()).isEqualTo(PromotionService.FEATURED_POOL_SIZE);
         ArgumentCaptor<List<Course>> courses = ArgumentCaptor.forClass(List.class);
         verify(coursePublicService, org.mockito.Mockito.times(2)).summariesOf(courses.capture());
         assertThat(courses.getAllValues().get(0)).containsExactly(course); // 2 đợt cùng 1 khóa → xuất hiện 1 lần
+    }
+
+    @Test
+    void featured_cutsThePoolToSize_withoutAnyAdminPriority() {
+        List<CoursePromotion> five = new java.util.ArrayList<>();
+        for (long i = 1; i <= 5; i++) {
+            Course c = new Course();
+            c.setId(i);
+            CoursePromotion cp = new CoursePromotion();
+            cp.setCourse(c);
+            five.add(cp);
+        }
+        when(promotionRepository.findActive(eq(PromotionPlacement.HOME_FEATURED), any(), any(Pageable.class))).thenReturn(five);
+        when(coursePublicService.summariesOf(any())).thenReturn(List.of());
+
+        service.featured(PromotionPlacement.HOME_FEATURED, null, 3);
+
+        ArgumentCaptor<List<Course>> courses = ArgumentCaptor.forClass(List.class);
+        verify(coursePublicService).summariesOf(courses.capture());
+        assertThat(courses.getValue()).hasSize(3).doesNotHaveDuplicates();
     }
 }
