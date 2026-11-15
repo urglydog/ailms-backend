@@ -32,5 +32,11 @@ public interface PayosPayoutGateway {
 
     TransferResult create(TransferRequest request);
 
+    /**
+     * Tìm lệnh chi đã tạo theo mã tham chiếu (GET /v1/payouts?referenceId=). Dùng trước khi gửi lại một lệnh chưa rõ kết quả: tài liệu PayOS
+     * liệt kê "Idempotency key đã tồn tại" là một LỖI của việc tạo lệnh, nên gửi lại cùng khóa KHÔNG được tin là trả về lệnh cũ.
+     */
+    java.util.Optional<TransferResult> findByReferenceId(String referenceId);
+
     TransferResult get(String payoutId);
 }

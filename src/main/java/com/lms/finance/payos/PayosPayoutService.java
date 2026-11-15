@@ -235,10 +235,21 @@ public class PayosPayoutService {
                 orderSnapshot(order));
 
         try {
+            if (!fresh) {
+                // Gửi lại lệnh chưa rõ kết quả: hỏi PayOS xem lệnh đã được tạo chưa. Đã có thì chỉ cập nhật trạng thái, KHÔNG tạo lại; không hỏi được
+                // thì dừng ở UNKNOWN (không đoán), tránh nguy cơ chi hai lần.
+                var existing = gateway.findByReferenceId(order.getReferenceId());
+                if (existing.isPresent()) {
+                    applyResult(order, existing.get(), adminEmail);
+                    return toRes(orderRepository.findById(order.getId()).orElse(order));
+                }
+            }
             applyResult(order, gateway.create(req), adminEmail);
         } catch (APIException e) {
             int status = e.getStatusCode().orElse(0);
-            if (status >= 400 && status < 500) {
+            if (isIdempotencyConflict(e)) {
+                resolveByLookup(order, adminEmail, safeMessage(e));
+            } else if (status >= 400 && status < 500) {
                 markFailed(order, e.getErrorCode().orElse(String.valueOf(status)), e.getErrorDesc().orElse(safeMessage(e)));
             } else {
                 markUnknown(order, safeMessage(e));
@@ -247,6 +258,26 @@ public class PayosPayoutService {
             markUnknown(order, safeMessage(e));
         }
         return toRes(orderRepository.findById(order.getId()).orElse(order));
+    }
+
+    /** PayOS báo khóa idempotency đã tồn tại = lệnh này ĐÃ được tạo trước đó (không phải thất bại): phải tra lại thay vì coi là lỗi. */
+    private static boolean isIdempotencyConflict(APIException e) {
+        String text = (e.getErrorDesc().orElse("") + " " + e.getMessage()).toLowerCase(java.util.Locale.ROOT);
+        return text.contains("idempotency") && (text.contains("tồn tại") || text.contains("exist"));
+    }
+
+    /** Tra lệnh theo mã tham chiếu; thấy thì cập nhật trạng thái, không thấy/không tra được thì để UNKNOWN. */
+    private void resolveByLookup(PayosPayoutOrder order, String actorEmail, String why) {
+        try {
+            var found = gateway.findByReferenceId(order.getReferenceId());
+            if (found.isPresent()) {
+                applyResult(order, found.get(), actorEmail);
+                return;
+            }
+        } catch (RuntimeException e) {
+            log.warn("Tra lệnh PayOS {} theo mã tham chiếu lỗi: {}", order.getReferenceId(), safeMessage(e));
+        }
+        markUnknown(order, why);
     }
 
     private PayosPayoutOrder newOrder(PayosOrderKind kind, Long entityId, int attempt, Source src, User admin) {
@@ -273,6 +304,10 @@ public class PayosPayoutService {
             balance = gateway.balance();
         } catch (RuntimeException e) {
             throw new BusinessRuleViolationException("Không kiểm tra được số dư tài khoản chi PayOS: " + safeMessage(e));
+        }
+        // Tài liệu PayOS không nói rõ estimateCredit là TỔNG cần có hay chỉ là phí: nhỏ hơn số tiền chi thì coi là phí và cộng thêm (thận trọng).
+        if (needed < req.amount()) {
+            needed = req.amount() + needed;
         }
         if (balance < needed) {
             throw new BusinessRuleViolationException("Số dư tài khoản chi PayOS không đủ (cần " + needed + "đ, hiện có " + balance
@@ -372,11 +407,13 @@ public class PayosPayoutService {
             return;
         }
         for (PayosPayoutOrder o : open) {
-            if (o.getPayosPayoutId() == null) {
-                continue; // chưa có mã PayOS để hỏi: chờ admin bấm gửi lại
-            }
             try {
                 PayosPayoutOrder fresh = orderRepository.findById(o.getId()).orElse(o);
+                if (fresh.getPayosPayoutId() == null) {
+                    // Chưa có mã PayOS (gửi bị gián đoạn): tra theo mã tham chiếu; PayOS chưa có lệnh thì chờ admin quyết định gửi lại.
+                    gateway.findByReferenceId(fresh.getReferenceId()).ifPresent(r -> applyResult(fresh, r, null));
+                    continue;
+                }
                 applyResult(fresh, gateway.get(fresh.getPayosPayoutId()), null);
             } catch (RuntimeException e) {
                 log.warn("Đối soát PayOS lệnh {} lỗi: {}", o.getReferenceId(), safeMessage(e));
