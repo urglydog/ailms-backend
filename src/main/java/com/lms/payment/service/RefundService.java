@@ -171,7 +171,7 @@ public class RefundService {
         notificationService.notify(dispute.getFiledBy().getId(), "REFUND_TRANSFERRED",
                 "Đã chuyển tiền hoàn cho bạn",
                 "Giao dịch " + payment.getTxnRef() + " đã được hoàn tiền (mã chuyển khoản " + saved.getTransferRef() + ").",
-                "/payments");
+                "/disputes/new");
         emailService.sendRefundTransferredEmail(dispute.getFiledBy().getEmail(), payment.getTxnRef(),
                 payment.getCourse().getTitle(), payment.getAmount(), saved.getTransferRef());
         return saved;

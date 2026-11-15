@@ -295,19 +295,25 @@ public class PayosPayoutService {
         return o;
     }
 
-    /** Số dư tài khoản chi phải đủ (gồm phí) — không đủ thì dừng NGAY, chưa tạo lệnh. */
+    /**
+     * Số dư tài khoản chi phải đủ — không đủ thì dừng NGAY, chưa tạo lệnh. Ước tính phí chỉ là phụ: hàm {@code estimateCredit} của SDK payos-java 2.0.1 bị
+     * lỗi đóng gói yêu cầu (đã tái hiện offline, 15/11/2026) và tài liệu PayOS không rõ nó là tổng hay chỉ là phí, nên lỗi ở bước này KHÔNG được chặn
+     * việc chi; PayOS vẫn từ chối ("Số dư không đủ") nếu thiếu.
+     */
     private void checkFunds(TransferRequest req) {
-        long needed;
+        long needed = req.amount();
+        try {
+            long estimate = gateway.estimateCredit(req);
+            // Nhỏ hơn số tiền chi thì coi là phí và cộng thêm (thận trọng).
+            needed = estimate >= req.amount() ? estimate : req.amount() + estimate;
+        } catch (RuntimeException e) {
+            log.warn("Không ước tính được phí chi PayOS (bỏ qua, chỉ kiểm số dư theo số tiền chi): {}", safeMessage(e));
+        }
         long balance;
         try {
-            needed = gateway.estimateCredit(req);
             balance = gateway.balance();
         } catch (RuntimeException e) {
             throw new BusinessRuleViolationException("Không kiểm tra được số dư tài khoản chi PayOS: " + safeMessage(e));
-        }
-        // Tài liệu PayOS không nói rõ estimateCredit là TỔNG cần có hay chỉ là phí: nhỏ hơn số tiền chi thì coi là phí và cộng thêm (thận trọng).
-        if (needed < req.amount()) {
-            needed = req.amount() + needed;
         }
         if (balance < needed) {
             throw new BusinessRuleViolationException("Số dư tài khoản chi PayOS không đủ (cần " + needed + "đ, hiện có " + balance
