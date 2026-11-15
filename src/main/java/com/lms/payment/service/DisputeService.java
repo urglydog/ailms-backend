@@ -270,7 +270,7 @@ public class DisputeService {
                 refunded
                         ? "Giao dịch " + dispute.getPayment().getTxnRef() + " đã được chấp nhận hoàn tiền. Chúng tôi sẽ chuyển khoản cho bạn và báo lại ngay khi đã chuyển."
                         : "Giao dịch " + dispute.getPayment().getTxnRef() + " không được chấp nhận hoàn tiền.",
-                "/payments"
+                "/disputes/new"
         );
 
         // (23/10/2026) — trước đây kết quả xử lý CHỈ báo qua notification trong app, user không

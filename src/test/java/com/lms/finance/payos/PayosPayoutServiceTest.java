@@ -367,4 +367,25 @@ class PayosPayoutServiceTest {
                 .isInstanceOf(BusinessRuleViolationException.class).hasMessageContaining("không đủ");
         verify(gateway, never()).create(any());
     }
+
+    @Test
+    void estimateFailing_isNotFatal_theBalanceAgainstTheAmountDecides() {
+        approvedPayout(200_000);
+        when(gateway.estimateCredit(any())).thenThrow(new IllegalArgumentException("No serializer found for class java.lang.Object"));
+        when(gateway.balance()).thenReturn(1_000_000L);
+        when(gateway.create(any())).thenReturn(result("SUCCEEDED", null));
+
+        assertThat(service.transferInstructorPayout(ADMIN, 5L).status()).isEqualTo(PayosOrderStatus.SUCCEEDED);
+    }
+
+    @Test
+    void estimateFailing_butBalanceBelowTheAmount_stillStops() {
+        approvedPayout(200_000);
+        when(gateway.estimateCredit(any())).thenThrow(new IllegalArgumentException("boom"));
+        when(gateway.balance()).thenReturn(50_000L);
+
+        assertThatThrownBy(() -> service.transferInstructorPayout(ADMIN, 5L))
+                .isInstanceOf(BusinessRuleViolationException.class).hasMessageContaining("không đủ");
+        verify(gateway, never()).create(any());
+    }
 }

@@ -50,12 +50,14 @@ public class AdminPayoutController {
     @PostMapping("/{id}/reject")
     public ResponseEntity<PayoutDto.AdminPayoutRes> reject(
             Principal principal, @PathVariable Long id, @Valid @RequestBody PayoutDto.ReasonReq req) {
+        payosPayoutService.assertNoInFlightOrder(com.lms.common.enums.PayosOrderKind.INSTRUCTOR_PAYOUT, id);
         return ResponseEntity.ok(payoutService.reject(principal.getName(), id, req.reason()));
     }
 
     @PostMapping("/{id}/mark-failed")
     public ResponseEntity<PayoutDto.AdminPayoutRes> markFailed(
             Principal principal, @PathVariable Long id, @Valid @RequestBody PayoutDto.ReasonReq req) {
+        payosPayoutService.assertNoInFlightOrder(com.lms.common.enums.PayosOrderKind.INSTRUCTOR_PAYOUT, id);
         return ResponseEntity.ok(payoutService.markFailed(principal.getName(), id, req.reason()));
     }
 
