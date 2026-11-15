@@ -14,7 +14,7 @@
 | 2 | **Chờ tiền về Techcombank** cho 2 lệnh PayOS đang "đang xử lý": hoàn tiền `LLR5-1` (10.000đ, khiếu nại AI Agent) và rút tiền giảng viên `LLP1-1` (20.000đ, `PO-202611-815615`) | Khi PayOS báo thành công hệ thống tự ghi "đã chuyển". Quá 1–2 ngày làm việc vẫn chưa về → gửi hỗ trợ PayOS/Baokim kèm mã lệnh. |
 | 3 | **Hỏi PayOS** (đang có email hỗ trợ): số dư tối thiểu 1.000.000đ là nạp một lần hay phải duy trì; số dư tài khoản chi có rút ngược được không; IP/hạn mức; lệnh chi có cần duyệt trên dashboard | Tài liệu API không nêu các điểm này. |
 | 4 | **Trả cấu hình test về mặc định** sau khi thử xong: `PAYOUT_MIN_AMOUNT` (đang hạ xuống 20.000) → `100000`; `PAYOS_PAYOUT_MAX_AMOUNT`; `PAYOS_PAYOUT_ENABLED` (để 0 nếu chưa dùng thật) | Admin → Cài đặt. |
-| 5 | **Duyệt kế hoạch Hóa đơn & Thống kê** (mục 2.A) | 7 câu hỏi ở cuối `docs/INVOICE_AND_REPORTING_PLAN.md`. |
+| 5 | **Duyệt hướng triển khai Hóa đơn & Thống kê** (mục 2.A) | Đã trả lời 15/11 (mục 8 của `docs/INVOICE_AND_REPORTING_PLAN.md`); còn 6 điểm cần chốt cuối mục 8, rồi duyệt mục 7. |
 | 6 | **Quyết định chính sách**: (a) chặn gửi khiếu nại loại "đổi ý" khi ngoài chính sách (quá 7 ngày / đã học > 20%) hay chỉ cảnh báo; (b) bậc nợ 90 ngày có ẩn khóa khỏi tìm kiếm không (hiện chỉ chặn mua + gỡ khỏi kệ đề xuất) | Cả hai đang ở trạng thái "chỉ gắn nhãn/chặn một phần". |
 | 7 | Nhập `REFUND_HOLIDAYS` (ngày lễ gia hạn hạn hoàn tiền) | Admin → Cài đặt. |
 | 8 | **Đĩa server 38 GB chỉ còn ~3,7 GB (90%)**: dọn bản VS Code Server cũ (~3,3 GB), `/var/lms/fe_node_modules_old` + `fe_next_old` (~1,4 GB, tên "old"), volume Docker không dùng (3,4 GB — kiểm tên trước khi xoá) | Đĩa đầy đã làm hỏng build/backend một lần. |
@@ -25,8 +25,8 @@
 
 ## 2. TASK MỚI / ĐANG LÀM
 
-### A. Hóa đơn / chứng từ & Thống kê – báo cáo tự động — 📝 ĐỀ XUẤT, CHƯA LÀM
-Mọi khoản tiền (thanh toán, hoàn, chi trả, nợ) cần chứng từ bất biến có PDF + minh bạch chi phí; admin cần thống kê toàn nền tảng và xuất báo cáo tự động. Phạm vi, thiết kế dữ liệu, 6 giai đoạn (H1–H6) và câu hỏi cần quyết định: **`docs/INVOICE_AND_REPORTING_PLAN.md`**. Bắt đầu sau khi bạn duyệt (mục 1 #5).
+### A. Hóa đơn / chứng từ & Thống kê – báo cáo tự động — ✅ ĐÃ CHỐT PHẠM VI, CHƯA LÀM
+Mọi khoản tiền (thanh toán, hoàn, chi trả, nợ) cần chứng từ bất biến có PDF + minh bạch chi phí; admin cần thống kê toàn nền tảng và xuất báo cáo tự động. Phạm vi, thiết kế dữ liệu, 4 giai đoạn (H1 gộp chứng từ → H2 quản trị → H3 thống kê → H4 báo cáo tự động) và quyết định đã chốt: **`docs/INVOICE_AND_REPORTING_PLAN.md`**. Bắt đầu sau khi hai lệnh PayOS LLR5-1/LLP1-1 xong và bạn duyệt hướng triển khai (mục 1 #5).
 
 ### B. Chi tự động PayOS — còn lại sau lõi
 - Xác nhận thật (khi PayOS chi xong): hoàn tiền tự ghi "đã chuyển" + học viên nhận thông báo/email; rút tiền giảng viên tự ghi "đã chuyển".

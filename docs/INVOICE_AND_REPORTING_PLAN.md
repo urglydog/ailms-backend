@@ -1,6 +1,6 @@
 # Kế hoạch: Hóa đơn / chứng từ & Thống kê – Báo cáo tự động (đề xuất 15/11/2026)
 
-> Trạng thái: **ĐỀ XUẤT, CHƯA LÀM** — chờ chủ dự án duyệt phạm vi và trả lời các câu hỏi ở mục 8 (theo CLAUDE.md: việc mới / đổi schema phải confirm trước).
+> Trạng thái: **ĐÃ CHỐT PHẠM VI (15/11/2026), CHƯA LÀM** — chủ dự án đã trả lời các câu hỏi (mục 8). Bắt đầu code **sau khi hai lệnh chi PayOS LLR5-1 và LLP1-1 hoàn tất** và sau khi chủ dự án duyệt hướng triển khai ở mục 7 (theo CLAUDE.md: việc mới / đổi schema phải confirm trước).
 
 ## 1. Vấn đề
 - Mọi khoản tiền (học viên trả, hoàn tiền, chi trả giảng viên, trả nợ) hiện chỉ có **bản ghi trong DB và email chữ thuần**, không có chứng từ chính thức; email thanh toán không đính kèm hóa đơn/biên lai.
@@ -43,24 +43,48 @@ Nguyên tắc: **bất biến** (ảnh chụp dữ liệu lúc phát hành, đ�
 **Xuất:** CSV (và XLSX/PDF nếu duyệt), theo bộ lọc đang xem.
 **Tự động:** cấu hình lịch (ngày/tuần/tháng) + người nhận trong Cài đặt; job tạo báo cáo, lưu bản chụp (`report_snapshots`), gửi email kèm file; có nút "chạy ngay".
 
-## 7. Giai đoạn đề xuất
-1. **H1 – Lõi hóa đơn:** bảng + đánh số + biên lai thanh toán + PDF + đính kèm email + trang học viên + backfill.
-2. **H2 – Chứng từ còn lại:** phiếu hoàn, phiếu chi, biên lai nợ, bảng kê thu nhập tháng (giảng viên).
-3. **H3 – Minh bạch chi phí & quản trị chứng từ:** thêm phí cổng vào đơn, màn quản lý/xuất CSV cho admin.
-4. **H4 – Thống kê tài chính admin:** API + trang + xuất; màn đối soát.
-5. **H5 – Báo cáo tự động:** lịch, email, bản chụp, cài đặt.
-6. **H6 (tùy chọn) – Hóa đơn điện tử pháp lý:** nối nhà cung cấp (xem câu hỏi 1).
+## 7. Giai đoạn triển khai (theo quyết định ở mục 8 — chờ duyệt trước khi code)
+1. **H1 – Lõi chứng từ (gộp H1+H2 cũ, theo D1):**
+   - Migration: `invoices`, `invoice_lines`, `invoice_sequences`; lưu **phí cổng thanh toán** vào đơn (cần để in phí đầy đủ trên biên lai học viên — B3).
+   - Đánh số `LOẠI-YYYYMM-STT` (RCP biên lai, RFD phiếu hoàn, PAY phiếu chi, DBT biên lai nợ, STM bảng kê tháng giảng viên, PLT bảng kê nền tảng), khóa dòng bộ đếm.
+   - Phát hành tự động khi: đơn PAID, hoàn tiền được duyệt/đã chuyển, yêu cầu rút ở PAID, trả nợ thành công; job bảng kê tháng.
+   - PDF **tiếng Anh mặc định** (OpenPDF, nhúng font để in đúng tên tiếng Việt), ghi "Internal electronic receipt, not a VAT invoice"; đính kèm email thanh toán/hoàn tiền (B2).
+   - FE: trang Hóa đơn của học viên, tab Chứng từ của giảng viên, nút tải trong chi tiết giao dịch.
+   - **Backfill** một lần cho giao dịch cũ, bỏ qua tài khoản demo (B4).
+2. **H2 – Quản trị chứng từ:** màn admin lọc theo loại/kỳ/người, tải PDF, xuất CSV; bảng kê nền tảng.
+3. **H3 – Thống kê tài chính admin:** API + trang theo kỳ/khóa/giảng viên; xuất **CSV + XLSX + PDF**; màn đối soát PayOS với sổ cái.
+4. **H4 – Báo cáo tự động:** lịch ngày/tuần/tháng cấu hình được, người nhận trong Cài đặt, bản chụp `report_snapshots`, gửi email kèm file, nút "chạy ngay".
+5. **(Không làm)** Hóa đơn điện tử pháp lý — chỉ chừa điểm nối (A1 chọn biên lai nội bộ).
 
-Mỗi giai đoạn: migration + `mvn clean verify` + test; tách PR; sao lưu DB trước khi deploy (quy trình ở `PAYMENT_PAYOUT_EPIC.md`).
+Mỗi giai đoạn: migration + `mvn clean verify` + test; tách PR; sao lưu DB trước khi deploy (quy trình ở `PAYMENT_PAYOUT_EPIC.md`). XLSX cần thêm thư viện (đề xuất Apache POI) — là thay đổi dependency, confirm trước khi thêm.
 
-## 8. Câu hỏi cần chủ dự án quyết định
-1. **Pháp lý:** cần **hóa đơn điện tử đúng quy định thuế** (cần nhà cung cấp được cấp phép, mã số thuế, mẫu số/ký hiệu) hay chỉ **biên lai/phiếu thu nội bộ** cho đề tài (khuyến nghị làm biên lai nội bộ trước, chừa điểm nối nhà cung cấp)? Cần kiểm tra với người có chuyên môn thuế trước khi dùng thật.
-2. **Bên phát hành & thông tin pháp nhân** của nền tảng (tên, địa chỉ, mã số thuế, logo), giá đã gồm/chưa gồm thuế, thuế suất.
-3. Định dạng **số chứng từ** (đề xuất `LOẠI-YYYYMM-STT`).
-4. Ngôn ngữ PDF: chỉ tiếng Việt hay 4 ngôn ngữ như giao diện?
-5. Danh sách **chỉ số** cần có ở thống kê (ưu tiên), định dạng xuất (CSV/XLSX/PDF), **lịch** và **người nhận** báo cáo tự động.
-6. Có **backfill** chứng từ cho giao dịch cũ (kể cả dữ liệu demo) không?
-7. Thời gian lưu trữ chứng từ.
+## 8. Quyết định của chủ dự án (15/11/2026)
+| Mã | Quyết định |
+|---|---|
+| A1 | **Biên lai điện tử nội bộ** (không phải hóa đơn GTGT), chừa điểm nối nhà cung cấp hóa đơn điện tử |
+| A2 | Bên phát hành = **LinguaLearn**, ghi chú đề tài, chưa có mã số thuế; thông tin sửa được trong Cài đặt |
+| A3 | **Không ghi thuế** |
+| A4 | Số chứng từ `LOẠI-YYYYMM-STT` |
+| A5 | PDF **tiếng Anh mặc định** (cho chuyên nghiệp) |
+| B1 | Làm đủ: biên lai thanh toán, phiếu hoàn, phiếu chi, biên lai công nợ, bảng kê thu nhập tháng (GV), bảng kê nền tảng (admin) |
+| B2 | **Đính kèm PDF** vào email thanh toán/hoàn tiền |
+| B3 | Biên lai học viên **hiện đầy đủ cả phí** (phí nền tảng, phí cổng) — khác đề xuất ban đầu |
+| B4 | **Backfill** giao dịch cũ, **bỏ qua tài khoản demo** |
+| B5 | Lưu trữ **có thời hạn** (ví dụ 10 năm) |
+| C1 | Doanh thu gộp/ròng + phí nền tảng + phí cổng; hoàn tiền (số tiền, tỷ lệ); chi trả GV + nghĩa vụ chưa trả + công nợ phải thu; đối soát PayOS với sổ cái |
+| C2 | Chiều xem: kỳ (ngày/tuần/tháng), khóa học, giảng viên (không làm danh mục) |
+| C3 | Xuất **CSV + XLSX + PDF** |
+| C4 | Lịch báo cáo tự động **cấu hình được** ngày/tuần/tháng |
+| D1 | **Gộp H1 và H2** làm một lượt |
+| D2 | Bắt đầu **sau khi hai lệnh PayOS LLR5-1 và LLP1-1 hoàn tất** |
+
+### Còn cần chốt (phát sinh từ các quyết định trên)
+1. **Tài khoản demo** nhận diện thế nào để backfill bỏ qua (theo đuôi email `@lms.local`, theo cờ, hay danh sách cụ thể)?
+2. **Phí cổng thanh toán:** lấy giá trị từ đâu (PayOS có trả phí theo giao dịch không, hay theo tỷ lệ cấu hình)? Đơn cũ chưa có phí cổng thì in "N/A" hay ước tính?
+3. **Thời hạn lưu trữ:** chốt con số (đề xuất 10 năm, cấu hình được); khi hết hạn xóa hay chỉ ẩn?
+4. **Phí hiển thị trên biên lai học viên:** xác nhận hiển thị cả tỷ lệ chia giảng viên hay chỉ số tiền phí.
+5. **Người nhận báo cáo tự động:** chỉ admin hay có thể thêm email ngoài hệ thống.
+6. Chấp thuận thêm **Apache POI** cho XLSX.
 
 ## 9. Rủi ro / lưu ý
 - Font tiếng Việt trong PDF (nhúng font); số tiền dùng `BigDecimal`, múi giờ `Asia/Ho_Chi_Minh`.
