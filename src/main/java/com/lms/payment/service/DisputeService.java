@@ -268,7 +268,7 @@ public class DisputeService {
                 "DISPUTE_RESOLVED",
                 "Khiếu nại của bạn đã được xử lý",
                 refunded
-                        ? "Giao dịch " + dispute.getPayment().getTxnRef() + " đã được chấp nhận hoàn tiền. Chúng tôi sẽ chuyển khoản cho bạn và báo lại ngay khi đã chuyển."
+                        ? "Giao dịch " + dispute.getPayment().getTxnRef() + " đã được chấp nhận hoàn tiền. Hệ thống sẽ chi trả khoản hoàn vào tài khoản bạn đã khai và báo lại khi hoàn tất."
                         : "Giao dịch " + dispute.getPayment().getTxnRef() + " không được chấp nhận hoàn tiền.",
                 "/disputes/new"
         );
