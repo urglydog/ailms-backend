@@ -288,6 +288,11 @@ public class PayoutService {
         payout.setApprovedAt(LocalDateTime.now());
         InstructorPayout saved = payoutRepository.save(payout);
         audit(adminEmail, "PAYOUT_APPROVED", saved, Map.of("status", "REQUESTED"), snapshot(saved));
+        // Giảng viên phải biết yêu cầu đã được duyệt (trước đây chỉ có thông báo khi đã chi/từ chối).
+        notificationService.notify(saved.getInstructor().getId(), "PAYOUT_APPROVED", "Yêu cầu rút tiền đã được duyệt",
+                "Yêu cầu " + saved.getCode() + " (" + formatVnd(saved.getAmount()) + ") đã được duyệt và sẽ được chuyển vào "
+                        + saved.getBankName() + " " + PayoutCrypto.mask(saved.getAccountLast4()) + ". Bạn sẽ nhận thông báo khi tiền đã được chuyển.",
+                "/instructor/earnings");
         return toAdminRes(saved);
     }
 

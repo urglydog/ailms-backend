@@ -305,6 +305,7 @@ class PayoutServiceTest {
         assertThat(p.getApprovedBy()).isSameAs(admin);
         assertThat(p.getApprovedAt()).isNotNull();
         verify(auditService).record(eq(ADMIN_EMAIL), eq("PAYOUT_APPROVED"), eq("payout"), anyString(), any(), any());
+        verify(notificationService).notify(eq(7L), eq("PAYOUT_APPROVED"), anyString(), anyString(), eq("/instructor/earnings"));
 
         for (PayoutStatus bad : new PayoutStatus[]{PayoutStatus.PENDING_EMAIL, PayoutStatus.APPROVED, PayoutStatus.PAID,
                 PayoutStatus.REJECTED, PayoutStatus.CANCELLED, PayoutStatus.FAILED}) {
