@@ -154,6 +154,10 @@ services:
       PAYOS_CLIENT_ID: ${PAYOS_CLIENT_ID:-}
       PAYOS_API_KEY: ${PAYOS_API_KEY:-}
       PAYOS_CHECKSUM_KEY: ${PAYOS_CHECKSUM_KEY:-}
+      # Kênh CHI HỘ của PayOS (kênh riêng, có Client ID/API Key/Checksum Key riêng). Để trống = dùng lại 3 khóa thanh toán ở trên.
+      PAYOS_PAYOUT_CLIENT_ID: ${PAYOS_PAYOUT_CLIENT_ID:-}
+      PAYOS_PAYOUT_API_KEY: ${PAYOS_PAYOUT_API_KEY:-}
+      PAYOS_PAYOUT_CHECKSUM_KEY: ${PAYOS_PAYOUT_CHECKSUM_KEY:-}
       PAYOS_RETURN_URL: ${PAYOS_RETURN_URL:-}
       PAYOS_CANCEL_URL: ${PAYOS_CANCEL_URL:-}
       ZALOPAY_APP_ID: ${ZALOPAY_APP_ID:-}

@@ -294,4 +294,77 @@ class PayosPayoutServiceTest {
         assertThat(res.status()).isEqualTo(PayosOrderStatus.SUCCEEDED);
         verify(disputeService).markTransferred(eq(ADMIN), eq(4L), any());
     }
+
+    @Test
+    void manualRecording_isBlockedWhileAPayosOrderIsInFlightOrUnknown_butAllowedAfterFailure() {
+        for (PayosOrderStatus st : new PayosOrderStatus[] {PayosOrderStatus.PENDING, PayosOrderStatus.SUBMITTED, PayosOrderStatus.UNKNOWN}) {
+            PayosPayoutOrder o = new PayosPayoutOrder();
+            o.setReferenceId("LLP5-1");
+            o.setStatus(st);
+            when(orderRepository.findFirstByKindAndEntityIdOrderByAttemptDesc(PayosOrderKind.INSTRUCTOR_PAYOUT, 5L)).thenReturn(Optional.of(o));
+            assertThatThrownBy(() -> service.assertNoInFlightOrder(PayosOrderKind.INSTRUCTOR_PAYOUT, 5L))
+                    .as(st.name()).isInstanceOf(BusinessRuleViolationException.class);
+        }
+        PayosPayoutOrder failed = new PayosPayoutOrder();
+        failed.setReferenceId("LLP5-1");
+        failed.setStatus(PayosOrderStatus.FAILED);
+        when(orderRepository.findFirstByKindAndEntityIdOrderByAttemptDesc(PayosOrderKind.INSTRUCTOR_PAYOUT, 5L)).thenReturn(Optional.of(failed));
+        service.assertNoInFlightOrder(PayosOrderKind.INSTRUCTOR_PAYOUT, 5L);
+        when(orderRepository.findFirstByKindAndEntityIdOrderByAttemptDesc(PayosOrderKind.INSTRUCTOR_PAYOUT, 6L)).thenReturn(Optional.empty());
+        service.assertNoInFlightOrder(PayosOrderKind.INSTRUCTOR_PAYOUT, 6L);
+    }
+
+    @Test
+    void retryOfAnUnknownOrder_firstAsksPayosWhetherItExists_andNeverCreatesItTwice() {
+        approvedPayout(200_000);
+        fundsOk();
+        when(gateway.create(any())).thenThrow(new RuntimeException("timeout"));
+        assertThat(service.transferInstructorPayout(ADMIN, 5L).status()).isEqualTo(PayosOrderStatus.UNKNOWN);
+
+        // Lần gửi đầu thực ra ĐÃ tới PayOS và thành công; gửi lại phải thấy nó qua tra theo mã tham chiếu.
+        when(orderRepository.findFirstByKindAndEntityIdOrderByAttemptDesc(PayosOrderKind.INSTRUCTOR_PAYOUT, 5L)).thenReturn(Optional.of(stored));
+        when(gateway.findByReferenceId("LLP5-1")).thenReturn(Optional.of(result("SUCCEEDED", "NGUYEN CHI THIEN")));
+
+        PayosDto.OrderRes res = service.transferInstructorPayout(ADMIN, 5L);
+
+        assertThat(res.status()).isEqualTo(PayosOrderStatus.SUCCEEDED);
+        verify(gateway, org.mockito.Mockito.times(1)).create(any()); // chỉ lần đầu
+        verify(payoutService).markPaid(ADMIN, 5L, "PAYOS-FT123", null);
+    }
+
+    @Test
+    void idempotencyAlreadyExists_isNotAFailure_itIsResolvedByLookup() {
+        approvedPayout(200_000);
+        fundsOk();
+        when(gateway.create(any())).thenThrow(new APIException("conflict", 400, "ERR", "Idempotency key đã tồn tại"));
+        when(gateway.findByReferenceId("LLP5-1")).thenReturn(Optional.of(result("SUCCEEDED", null)));
+
+        PayosDto.OrderRes res = service.transferInstructorPayout(ADMIN, 5L);
+
+        assertThat(res.status()).isEqualTo(PayosOrderStatus.SUCCEEDED);
+        verify(payoutService).markPaid(ADMIN, 5L, "PAYOS-FT123", null);
+    }
+
+    @Test
+    void idempotencyAlreadyExists_whenTheLookupFindsNothing_staysUnknownInsteadOfFailed() {
+        approvedPayout(200_000);
+        fundsOk();
+        when(gateway.create(any())).thenThrow(new APIException("conflict", 400, "ERR", "Idempotency key đã tồn tại"));
+
+        PayosDto.OrderRes res = service.transferInstructorPayout(ADMIN, 5L);
+
+        assertThat(res.status()).isEqualTo(PayosOrderStatus.UNKNOWN);
+        verify(payoutService, never()).markFailed(anyString(), anyLong(), anyString());
+    }
+
+    @Test
+    void estimateSmallerThanTheAmount_isTreatedAsAFee_soTheBalanceMustCoverAmountPlusFee() {
+        approvedPayout(200_000);
+        when(gateway.estimateCredit(any())).thenReturn(5_000L); // chỉ là phí
+        when(gateway.balance()).thenReturn(203_000L);           // đủ tiền chi nhưng thiếu phí
+
+        assertThatThrownBy(() -> service.transferInstructorPayout(ADMIN, 5L))
+                .isInstanceOf(BusinessRuleViolationException.class).hasMessageContaining("không đủ");
+        verify(gateway, never()).create(any());
+    }
 }

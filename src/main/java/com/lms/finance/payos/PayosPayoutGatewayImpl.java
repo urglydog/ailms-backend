@@ -1,11 +1,11 @@
 package com.lms.finance.payos;
 
 import com.lms.common.service.SystemConfigService;
-import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import vn.payos.PayOS;
+import vn.payos.model.v1.payouts.GetPayoutListParams;
 import vn.payos.model.v1.payouts.Payout;
 import vn.payos.model.v1.payouts.PayoutRequests;
 import vn.payos.model.v1.payouts.PayoutTransaction;
@@ -60,6 +60,12 @@ public class PayosPayoutGatewayImpl implements PayosPayoutGateway {
     }
 
     @Override
+    public java.util.Optional<TransferResult> findByReferenceId(String referenceId) {
+        var page = client.payouts().list(GetPayoutListParams.builder().referenceId(referenceId).limit(1).offset(0).build());
+        return page.getItems().stream().findFirst().map(PayosPayoutGatewayImpl::toResult);
+    }
+
+    @Override
     public TransferResult get(String payoutId) {
         return toResult(client.payouts().get(payoutId));
     }
@@ -71,7 +77,6 @@ public class PayosPayoutGatewayImpl implements PayosPayoutGateway {
                 .description(r.description())
                 .toBin(r.bankBin())
                 .toAccountNumber(r.accountNumber())
-                .category(List.of("other"))
                 .build();
     }
 
