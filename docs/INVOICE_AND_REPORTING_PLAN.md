@@ -21,7 +21,7 @@
 | **Phiếu chi** | yêu cầu rút ở trạng thái PAID | giảng viên | số tiền, tài khoản (che), mã PayOS/ngân hàng, kỳ rút |
 | **Bảng kê thu nhập theo kỳ** (tháng) | đầu tháng sau (job) | giảng viên | từng đơn: giá, tỷ lệ chia, phần giảng viên; trừ hoàn tiền; bù trừ công nợ; đã rút; số dư |
 | **Biên lai công nợ** | trả nợ qua PayOS thành công / xóa nợ | giảng viên | số tiền, nợ còn lại |
-| **Bảng kê nền tảng** (nội bộ) | theo kỳ | admin | phí nền tảng thu được, phí cổng, hoàn tiền, chi trả, công nợ |
+| **Bảng kê nền tảng** (nội bộ) | theo kỳ | admin | phí nền tảng thu được, hoàn tiền, chi trả, công nợ |
 
 Nguyên tắc: **bất biến** (ảnh chụp dữ liệu lúc phát hành, đổi giá sau không đổi chứng từ), **không sửa mà hủy bằng phiếu điều chỉnh**, **idempotent** (mỗi nguồn giao dịch chỉ một chứng từ).
 
@@ -39,24 +39,25 @@ Nguyên tắc: **bất biến** (ảnh chụp dữ liệu lúc phát hành, đ�
 - API: `GET /api/v1/invoices` (của tôi), `GET /api/v1/invoices/{id}/pdf`, `GET /api/v1/admin/invoices`, `.../export.csv`.
 
 ## 6. Thống kê & báo cáo admin
-**Chỉ số (ưu tiên tài chính):** doanh thu gộp/ròng, phí nền tảng, phí cổng thanh toán, tổng hoàn tiền và tỷ lệ hoàn, chi trả giảng viên (chờ duyệt/đã duyệt/đã chi), **nghĩa vụ chưa trả** (tổng số dư giảng viên), công nợ phải thu, đối soát PayOS (vào/ra) với sổ cái; theo kỳ/khóa/giảng viên/danh mục. Mở rộng: người dùng mới, hoạt động học, sử dụng AI (đã có một phần ở `ai-analytics`).
+**Chỉ số (ưu tiên tài chính):** doanh thu gộp/ròng, phí nền tảng (cổng không thu phí nên không có phí cổng), tổng hoàn tiền và tỷ lệ hoàn, chi trả giảng viên (chờ duyệt/đã duyệt/đã chi), **nghĩa vụ chưa trả** (tổng số dư giảng viên), công nợ phải thu, đối soát PayOS (vào/ra) với sổ cái; theo kỳ/khóa/giảng viên. Mở rộng: người dùng mới, hoạt động học, sử dụng AI (đã có một phần ở `ai-analytics`).
 **Xuất:** CSV (và XLSX/PDF nếu duyệt), theo bộ lọc đang xem.
 **Tự động:** cấu hình lịch (ngày/tuần/tháng) + người nhận trong Cài đặt; job tạo báo cáo, lưu bản chụp (`report_snapshots`), gửi email kèm file; có nút "chạy ngay".
 
 ## 7. Giai đoạn triển khai (theo quyết định ở mục 8 — chờ duyệt trước khi code)
 1. **H1 – Lõi chứng từ (gộp H1+H2 cũ, theo D1):**
-   - Migration: `invoices`, `invoice_lines`, `invoice_sequences`; lưu **phí cổng thanh toán** vào đơn (cần để in phí đầy đủ trên biên lai học viên — B3).
+   - Migration: `invoices`, `invoice_lines`, `invoice_sequences` (không cần cột phí cổng — cổng không thu phí).
    - Đánh số `LOẠI-YYYYMM-STT` (RCP biên lai, RFD phiếu hoàn, PAY phiếu chi, DBT biên lai nợ, STM bảng kê tháng giảng viên, PLT bảng kê nền tảng), khóa dòng bộ đếm.
    - Phát hành tự động khi: đơn PAID, hoàn tiền được duyệt/đã chuyển, yêu cầu rút ở PAID, trả nợ thành công; job bảng kê tháng.
+   - Biên lai học viên chỉ hiện giá/khuyến mãi/tổng đã trả; bảng kê giảng viên mới hiện tỷ lệ chia và phí nền tảng.
    - PDF **tiếng Anh mặc định** (OpenPDF, nhúng font để in đúng tên tiếng Việt), ghi "Internal electronic receipt, not a VAT invoice"; đính kèm email thanh toán/hoàn tiền (B2).
    - FE: trang Hóa đơn của học viên, tab Chứng từ của giảng viên, nút tải trong chi tiết giao dịch.
-   - **Backfill** một lần cho giao dịch cũ, bỏ qua tài khoản demo (B4).
+   - **Backfill** một lần cho giao dịch cũ, bỏ qua tài khoản đuôi `@example.com` (B4).
 2. **H2 – Quản trị chứng từ:** màn admin lọc theo loại/kỳ/người, tải PDF, xuất CSV; bảng kê nền tảng.
 3. **H3 – Thống kê tài chính admin:** API + trang theo kỳ/khóa/giảng viên; xuất **CSV + XLSX + PDF**; màn đối soát PayOS với sổ cái.
 4. **H4 – Báo cáo tự động:** lịch ngày/tuần/tháng cấu hình được, người nhận trong Cài đặt, bản chụp `report_snapshots`, gửi email kèm file, nút "chạy ngay".
 5. **(Không làm)** Hóa đơn điện tử pháp lý — chỉ chừa điểm nối (A1 chọn biên lai nội bộ).
 
-Mỗi giai đoạn: migration + `mvn clean verify` + test; tách PR; sao lưu DB trước khi deploy (quy trình ở `PAYMENT_PAYOUT_EPIC.md`). XLSX cần thêm thư viện (đề xuất Apache POI) — là thay đổi dependency, confirm trước khi thêm.
+Mỗi giai đoạn: migration + `mvn clean verify` + test; tách PR; sao lưu DB trước khi deploy (quy trình ở `PAYMENT_PAYOUT_EPIC.md`). XLSX: ghi dạng luồng, nhẹ (xem "Đã chốt thêm" #6); thêm dependency phải confirm.
 
 ## 8. Quyết định của chủ dự án (15/11/2026)
 | Mã | Quyết định |
@@ -68,23 +69,23 @@ Mỗi giai đoạn: migration + `mvn clean verify` + test; tách PR; sao lưu DB
 | A5 | PDF **tiếng Anh mặc định** (cho chuyên nghiệp) |
 | B1 | Làm đủ: biên lai thanh toán, phiếu hoàn, phiếu chi, biên lai công nợ, bảng kê thu nhập tháng (GV), bảng kê nền tảng (admin) |
 | B2 | **Đính kèm PDF** vào email thanh toán/hoàn tiền |
-| B3 | Biên lai học viên **hiện đầy đủ cả phí** (phí nền tảng, phí cổng) — khác đề xuất ban đầu |
+| B3 | ~~Hiện đầy đủ cả phí~~ → **đã đổi:** biên lai học viên chỉ hiện giá/khuyến mãi/tổng đã trả (xem "Đã chốt thêm" #4) |
 | B4 | **Backfill** giao dịch cũ, **bỏ qua tài khoản demo** |
-| B5 | Lưu trữ **có thời hạn** (ví dụ 10 năm) |
-| C1 | Doanh thu gộp/ròng + phí nền tảng + phí cổng; hoàn tiền (số tiền, tỷ lệ); chi trả GV + nghĩa vụ chưa trả + công nợ phải thu; đối soát PayOS với sổ cái |
+| B5 | ~~Có thời hạn 10 năm~~ → **đã đổi: lưu vĩnh viễn**, thiết kế bất biến theo chuẩn hệ thống lớn (xem "Đã chốt thêm" #3) |
+| C1 | Doanh thu gộp/ròng + phí nền tảng (không có phí cổng — cổng không thu phí); hoàn tiền (số tiền, tỷ lệ); chi trả GV + nghĩa vụ chưa trả + công nợ phải thu; đối soát PayOS với sổ cái |
 | C2 | Chiều xem: kỳ (ngày/tuần/tháng), khóa học, giảng viên (không làm danh mục) |
 | C3 | Xuất **CSV + XLSX + PDF** |
 | C4 | Lịch báo cáo tự động **cấu hình được** ngày/tuần/tháng |
 | D1 | **Gộp H1 và H2** làm một lượt |
 | D2 | Bắt đầu **sau khi hai lệnh PayOS LLR5-1 và LLP1-1 hoàn tất** |
 
-### Còn cần chốt (phát sinh từ các quyết định trên)
-1. **Tài khoản demo** nhận diện thế nào để backfill bỏ qua (theo đuôi email `@lms.local`, theo cờ, hay danh sách cụ thể)?
-2. **Phí cổng thanh toán:** lấy giá trị từ đâu (PayOS có trả phí theo giao dịch không, hay theo tỷ lệ cấu hình)? Đơn cũ chưa có phí cổng thì in "N/A" hay ước tính?
-3. **Thời hạn lưu trữ:** chốt con số (đề xuất 10 năm, cấu hình được); khi hết hạn xóa hay chỉ ẩn?
-4. **Phí hiển thị trên biên lai học viên:** xác nhận hiển thị cả tỷ lệ chia giảng viên hay chỉ số tiền phí.
-5. **Người nhận báo cáo tự động:** chỉ admin hay có thể thêm email ngoài hệ thống.
-6. Chấp thuận thêm **Apache POI** cho XLSX.
+### Đã chốt thêm (15/11/2026, sau câu hỏi bổ sung)
+1. **Tài khoản ảo/demo:** nhận diện theo **đuôi email `@example.com`** — backfill và thống kê bỏ qua các tài khoản này (cấu hình đuôi trong Cài đặt để đổi được).
+2. **Phí cổng thanh toán = 0:** cổng không thu phí nên **không có cột/dòng phí cổng** trên chứng từ và thống kê; hoàn 10k thì đúng 10k rời khỏi nền tảng. Bỏ "phí cổng" khỏi chỉ số C1 và khỏi migration (không cần thêm cột phí cổng vào đơn). Nếu sau này đổi cổng có phí thì thêm lúc đó.
+3. **Lưu trữ vĩnh viễn** (thay cho "có thời hạn 10 năm" ở B5): thiết kế theo chuẩn hệ thống lớn — chứng từ **bất biến**, không xóa/sửa, sai thì **hủy bằng phiếu điều chỉnh/ghi có**, đánh số liên tục không đứt quãng, mọi thao tác có nhật ký (`finance_audit_log`). Không cần job dọn dữ liệu cũ. Không lưu PDF, sinh từ ảnh chụp dữ liệu (`snapshot_json`) nên DB không phình.
+4. **Biên lai học viên chỉ hiện số liên quan đến họ:** giá khóa học, khuyến mãi/giảm giá (nếu có), **tổng đã trả**, phương thức, mã giao dịch, ngày. **Không** hiện phí nền tảng, tỷ lệ chia giảng viên hay phí cổng (đảo ngược quyết định B3 trước đó). Phí nền tảng/phần giảng viên chỉ xuất hiện ở bảng kê giảng viên và bảng kê nền tảng (admin).
+5. **Báo cáo tự động:** người nhận mặc định **chỉ admin**, xem trên giao diện hoặc nhận file qua email. **Bảng kê thu nhập tháng gửi cho từng giảng viên** qua email của họ, có **công tắc bật/tắt trong Cài đặt hệ thống** (tắt thì giảng viên vẫn tải được trên giao diện).
+6. **XLSX nhẹ, không làm sập server:** không dùng Apache POI bản đầy đủ (dựng cả bảng tính trong RAM). Dùng ghi **dạng luồng** (POI SXSSF hoặc bộ ghi XLSX tối giản tự viết bằng zip+XML), giới hạn số dòng mỗi lần xuất, chạy tuần tự (không song song), PDF báo cáo chỉ tóm tắt + bảng giới hạn dòng. Quyết định thư viện cuối cùng khi code, đo bộ nhớ trước (server 3.8GB).
 
 ## 9. Rủi ro / lưu ý
 - Font tiếng Việt trong PDF (nhúng font); số tiền dùng `BigDecimal`, múi giờ `Asia/Ho_Chi_Minh`.
