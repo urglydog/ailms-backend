@@ -135,7 +135,8 @@ class RefundServiceTest {
         verify(ledgerService).recordRefundReversal(eq(payment), charge.capture(), eq(1L));
         assertThat(charge.getValue()).isEqualByComparingTo("370000");
         verify(financeAuditService).record(eq(ADMIN_EMAIL), eq("REFUND_APPROVED"), eq("payment"), eq("txn-100"), any(), any());
-        verify(notificationService).notify(eq(3L), eq("REFUND_APPROVED_INSTRUCTOR"), anyString(), anyString(), anyString());
+        verify(notificationService).notify(eq(3L), eq("REFUND_APPROVED_INSTRUCTOR"), eq("Thu nhập của bạn bị trừ do học viên được hoàn tiền"),
+                org.mockito.ArgumentMatchers.contains("bị trừ 370.000đ"), anyString());
     }
 
     @Test

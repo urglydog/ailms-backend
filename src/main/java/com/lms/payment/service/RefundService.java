@@ -227,10 +227,12 @@ public class RefundService {
         if (instructor == null) {
             return;
         }
-        StringBuilder text = new StringBuilder("Giao dịch " + payment.getTxnRef() + " khóa \"" + payment.getCourse().getTitle() + "\" đã hoàn tiền. ");
-        text.append(charge.signum() > 0
-                ? "Thu nhập của bạn bị trừ " + charge.toBigInteger() + "đ."
-                : "Thu nhập của bạn không bị trừ (nền tảng chịu).");
+        boolean charged = charge.signum() > 0;
+        String course = payment.getCourse().getTitle();
+        StringBuilder text = new StringBuilder("Học viên đã được hoàn tiền cho khóa \"" + course + "\" (giao dịch " + payment.getTxnRef() + "). ");
+        text.append(charged
+                ? "Thu nhập của bạn từ đơn này bị trừ " + vnd(charge) + "."
+                : "Thu nhập của bạn từ đơn này không bị trừ.");
         if (code != null) {
             text.append(" Lý do: ").append(reasonLabel(code)).append('.');
         }
@@ -239,8 +241,16 @@ public class RefundService {
             text.append(" Minh chứng: ").append(evidenceNote == null ? "" : evidenceNote.trim()).append('.');
             text.append(" Bạn có ").append(appealDays()).append(" ngày để khiếu nại quyết định này trong mục Hoàn tiền.");
         }
+        // Tiêu đề viết cho GIẢNG VIÊN: nói việc xảy ra với thu nhập của họ, không phải câu của học viên ("đã được hoàn tiền").
         notificationService.notify(instructor.getId(), "REFUND_APPROVED_INSTRUCTOR",
-                "Một giao dịch khóa học của bạn đã được hoàn tiền", text.toString(), "/instructor/communication/refunds");
+                charged ? "Thu nhập của bạn bị trừ do học viên được hoàn tiền" : "Học viên được hoàn tiền, thu nhập của bạn không bị ảnh hưởng",
+                text.toString(), "/instructor/communication/refunds");
+    }
+
+    /** Số tiền kiểu Việt Nam: 3.700đ. */
+    private static String vnd(BigDecimal amount) {
+        var symbols = new java.text.DecimalFormatSymbols(java.util.Locale.forLanguageTag("vi-VN"));
+        return new java.text.DecimalFormat("#,##0", symbols).format(amount) + "đ";
     }
 
     private int appealDays() {
