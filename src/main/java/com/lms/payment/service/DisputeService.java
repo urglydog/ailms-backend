@@ -500,7 +500,7 @@ public class DisputeService {
         return new AccountEditability(true, null);
     }
 
-    private static String accountSummary(PaymentDispute d) {
+    static String accountSummary(PaymentDispute d) {
         if (d.getRefundBankCode() == null || d.getRefundAccountNumber() == null) {
             return null;
         }

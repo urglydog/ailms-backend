@@ -237,7 +237,7 @@ class PayoutServiceTest {
         assertThat(res.status()).isEqualTo(PayoutStatus.REQUESTED);
         assertThat(p.getEmailConfirmedAt()).isNotNull();
         assertThat(p.getScheduledFor()).isAfter(LocalDate.now());
-        verify(emailService).sendPayoutRequestedEmail(eq(EMAIL), eq("PO-202611-000001"), eq(new BigDecimal("200000")), any());
+        verify(emailService).sendPayoutRequestedEmail(eq(EMAIL), any(), eq("PO-202611-000001"), eq(new BigDecimal("200000")), any());
         verify(notificationService).notify(eq(1L), eq("PAYOUT_REQUESTED"), anyString(), anyString(), anyString());
     }
 
@@ -326,8 +326,8 @@ class PayoutServiceTest {
         assertThat(p.getTransferRef()).isEqualTo("FT123");
         assertThat(p.getProofUrl()).isEqualTo("http://proof");
         assertThat(p.getPaidBy()).isSameAs(admin);
-        verify(emailService).sendPayoutPaidEmail(EMAIL, "PO-202611-000001", new BigDecimal("200000"), "FT123");
-        verify(notificationService).notify(eq(7L), eq("PAYOUT_PAID"), anyString(), anyString(), anyString());
+        verify(emailService).sendPayoutPaidEmail(eq(EMAIL), any(), eq("PO-202611-000001"), eq(new BigDecimal("200000")), anyString(), any(), eq("FT123"));
+        verify(notificationService).notify(eq(7L), eq("PAYOUT_PAID"), eq("Rút tiền thành công"), org.mockito.ArgumentMatchers.contains("FT123"), anyString());
         verify(ledgerService, never()).recordPayoutRelease(any(), any(), any(), any()); // đã chi thật: KHÔNG trả lại số dư
 
         p.setStatus(PayoutStatus.REQUESTED);
@@ -339,12 +339,12 @@ class PayoutServiceTest {
         payout(PayoutStatus.REQUESTED);
         service.reject(ADMIN_EMAIL, 90L, " Sai thông tin ");
         verify(ledgerService).recordPayoutRelease(eq(instructor), eq(new BigDecimal("200000")), eq(90L), anyString());
-        verify(emailService).sendPayoutRejectedEmail(EMAIL, "PO-202611-000001", new BigDecimal("200000"), "Sai thông tin", false);
+        verify(emailService).sendPayoutRejectedEmail(eq(EMAIL), any(), eq("PO-202611-000001"), eq(new BigDecimal("200000")), eq("Sai thông tin"), eq(false));
 
         InstructorPayout failing = payout(PayoutStatus.APPROVED);
         service.markFailed(ADMIN_EMAIL, 90L, "Ngân hàng từ chối");
         assertThat(failing.getStatus()).isEqualTo(PayoutStatus.FAILED);
-        verify(emailService).sendPayoutRejectedEmail(EMAIL, "PO-202611-000001", new BigDecimal("200000"), "Ngân hàng từ chối", true);
+        verify(emailService).sendPayoutRejectedEmail(eq(EMAIL), any(), eq("PO-202611-000001"), eq(new BigDecimal("200000")), eq("Ngân hàng từ chối"), eq(true));
         verify(notificationService, times(2)).notify(eq(7L), eq("PAYOUT_REJECTED"), anyString(), anyString(), anyString());
     }
 

@@ -237,9 +237,10 @@ class RefundServiceTest {
         assertThat(saved.getTransferRef()).isEqualTo("FT26111100123");
         assertThat(saved.getTransferredBy()).isSameAs(admin);
         assertThat(saved.getTransferredAt()).isNotNull();
-        verify(emailService).sendRefundTransferredEmail("hocvien@lms.local", "txn-100", "Unity co ban",
-                new BigDecimal("1000000"), "FT26111100123");
-        verify(notificationService).notify(eq(2L), eq("REFUND_TRANSFERRED"), anyString(), anyString(), anyString());
+        verify(emailService).sendRefundTransferredEmail(eq("hocvien@lms.local"), any(), eq("txn-100"), eq("Unity co ban"),
+                eq(new BigDecimal("1000000")), any(), any(), eq("FT26111100123"));
+        verify(notificationService).notify(eq(2L), eq("REFUND_TRANSFERRED"), eq("Hoàn tiền thành công"),
+                org.mockito.ArgumentMatchers.contains("FT26111100123"), anyString());
         verify(financeAuditService).record(eq(ADMIN_EMAIL), eq("REFUND_TRANSFERRED"), eq("payment"), eq("txn-100"), any(), any());
     }
 
@@ -257,7 +258,7 @@ class RefundServiceTest {
         assertThatThrownBy(() -> refundService.markTransferred(dispute, ADMIN_EMAIL, "REF2"))
                 .isInstanceOf(BusinessRuleViolationException.class);
 
-        verify(emailService, never()).sendRefundTransferredEmail(any(), any(), any(), any(), any());
+        verify(emailService, never()).sendRefundTransferredEmail(any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -311,6 +312,8 @@ class RefundServiceTest {
         assertThat(saved.getTransferStatus()).isEqualTo(RefundTransferStatus.AWAITING_ACCOUNT);
         verify(financeAuditService).record(eq("system"), eq("REFUND_AWAITING_ACCOUNT"), eq("payment"), eq("txn-100"), any(), any());
         verify(notificationService).notify(eq(2L), eq("REFUND_ACCOUNT_REQUIRED"), anyString(), anyString(), anyString());
+        verify(emailService).sendRefundAccountRequiredEmail(eq("hocvien@lms.local"), any(), eq("txn-100"), eq("Unity co ban"), any(),
+                eq("Tài khoản nhận không tìm thấy"));
     }
 
     @Test

@@ -436,6 +436,11 @@ public class PayosPayoutService {
             } else {
                 disputeService.markTransferred(email, order.getEntityId(), new DisputeDto.MarkTransferredReq(ref));
             }
+            // Kết quả đến muộn qua đối soát nền (không có admin nào đang bấm): báo admin để không phải tự mở trang xem.
+            if (actorEmail == null) {
+                notifyAdmins("PAYOS_PAYOUT_SUCCEEDED", "Chi tự động thành công",
+                        "Lệnh " + order.getReferenceId() + " (" + vnd(order.getAmount()) + ") đã được ngân hàng xác nhận và hệ thống đã ghi nhận.", adminLink(order));
+            }
         } catch (RuntimeException e) {
             // Tiền ĐÃ chuyển nhưng ghi nhận nội bộ lỗi: báo admin ghi nhận tay với đúng mã này (không để mất dấu).
             log.error("PayOS đã chi lệnh {} nhưng ghi nhận nội bộ lỗi: {}", order.getReferenceId(), e.getMessage());
