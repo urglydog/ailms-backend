@@ -166,26 +166,77 @@ public class EmailService {
         }
     }
 
-    /** Báo học viên: admin đã chuyển khoản tiền hoàn (11/11/2026, Giai đoạn B). Best-effort: lỗi gửi mail không làm hỏng việc ghi nhận. */
-    public void sendRefundTransferredEmail(String toEmail, String txnRef, String courseTitle,
-                                           BigDecimal amount, String transferRef) {
+    /**
+     * Báo học viên khoản hoàn tiền ĐÃ được chuyển (11/11/2026; viết lại 16/11/2026 theo khung email hỗ trợ: lời chào, bảng tóm tắt, mục lưu ý,
+     * chữ ký). Best-effort: lỗi gửi mail không làm hỏng việc ghi nhận. {@code accountSummary} đã che số (chỉ 4 số cuối), có thể null.
+     */
+    public void sendRefundTransferredEmail(String toEmail, String recipientName, String txnRef, String courseTitle, BigDecimal amount,
+                                           String accountSummary, LocalDateTime transferredAt, String transferRef) {
         try {
-            sendHtmlMail(toEmail, "Đã chuyển tiền hoàn cho giao dịch " + txnRef,
-                    "Chúng tôi đã chuyển khoản số tiền hoàn " + formatVnd(amount) + " cho giao dịch " + txnRef
-                            + " (khóa học: " + courseTitle + "). Mã chuyển khoản: " + transferRef
-                            + ". Nếu sau vài giờ bạn chưa nhận được tiền, hãy mở lại khiếu nại trong mục Khiếu nại giao dịch.",
-                    supportMailShell("Đã chuyển tiền hoàn",
-                            paragraph("Chúng tôi đã chuyển khoản số tiền hoàn cho giao dịch của bạn.")
-                                    + summaryTable(new String[][]{
-                                            {"Mã giao dịch", HtmlUtils.htmlEscape(txnRef)},
-                                            {"Khóa học", HtmlUtils.htmlEscape(courseTitle)},
-                                            {"Số tiền hoàn", formatVnd(amount)},
-                                            {"Mã chuyển khoản", HtmlUtils.htmlEscape(transferRef)}})
-                                    + paragraph("Nếu sau vài giờ bạn chưa nhận được tiền, hãy mở lại khiếu nại trong mục "
-                                            + "<strong>Khiếu nại giao dịch</strong>.")));
-            log.info("Da gui email chuyen tien hoan den {} cho giao dich {}", toEmail, txnRef);
+            String when = (transferredAt == null ? LocalDateTime.now() : transferredAt).format(SUPPORT_TIME_FORMAT);
+            java.util.List<String[]> rows = new java.util.ArrayList<>(java.util.List.of(
+                    new String[]{"Mã giao dịch", HtmlUtils.htmlEscape(txnRef)},
+                    new String[]{"Khóa học", HtmlUtils.htmlEscape(courseTitle)},
+                    new String[]{"Số tiền hoàn", "<strong>" + formatVnd(amount) + "</strong>"}));
+            if (accountSummary != null && !accountSummary.isBlank()) {
+                rows.add(new String[]{"Tài khoản nhận", HtmlUtils.htmlEscape(accountSummary)});
+            }
+            rows.add(new String[]{"Thời gian chuyển", when});
+            rows.add(new String[]{"Mã giao dịch ngân hàng", "<span style=\"font-family:monospace;\">" + HtmlUtils.htmlEscape(transferRef) + "</span>"});
+
+            String text = "Kính gửi " + recipientName + ",\n\nKhoản hoàn tiền " + formatVnd(amount) + " cho giao dịch " + txnRef + " (khóa học: " + courseTitle
+                    + ") đã được chuyển vào tài khoản ngân hàng bạn đã đăng ký" + (accountSummary == null ? "" : " (" + accountSummary + ")")
+                    + ". Thời gian chuyển: " + when + ". Mã giao dịch ngân hàng: " + transferRef + ".\n\n"
+                    + "Thông thường tiền về tài khoản trong vài phút; một số ngân hàng có thể chậm hơn tới vài giờ. Nếu sau 24 giờ bạn vẫn chưa nhận được tiền, "
+                    + "hãy mở lại khiếu nại trong mục Khiếu nại giao dịch (" + frontendBaseUrl + "/disputes/new) hoặc gửi yêu cầu hỗ trợ tại "
+                    + frontendBaseUrl + "/help kèm mã giao dịch trên.\n\nTrân trọng,\nĐội ngũ hỗ trợ LinguaLearn";
+            String html = supportMailShell("Hoàn tiền thành công",
+                    greeting(recipientName)
+                            + paragraph("LinguaLearn xin thông báo: khoản hoàn tiền cho giao dịch dưới đây đã được chuyển vào tài khoản ngân hàng bạn đã đăng ký.")
+                            + summaryTable(rows.toArray(new String[0][]))
+                            + section("Lưu ý", orderedList(java.util.List.of(
+                                    "Thông thường tiền về tài khoản trong vài phút; một số ngân hàng có thể chậm hơn tới <strong>vài giờ</strong>.",
+                                    "Quyền truy cập khóa học đã được thu hồi theo quyết định hoàn tiền.",
+                                    "Nếu sau <strong>24 giờ</strong> bạn vẫn chưa nhận được tiền, hãy mở lại khiếu nại trong mục "
+                                            + "<a href=\"" + frontendBaseUrl + "/disputes/new\" style=\"color:#1A6FE0;\">Khiếu nại giao dịch</a> hoặc gửi yêu cầu tại "
+                                            + "<a href=\"" + frontendBaseUrl + "/help\" style=\"color:#1A6FE0;\">Trung tâm trợ giúp</a> kèm mã giao dịch trên.")))
+                            + closing("Trân trọng,", null, "Đội ngũ hỗ trợ LinguaLearn"));
+            sendHtmlMail(toEmail, "Hoàn tiền thành công — giao dịch " + txnRef + " - LinguaLearn", text, html);
+            log.info("Da gui email hoan tien thanh cong den {} cho giao dich {}", toEmail, txnRef);
         } catch (Exception e) {
-            log.error("Loi khi gui email chuyen tien hoan den {}: {}", toEmail, e.getMessage());
+            log.error("Loi khi gui email hoan tien thanh cong den {}: {}", toEmail, e.getMessage());
+        }
+    }
+
+    /**
+     * Báo học viên: chưa chuyển được khoản hoàn vào tài khoản đã khai, cần kiểm tra và cập nhật (16/11/2026). Khoản hoàn vẫn được giữ nguyên.
+     * Best-effort.
+     */
+    public void sendRefundAccountRequiredEmail(String toEmail, String recipientName, String txnRef, String courseTitle, BigDecimal amount, String reason) {
+        try {
+            String text = "Kính gửi " + recipientName + ",\n\nChúng tôi chưa thể chuyển khoản hoàn tiền " + formatVnd(amount) + " cho giao dịch " + txnRef
+                    + " vào tài khoản bạn đã khai. Khoản hoàn của bạn vẫn được giữ nguyên. Nguyên nhân: " + reason + "\n\n"
+                    + "Vui lòng đăng nhập, mở mục Khiếu nại giao dịch (" + frontendBaseUrl + "/disputes/new), chọn \"Đổi tài khoản nhận hoàn tiền\" và nhập thông tin chính xác. "
+                    + "Sau khi cập nhật, chúng tôi sẽ chuyển lại khoản hoàn.\n\nTrân trọng,\nĐội ngũ hỗ trợ LinguaLearn";
+            String html = supportMailShell("Cần cập nhật tài khoản nhận hoàn tiền",
+                    greeting(recipientName)
+                            + paragraph("Chúng tôi chưa thể chuyển khoản hoàn tiền cho giao dịch dưới đây vào tài khoản bạn đã khai. "
+                            + "<strong>Khoản hoàn của bạn vẫn được giữ nguyên</strong>, chỉ cần bạn kiểm tra và cập nhật thông tin tài khoản nhận.")
+                            + summaryTable(new String[][]{
+                                    {"Mã giao dịch", HtmlUtils.htmlEscape(txnRef)},
+                                    {"Khóa học", HtmlUtils.htmlEscape(courseTitle)},
+                                    {"Số tiền hoàn", "<strong>" + formatVnd(amount) + "</strong>"}})
+                            + section("Nguyên nhân", quotedBox(reason == null ? "" : reason))
+                            + section("Việc cần làm", orderedList(java.util.List.of(
+                                    "Đăng nhập và mở mục <a href=\"" + frontendBaseUrl + "/disputes/new\" style=\"color:#1A6FE0;\">Khiếu nại giao dịch</a>.",
+                                    "Chọn <strong>Đổi tài khoản nhận hoàn tiền</strong> và nhập thông tin chính xác (đúng ngân hàng, số tài khoản và tên chủ tài khoản).",
+                                    "Sau khi cập nhật, chúng tôi sẽ chuyển lại khoản hoàn cho bạn.")))
+                            + paragraph("Cần hỗ trợ? Gửi yêu cầu tại <a href=\"" + frontendBaseUrl + "/help\" style=\"color:#1A6FE0;\">Trung tâm trợ giúp</a>.")
+                            + closing("Trân trọng,", null, "Đội ngũ hỗ trợ LinguaLearn"));
+            sendHtmlMail(toEmail, "Cần cập nhật tài khoản nhận hoàn tiền — giao dịch " + txnRef + " - LinguaLearn", text, html);
+            log.info("Da gui email can cap nhat tai khoan hoan tien den {} cho giao dich {}", toEmail, txnRef);
+        } catch (Exception e) {
+            log.error("Loi khi gui email can cap nhat tai khoan hoan tien den {}: {}", toEmail, e.getMessage());
         }
     }
 
@@ -230,45 +281,83 @@ public class EmailService {
         }
     }
 
-    /** Đã nhận yêu cầu rút, kèm ngày chi dự kiến. Best-effort. */
-    public void sendPayoutRequestedEmail(String toEmail, String code, BigDecimal amount, java.time.LocalDate scheduledFor) {
+    /** Đã tiếp nhận yêu cầu rút, kèm ngày chi dự kiến (viết lại 16/11/2026 theo khung email hỗ trợ). Best-effort. */
+    public void sendPayoutRequestedEmail(String toEmail, String recipientName, String code, BigDecimal amount, java.time.LocalDate scheduledFor) {
         String date = scheduledFor == null ? "sớm nhất có thể" : scheduledFor.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"));
         try {
-            sendHtmlMail(toEmail, "Đã nhận yêu cầu rút tiền " + code,
-                    "Chúng tôi đã nhận yêu cầu rút " + formatVnd(amount) + " (mã " + code + "). Dự kiến chuyển khoản trong đợt " + date + ".",
-                    supportMailShell("Đã nhận yêu cầu rút tiền",
-                            summaryTable(new String[][]{{"Mã yêu cầu", HtmlUtils.htmlEscape(code)}, {"Số tiền", formatVnd(amount)},
-                                    {"Dự kiến chi", HtmlUtils.htmlEscape(date)}})
-                                    + paragraph("Chúng tôi sẽ báo lại ngay khi đã chuyển khoản.")));
+            String text = "Kính gửi " + recipientName + ",\n\nChúng tôi đã tiếp nhận yêu cầu rút tiền " + formatVnd(amount) + " (mã " + code
+                    + "). Dự kiến xử lý trong đợt " + date + ". Chúng tôi sẽ thông báo ngay khi giao dịch hoàn tất.\n\nTrân trọng,\nĐội ngũ hỗ trợ LinguaLearn";
+            String html = supportMailShell("Đã tiếp nhận yêu cầu rút tiền",
+                    greeting(recipientName)
+                            + paragraph("Chúng tôi đã tiếp nhận yêu cầu rút tiền của bạn và xin xác nhận thông tin như sau.")
+                            + summaryTable(new String[][]{{"Mã yêu cầu", HtmlUtils.htmlEscape(code)}, {"Số tiền", "<strong>" + formatVnd(amount) + "</strong>"},
+                                    {"Dự kiến xử lý", HtmlUtils.htmlEscape(date)}})
+                            + section("Các bước tiếp theo", orderedList(java.util.List.of(
+                                    "Đội ngũ vận hành kiểm tra và duyệt yêu cầu.",
+                                    "Sau khi duyệt, số tiền được chuyển vào tài khoản ngân hàng bạn đã liên kết.",
+                                    "Bạn sẽ nhận thông báo và email xác nhận ngay khi giao dịch hoàn tất.")))
+                            + closing("Trân trọng,", null, "Đội ngũ hỗ trợ LinguaLearn"));
+            sendHtmlMail(toEmail, "Đã tiếp nhận yêu cầu rút tiền " + code + " - LinguaLearn", text, html);
         } catch (Exception e) {
             log.error("Loi khi gui email da nhan yeu cau rut tien den {}: {}", toEmail, e.getMessage());
         }
     }
 
-    /** Đã chuyển khoản. Best-effort. */
-    public void sendPayoutPaidEmail(String toEmail, String code, BigDecimal amount, String transferRef) {
+    /**
+     * Rút tiền thành công: số tiền đã được chuyển vào tài khoản của giảng viên (viết lại 16/11/2026 — trước đây tiêu đề "Đã chuyển tiền cho bạn"
+     * nghe như có người khác chuyển). {@code accountSummary} đã che số, có thể null. Best-effort.
+     */
+    public void sendPayoutPaidEmail(String toEmail, String recipientName, String code, BigDecimal amount, String accountSummary,
+                                    LocalDateTime paidAt, String transferRef) {
         try {
-            sendHtmlMail(toEmail, "Đã chuyển tiền cho yêu cầu " + code,
-                    "Chúng tôi đã chuyển khoản " + formatVnd(amount) + " cho yêu cầu " + code + ". Mã chuyển khoản: " + transferRef + ".",
-                    supportMailShell("Đã chuyển tiền cho bạn",
-                            summaryTable(new String[][]{{"Mã yêu cầu", HtmlUtils.htmlEscape(code)}, {"Số tiền", formatVnd(amount)},
-                                    {"Mã chuyển khoản", HtmlUtils.htmlEscape(transferRef)}})
-                                    + paragraph("Nếu sau vài giờ bạn chưa thấy tiền về tài khoản, hãy liên hệ hỗ trợ kèm mã yêu cầu.")));
+            String when = (paidAt == null ? LocalDateTime.now() : paidAt).format(SUPPORT_TIME_FORMAT);
+            java.util.List<String[]> rows = new java.util.ArrayList<>(java.util.List.of(
+                    new String[]{"Mã yêu cầu", HtmlUtils.htmlEscape(code)},
+                    new String[]{"Số tiền", "<strong>" + formatVnd(amount) + "</strong>"}));
+            if (accountSummary != null && !accountSummary.isBlank()) {
+                rows.add(new String[]{"Tài khoản nhận", HtmlUtils.htmlEscape(accountSummary)});
+            }
+            rows.add(new String[]{"Thời gian", when});
+            rows.add(new String[]{"Mã giao dịch ngân hàng", "<span style=\"font-family:monospace;\">" + HtmlUtils.htmlEscape(transferRef) + "</span>"});
+
+            String text = "Kính gửi " + recipientName + ",\n\nYêu cầu rút tiền " + code + " của bạn đã hoàn tất: " + formatVnd(amount)
+                    + " đã được chuyển vào tài khoản ngân hàng bạn đã liên kết" + (accountSummary == null ? "" : " (" + accountSummary + ")")
+                    + ". Thời gian: " + when + ". Mã giao dịch ngân hàng: " + transferRef + ".\n\n"
+                    + "Nếu sau 24 giờ bạn chưa thấy tiền về tài khoản, hãy gửi yêu cầu hỗ trợ tại " + frontendBaseUrl + "/help kèm mã yêu cầu.\n\n"
+                    + "Trân trọng,\nĐội ngũ hỗ trợ LinguaLearn";
+            String html = supportMailShell("Rút tiền thành công",
+                    greeting(recipientName)
+                            + paragraph("Yêu cầu rút tiền của bạn đã được xử lý. Số tiền đã được chuyển vào tài khoản ngân hàng bạn đã liên kết.")
+                            + summaryTable(rows.toArray(new String[0][]))
+                            + section("Lưu ý", paragraph("Thông thường tiền về trong vài phút; một số ngân hàng có thể chậm hơn tới vài giờ. Nếu sau <strong>24 giờ</strong> "
+                            + "bạn chưa thấy tiền về tài khoản, hãy gửi yêu cầu tại <a href=\"" + frontendBaseUrl
+                            + "/help\" style=\"color:#1A6FE0;\">Trung tâm trợ giúp</a> kèm mã yêu cầu."))
+                            + closing("Trân trọng,", null, "Đội ngũ hỗ trợ LinguaLearn"));
+            sendHtmlMail(toEmail, "Rút tiền thành công — yêu cầu " + code + " - LinguaLearn", text, html);
+            log.info("Da gui email rut tien thanh cong den {} cho yeu cau {}", toEmail, code);
         } catch (Exception e) {
-            log.error("Loi khi gui email da chi tien den {}: {}", toEmail, e.getMessage());
+            log.error("Loi khi gui email rut tien thanh cong den {}: {}", toEmail, e.getMessage());
         }
     }
 
-    /** Yêu cầu rút bị từ chối hoặc chuyển khoản thất bại — tiền đã được trả lại vào số dư. Best-effort. */
-    public void sendPayoutRejectedEmail(String toEmail, String code, BigDecimal amount, String reason, boolean transferFailed) {
+    /** Yêu cầu rút bị từ chối hoặc chuyển khoản thất bại — tiền đã được trả lại vào số dư (viết lại 16/11/2026). Best-effort. */
+    public void sendPayoutRejectedEmail(String toEmail, String recipientName, String code, BigDecimal amount, String reason, boolean transferFailed) {
         try {
-            String title = transferFailed ? "Chuyển tiền thất bại" : "Yêu cầu rút tiền bị từ chối";
-            sendHtmlMail(toEmail, title + " - " + code,
-                    title + " (mã " + code + ", " + formatVnd(amount) + "). Lý do: " + reason + ". Số tiền đã được trả lại vào số dư của bạn.",
-                    supportMailShell(title,
-                            summaryTable(new String[][]{{"Mã yêu cầu", HtmlUtils.htmlEscape(code)}, {"Số tiền", formatVnd(amount)}})
-                                    + section("Lý do", quotedBox(HtmlUtils.htmlEscape(reason == null ? "" : reason)))
-                                    + paragraph("Số tiền đã được trả lại vào số dư của bạn, bạn có thể gửi yêu cầu rút mới.")));
+            String title = transferFailed ? "Chuyển tiền chưa thành công" : "Yêu cầu rút tiền chưa được chấp nhận";
+            String text = "Kính gửi " + recipientName + ",\n\n" + title + " (mã " + code + ", " + formatVnd(amount) + "). Lý do: " + reason
+                    + ".\nSố tiền đã được hoàn lại vào số dư khả dụng của bạn; bạn có thể kiểm tra thông tin tài khoản nhận và gửi yêu cầu rút mới.\n\n"
+                    + "Trân trọng,\nĐội ngũ hỗ trợ LinguaLearn";
+            String html = supportMailShell(title,
+                    greeting(recipientName)
+                            + paragraph(transferFailed
+                            ? "Rất tiếc, hệ thống chưa thể chuyển tiền cho yêu cầu rút dưới đây."
+                            : "Yêu cầu rút tiền dưới đây của bạn chưa được chấp nhận.")
+                            + summaryTable(new String[][]{{"Mã yêu cầu", HtmlUtils.htmlEscape(code)}, {"Số tiền", "<strong>" + formatVnd(amount) + "</strong>"}})
+                            + section("Lý do", quotedBox(reason == null ? "" : reason))
+                            + paragraph("Số tiền đã được <strong>hoàn lại vào số dư khả dụng</strong> của bạn. Bạn có thể kiểm tra thông tin tài khoản nhận và gửi yêu cầu rút mới. "
+                            + "Cần hỗ trợ? Gửi yêu cầu tại <a href=\"" + frontendBaseUrl + "/help\" style=\"color:#1A6FE0;\">Trung tâm trợ giúp</a>.")
+                            + closing("Trân trọng,", null, "Đội ngũ hỗ trợ LinguaLearn"));
+            sendHtmlMail(toEmail, title + " - " + code + " - LinguaLearn", text, html);
         } catch (Exception e) {
             log.error("Loi khi gui email tu choi rut tien den {}: {}", toEmail, e.getMessage());
         }
@@ -505,6 +594,6 @@ public class EmailService {
 
 
     private static String formatVnd(BigDecimal amount) {
-        return String.format("%,.0fđ", amount);
+        return String.format(java.util.Locale.ROOT, "%,.0f", amount).replace(',', '.') + "đ";
     }
 }

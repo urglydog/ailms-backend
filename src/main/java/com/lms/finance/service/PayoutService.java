@@ -229,7 +229,7 @@ public class PayoutService {
         InstructorPayout saved = payoutRepository.save(payout);
 
         audit(payout.getInstructor().getEmail(), "PAYOUT_CONFIRMED", saved, Map.of("status", "PENDING_EMAIL"), snapshot(saved));
-        emailService.sendPayoutRequestedEmail(payout.getInstructor().getEmail(), saved.getCode(), saved.getAmount(), saved.getScheduledFor());
+        emailService.sendPayoutRequestedEmail(payout.getInstructor().getEmail(), payout.getInstructor().getFullName(), saved.getCode(), saved.getAmount(), saved.getScheduledFor());
         userRepository.findByRole(Role.ADMIN).forEach(a -> notificationService.notify(a.getId(), "PAYOUT_REQUESTED",
                 "Yêu cầu rút tiền mới", saved.getInstructor().getFullName() + " yêu cầu rút " + formatVnd(saved.getAmount())
                         + " (" + saved.getCode() + ").", "/admin/transactions/payouts"));
@@ -291,8 +291,8 @@ public class PayoutService {
         audit(adminEmail, "PAYOUT_APPROVED", saved, Map.of("status", "REQUESTED"), snapshot(saved));
         // Giảng viên phải biết yêu cầu đã được duyệt (trước đây chỉ có thông báo khi đã chi/từ chối).
         notificationService.notify(saved.getInstructor().getId(), "PAYOUT_APPROVED", "Yêu cầu rút tiền đã được duyệt",
-                "Yêu cầu " + saved.getCode() + " (" + formatVnd(saved.getAmount()) + ") đã được duyệt và sẽ được chuyển vào "
-                        + saved.getBankName() + " " + PayoutCrypto.mask(saved.getAccountLast4()) + ". Bạn sẽ nhận thông báo khi tiền đã được chuyển.",
+                "Yêu cầu rút tiền " + saved.getCode() + " (" + formatVnd(saved.getAmount()) + ") đã được duyệt và đang chờ chuyển vào tài khoản "
+                        + saved.getBankName() + " " + PayoutCrypto.mask(saved.getAccountLast4()) + ". Bạn sẽ nhận thông báo khi giao dịch hoàn tất.",
                 "/instructor/earnings");
         return toAdminRes(saved);
     }
@@ -315,9 +315,12 @@ public class PayoutService {
         InstructorPayout saved = payoutRepository.save(payout);
 
         audit(adminEmail, "PAYOUT_PAID", saved, Map.of("status", "APPROVED"), snapshot(saved));
-        emailService.sendPayoutPaidEmail(saved.getInstructor().getEmail(), saved.getCode(), saved.getAmount(), saved.getTransferRef());
-        notificationService.notify(saved.getInstructor().getId(), "PAYOUT_PAID", "Đã chuyển tiền cho bạn",
-                "Yêu cầu rút " + saved.getCode() + " (" + formatVnd(saved.getAmount()) + ") đã được chuyển khoản.", "/instructor/earnings");
+        String account = saved.getBankName() + " " + PayoutCrypto.mask(saved.getAccountLast4());
+        emailService.sendPayoutPaidEmail(saved.getInstructor().getEmail(), saved.getInstructor().getFullName(), saved.getCode(), saved.getAmount(),
+                account, saved.getPaidAt(), saved.getTransferRef());
+        notificationService.notify(saved.getInstructor().getId(), "PAYOUT_PAID", "Rút tiền thành công",
+                "Yêu cầu rút tiền " + saved.getCode() + " đã hoàn tất: " + formatVnd(saved.getAmount()) + " đã được chuyển vào tài khoản " + account
+                        + ". Mã giao dịch ngân hàng: " + saved.getTransferRef() + ".", "/instructor/earnings");
         return toAdminRes(saved);
     }
 
@@ -398,11 +401,11 @@ public class PayoutService {
         ledgerService.recordPayoutRelease(saved.getInstructor(), saved.getAmount(), saved.getId(), saved.getCode());
         audit(actorEmail, action, saved, Map.of("status", before.name()), snapshot(saved));
         if (target == PayoutStatus.REJECTED || target == PayoutStatus.FAILED) {
-            emailService.sendPayoutRejectedEmail(saved.getInstructor().getEmail(), saved.getCode(), saved.getAmount(),
+            emailService.sendPayoutRejectedEmail(saved.getInstructor().getEmail(), saved.getInstructor().getFullName(), saved.getCode(), saved.getAmount(),
                     reason, target == PayoutStatus.FAILED);
             notificationService.notify(saved.getInstructor().getId(), "PAYOUT_REJECTED",
-                    target == PayoutStatus.FAILED ? "Chuyển tiền thất bại" : "Yêu cầu rút tiền bị từ chối",
-                    "Yêu cầu " + saved.getCode() + ": " + reason + ". Số tiền đã được trả lại vào số dư của bạn."
+                    target == PayoutStatus.FAILED ? "Chuyển tiền chưa thành công" : "Yêu cầu rút tiền chưa được chấp nhận",
+                    "Yêu cầu rút tiền " + saved.getCode() + ": " + reason + ". Số tiền đã được hoàn lại vào số dư khả dụng của bạn."
                             + (target == PayoutStatus.FAILED ? " Bạn có thể kiểm tra hoặc đổi tài khoản nhận tiền rồi gửi yêu cầu rút lại." : ""),
                     "/instructor/earnings");
         }
@@ -462,7 +465,7 @@ public class PayoutService {
     }
 
     static String formatVnd(BigDecimal amount) {
-        return String.format("%,.0fđ", amount);
+        return String.format(java.util.Locale.ROOT, "%,.0f", amount).replace(',', '.') + "đ";
     }
 
     /** Chống CSV injection: ô bắt đầu bằng = + - @ bị Excel hiểu là công thức → thêm dấu nháy; bọc nháy kép, nhân đôi nháy kép trong ô. */

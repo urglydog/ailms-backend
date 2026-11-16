@@ -557,4 +557,32 @@ class PayosPayoutServiceTest {
         assertThat(res.get(0).nextRetryAt()).isNotNull();
         assertThat(res.get(1).canRetry()).isNull();
     }
+
+    @Test
+    void successFoundByTheBackgroundReconcile_tellsTheAdmins_butAnAdminTriggeredSuccessDoesNot() {
+        approvedPayout(200_000);
+        fundsOk();
+        when(gateway.create(any())).thenReturn(result("SUCCEEDED", "NGUYEN CHI THIEN"));
+
+        service.transferInstructorPayout(ADMIN, 5L);
+
+        // Admin vừa bấm và thấy ngay kết quả: không cần thông báo thêm.
+        verify(notificationService, never()).notify(anyLong(), eq("PAYOS_PAYOUT_SUCCEEDED"), anyString(), anyString(), anyString());
+
+        PayosPayoutOrder open = new PayosPayoutOrder();
+        open.setId(88L);
+        open.setKind(PayosOrderKind.INSTRUCTOR_PAYOUT);
+        open.setEntityId(5L);
+        open.setReferenceId("LLP5-1");
+        open.setAmount(200_000L);
+        open.setStatus(PayosOrderStatus.SUBMITTED);
+        open.setPayosPayoutId("po-9");
+        when(orderRepository.findByStatusIn(any())).thenReturn(List.of(open));
+        when(orderRepository.findById(88L)).thenReturn(Optional.of(open));
+        when(gateway.get("po-9")).thenReturn(result("SUCCEEDED", null));
+
+        service.reconcileOpenOrders();
+
+        verify(notificationService).notify(eq(1L), eq("PAYOS_PAYOUT_SUCCEEDED"), anyString(), anyString(), anyString());
+    }
 }

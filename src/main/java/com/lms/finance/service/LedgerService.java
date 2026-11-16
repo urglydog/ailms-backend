@@ -111,7 +111,7 @@ public class LedgerService {
         entry.setAmount(amount.negate());
         entry.setAvailableAt(LocalDateTime.now());
         entry.setPayoutId(payoutId);
-        entry.setNote("Giữ chỗ yêu cầu rút " + code);
+        entry.setNote("Yêu cầu rút tiền " + code);
         repository.save(entry);
     }
 
@@ -127,7 +127,7 @@ public class LedgerService {
         entry.setAmount(amount);
         entry.setAvailableAt(LocalDateTime.now());
         entry.setPayoutId(payoutId);
-        entry.setNote("Trả lại khoản giữ chỗ yêu cầu rút " + code);
+        entry.setNote("Hoàn số dư yêu cầu rút " + code + " (không thành công)");
         repository.save(entry);
     }
 

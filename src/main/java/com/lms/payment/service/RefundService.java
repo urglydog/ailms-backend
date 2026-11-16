@@ -171,12 +171,15 @@ public class RefundService {
         financeAuditService.record(adminEmail, "REFUND_TRANSFERRED", "payment", payment.getTxnRef(),
                 Map.of("transferStatus", "PENDING_TRANSFER"),
                 Map.of("transferStatus", "TRANSFERRED", "transferRef", saved.getTransferRef()));
+        BigDecimal refunded = saved.getAmount() != null ? saved.getAmount() : payment.getAmount();
+        String account = DisputeService.accountSummary(dispute);
         notificationService.notify(dispute.getFiledBy().getId(), "REFUND_TRANSFERRED",
-                "Đã chuyển tiền hoàn cho bạn",
-                "Giao dịch " + payment.getTxnRef() + " đã được hoàn tiền (mã chuyển khoản " + saved.getTransferRef() + ").",
+                "Hoàn tiền thành công",
+                "Khoản hoàn " + vnd(refunded) + " cho giao dịch " + payment.getTxnRef() + " (" + payment.getCourse().getTitle() + ") đã được chuyển vào "
+                        + (account != null ? "tài khoản " + account : "tài khoản bạn đã đăng ký") + ". Mã giao dịch ngân hàng: " + saved.getTransferRef() + ".",
                 "/disputes/new");
-        emailService.sendRefundTransferredEmail(dispute.getFiledBy().getEmail(), payment.getTxnRef(),
-                payment.getCourse().getTitle(), payment.getAmount(), saved.getTransferRef());
+        emailService.sendRefundTransferredEmail(dispute.getFiledBy().getEmail(), dispute.getFiledBy().getFullName(), payment.getTxnRef(),
+                payment.getCourse().getTitle(), refunded, account, saved.getTransferredAt(), saved.getTransferRef());
         return saved;
     }
 
@@ -206,6 +209,8 @@ public class RefundService {
                 "Chưa thể chuyển khoản hoàn tiền giao dịch " + payment.getTxnRef() + " vào tài khoản đã khai. Khoản hoàn của bạn vẫn được giữ nguyên; "
                         + "vui lòng kiểm tra và cập nhật tài khoản nhận để chúng tôi chuyển lại. Cần hỗ trợ? Hãy gửi yêu cầu hỗ trợ.",
                 "/disputes/new");
+        emailService.sendRefundAccountRequiredEmail(dispute.getFiledBy().getEmail(), dispute.getFiledBy().getFullName(), payment.getTxnRef(),
+                payment.getCourse().getTitle(), saved.getAmount() != null ? saved.getAmount() : payment.getAmount(), reason);
         return saved;
     }
 
