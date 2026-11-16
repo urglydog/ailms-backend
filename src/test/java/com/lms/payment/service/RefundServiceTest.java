@@ -3,6 +3,7 @@ package com.lms.payment.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
@@ -60,6 +61,7 @@ class RefundServiceTest {
     @Mock private EmailService emailService;
 
     @Mock private com.lms.common.service.SystemConfigService systemConfigService;
+    @Mock private com.lms.finance.payos.PayosOrderGuard payosOrderGuard;
     @InjectMocks
     private RefundService refundService;
 
@@ -295,5 +297,58 @@ class RefundServiceTest {
         assertThat(refund.getReasonCode()).isEqualTo(RefundReasonCode.COPYRIGHT_VIOLATION);
         assertThat(refund.getEvidenceNote()).contains("khóa gốc");
         assertThat(refund.getInstructorCharge()).isEqualByComparingTo("1000000");
+    }
+
+    // ── chờ cập nhật tài khoản / chốt chặn PayOS (16/11/2026) ────────────────────────────────────
+
+    @Test
+    void awaitAccountUpdate_movesToAwaitingAccount_keepsTheRefundAndTellsTheLearner() {
+        PaymentRefund refund = pendingRefund();
+        when(refundRepository.findByPayment_Id(100L)).thenReturn(Optional.of(refund));
+
+        PaymentRefund saved = refundService.awaitAccountUpdate(dispute, "system", "Tài khoản nhận không tìm thấy");
+
+        assertThat(saved.getTransferStatus()).isEqualTo(RefundTransferStatus.AWAITING_ACCOUNT);
+        verify(financeAuditService).record(eq("system"), eq("REFUND_AWAITING_ACCOUNT"), eq("payment"), eq("txn-100"), any(), any());
+        verify(notificationService).notify(eq(2L), eq("REFUND_ACCOUNT_REQUIRED"), anyString(), anyString(), anyString());
+    }
+
+    @Test
+    void awaitAccountUpdate_isIdempotent_andRefusedOnceTransferred() {
+        PaymentRefund refund = pendingRefund();
+        refund.setTransferStatus(RefundTransferStatus.AWAITING_ACCOUNT);
+        when(refundRepository.findByPayment_Id(100L)).thenReturn(Optional.of(refund));
+
+        refundService.awaitAccountUpdate(dispute, "system", "x");
+        verify(notificationService, org.mockito.Mockito.never()).notify(anyLong(), anyString(), anyString(), anyString(), anyString());
+
+        refund.setTransferStatus(RefundTransferStatus.TRANSFERRED);
+        assertThatThrownBy(() -> refundService.awaitAccountUpdate(dispute, "system", "x")).isInstanceOf(BusinessRuleViolationException.class);
+    }
+
+    @Test
+    void onRefundAccountUpdated_resumesTheTransfer_andTellsAdminsAndTheLearner() {
+        PaymentRefund refund = pendingRefund();
+        refund.setTransferStatus(RefundTransferStatus.AWAITING_ACCOUNT);
+        dispute.setRefundBankAccount("Techcombank 19070154183018 - NGUYEN CHI THIEN");
+        when(userRepository.findByRole(Role.ADMIN)).thenReturn(List.of(admin));
+
+        refundService.onRefundAccountUpdated(dispute, refund);
+
+        assertThat(refund.getTransferStatus()).isEqualTo(RefundTransferStatus.PENDING_TRANSFER);
+        assertThat(refund.getRefundBankInfo()).contains("Techcombank");
+        verify(notificationService).notify(eq(1L), eq("REFUND_ACCOUNT_UPDATED"), anyString(), anyString(), anyString());
+        verify(notificationService).notify(eq(2L), eq("REFUND_ACCOUNT_UPDATED_SELF"), anyString(), anyString(), anyString());
+    }
+
+    @Test
+    void markTransferred_isBlockedAtTheServiceLayerWhileAPayosOrderIsUnsettled() {
+        when(refundRepository.findByPayment_Id(100L)).thenReturn(Optional.of(pendingRefund()));
+        org.mockito.Mockito.doThrow(new BusinessRuleViolationException("Đang có lệnh chi PayOS")).when(payosOrderGuard)
+                .assertNoUnsettled(com.lms.common.enums.PayosOrderKind.DISPUTE_REFUND, dispute.getId());
+
+        assertThatThrownBy(() -> refundService.markTransferred(dispute, ADMIN_EMAIL, "FT1")).isInstanceOf(BusinessRuleViolationException.class);
+
+        verify(refundRepository, org.mockito.Mockito.never()).save(any());
     }
 }

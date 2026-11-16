@@ -25,3 +25,16 @@ Cả hai bị ngân hàng đích (Techcombank) từ chối cùng thời điểm 
 
 ## Kết luận
 Đường thất bại ĐẠT. Chưa đủ điều kiện coi cả đợt kiểm chứng là đạt vì đường thành công chưa chạy và còn điểm yếu #2. Theo quy ước: xử lý #2 và chạy lại lệnh thật trước khi chuyển sang hóa đơn.
+
+## Xử lý sau lần 1 (16/11/2026) — đã làm, chờ triển khai (V168)
+Hai điểm yếu #2 và các yêu cầu bổ sung của chủ dự án đã được xử lý trong BE + FE (`mvn clean verify`: 748 test đạt; các lớp liên quan chạy lặp 5 lần, đạt):
+- **Chặn chi lại ở BE (không chỉ ẩn nút):** sau thất bại phải chờ `PAYOS_RETRY_COOLDOWN_MINUTES` (mặc định 30) và tối đa `PAYOS_MAX_ATTEMPTS` (mặc định 3) lần; quá số lần thì khóa nút PayOS, chỉ còn chuyển thủ công. Kiểm tra nằm trong `PayosPayoutService.transfer`, nên gọi API trực tiếp (curl) cũng bị chặn như bấm nút.
+- **Khóa Redis** theo từng khoản (`PayosTransferLock`, TTL 60s, fail-closed) + bắt lỗi trùng `reference_id` để báo rõ thay vì 500. Lớp bảo vệ thứ ba sau `UNIQUE(reference_id)` và khóa idempotency gửi PayOS.
+- **Chốt chặn ở tầng service** (`PayosOrderGuard`): `PayoutService.markPaid/reject/markFailed` và `RefundService.markTransferred` tự chặn khi còn lệnh PayOS chưa chốt (trước đây chỉ controller kiểm tra).
+- **Phân loại lỗi** (`PayosFailureClassifier`): tài liệu PayOS không có bảng mã lỗi chi hộ chính thức, nên chỉ nhận diện mã `PAYOUT_BANK_SYSTEM_ERROR` và các mô tả đã ghi trong tài liệu; còn lại là UNKNOWN (chỉ báo admin, không tự quyết định).
+  - Tạm thời → cho thử lại theo quy tắc trên, báo người nhận MỘT lần (+ một lần khi bị khóa) kèm đường dẫn gửi yêu cầu hỗ trợ (`/help`).
+  - Do tài khoản nhận → dừng ngay: rút tiền = hủy yêu cầu và hoàn số dư cho giảng viên; hoàn tiền = chuyển sang `AWAITING_ACCOUNT` (không hủy khoản hoàn vì khóa học đã thu hồi và sổ cái đã ghi).
+- **Học viên tự cập nhật tài khoản nhận hoàn tiền** (`PUT /api/v1/disputes/mine/{id}/refund-account`): được phép khi khiếu nại chưa xử lý, khi khoản hoàn chờ chuyển (chưa chi hoặc chi lỗi) hoặc chờ cập nhật; khóa khi có lệnh PayOS đang xử lý, đã chuyển, hoặc bị từ chối. Admin có thêm `POST /api/v1/disputes/admin/{id}/request-account-update`. Đổi tài khoản được ghi nhật ký, báo admin (kèm cảnh báo "kiểm tra tài khoản mới") và báo lại chính học viên.
+- Migration `V168__payos_failure_policy.sql` (cột `failure_category`, `refund_account_updated_at`, hai khóa cấu hình): đã áp thử trên MySQL 8 tạm, sạch.
+
+**Còn lại sau triển khai:** gửi lại lệnh thật (LLR5-2/LLP1-2) khi ngân hàng hoạt động để kiểm đường THÀNH CÔNG; hỏi PayOS vì sao lệnh treo ~15 giờ; thử chi một khoản nhỏ sang tài khoản khác ngân hàng để tách nguyên nhân.

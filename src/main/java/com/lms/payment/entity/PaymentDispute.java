@@ -68,6 +68,10 @@ public class PaymentDispute extends BaseEntity {
     @Column(name = "refund_account_confirmed", nullable = false)
     private Boolean refundAccountConfirmed = false;
 
+    /** Lần cuối học viên cập nhật tài khoản nhận hoàn tiền SAU khi gửi khiếu nại; mốc để tính lại số lần chi PayOS thử lại. */
+    @Column(name = "refund_account_updated_at")
+    private LocalDateTime refundAccountUpdatedAt;
+
     @Column(name = "admin_note", columnDefinition = "TEXT")
     private String adminNote;
 

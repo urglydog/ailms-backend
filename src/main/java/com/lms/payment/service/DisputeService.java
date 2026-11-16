@@ -7,6 +7,7 @@ import com.lms.common.enums.AttachmentSide;
 import com.lms.common.enums.DisputeCategory;
 import com.lms.common.enums.DisputeEligibility;
 import com.lms.common.enums.DisputeStatus;
+import com.lms.common.enums.RefundTransferStatus;
 import com.lms.common.enums.InstructorDecision;
 import com.lms.common.enums.RefundResponsibility;
 import com.lms.common.service.SystemConfigService;
@@ -75,6 +76,7 @@ public class DisputeService {
     private final EnrollmentRepository enrollmentRepository;
     private final SystemConfigService systemConfigService;
     private final PaymentRefundRepository refundRepository;
+    private final com.lms.finance.payos.PayosOrderGuard payosOrderGuard;
     private final Tika tika = new Tika();
 
     @Value("${lms.rules.max-dispute-evidence-files}")
@@ -368,7 +370,10 @@ public class DisputeService {
                 d.getEligibility(),
                 d.getInstructorDecision(),
                 refund != null ? refund.getTransferStatus() : null,
-                d.getPayment().getPaidAt() != null ? refundPolicyService.refundDeadline(d.getPayment().getPaidAt()) : null
+                d.getPayment().getPaidAt() != null ? refundPolicyService.refundDeadline(d.getPayment().getPaidAt()) : null,
+                accountEditability(d, refund).can(),
+                accountEditability(d, refund).hint(),
+                accountSummary(d)
         );
     }
 
@@ -416,7 +421,8 @@ public class DisputeService {
                 refund != null ? refund.getAppealStatus() : null,
                 refund != null ? refund.getAppealReason() : null,
                 refund != null ? refund.getAppealAt() : null,
-                refund != null ? refund.getAppealDecisionNote() : null
+                refund != null ? refund.getAppealDecisionNote() : null,
+                d.getRefundAccountUpdatedAt()
         );
     }
 
@@ -430,17 +436,22 @@ public class DisputeService {
             dispute.setRefundBankAccount(req.refundBankAccount());
             return;
         }
-        var bank = com.lms.finance.BankDirectory.find(req.refundBankCode())
+        applyStructuredAccount(dispute, req.refundBankCode(), req.refundAccountNumber(), req.refundAccountHolder(), req.refundAccountOwnConfirmed());
+    }
+
+    /** Kiểm tra và ghi tài khoản nhận hoàn tiền có cấu trúc (dùng chung cho lúc gửi khiếu nại và lúc học viên cập nhật sau đó). */
+    private void applyStructuredAccount(PaymentDispute dispute, String bankCode, String accountNumber, String accountHolder, Boolean ownConfirmed) {
+        var bank = com.lms.finance.BankDirectory.find(bankCode)
                 .orElseThrow(() -> new BusinessRuleViolationException("Ngân hàng nhận hoàn tiền không hợp lệ"));
-        String number = req.refundAccountNumber() == null ? "" : req.refundAccountNumber().replaceAll("\\s", "");
+        String number = accountNumber == null ? "" : accountNumber.replaceAll("\\s", "");
         if (!number.matches("[0-9]{6,20}")) {
             throw new BusinessRuleViolationException("Số tài khoản nhận hoàn tiền chỉ gồm chữ số (6–20 số)");
         }
-        String holder = com.lms.finance.NameNormalizer.normalize(req.refundAccountHolder());
+        String holder = com.lms.finance.NameNormalizer.normalize(accountHolder);
         if (holder.isEmpty()) {
             throw new BusinessRuleViolationException("Cần nhập tên chủ tài khoản nhận hoàn tiền");
         }
-        if (!Boolean.TRUE.equals(req.refundAccountOwnConfirmed())) {
+        if (!Boolean.TRUE.equals(ownConfirmed)) {
             throw new BusinessRuleViolationException("Bạn cần xác nhận đây là tài khoản của chính bạn");
         }
         dispute.setRefundBankCode(bank.code());
@@ -449,6 +460,87 @@ public class DisputeService {
         dispute.setRefundAccountConfirmed(true);
         String shown = bank.name() + " " + number + " - " + holder;
         dispute.setRefundBankAccount(shown.length() > 100 ? shown.substring(0, 100) : shown);
+    }
+
+    // ── cập nhật tài khoản nhận hoàn tiền sau khi đã gửi khiếu nại (16/11/2026) ──────────────────────
+
+    /** Kết quả đánh giá học viên có được sửa tài khoản nhận hoàn tiền lúc này không, kèm lời giải thích. */
+    record AccountEditability(boolean can, String hint) {}
+
+    /**
+     * Khi nào học viên được/không được sửa tài khoản nhận hoàn tiền (BE quyết định, giao diện chỉ hiển thị theo):
+     * <ul>
+     *   <li>Khiếu nại chưa xử lý (OPEN/REOPENED): được — chưa dùng tới tài khoản.</li>
+     *   <li>Bị từ chối: khóa — không có khoản hoàn nào cần tài khoản.</li>
+     *   <li>Đã duyệt hoàn: được khi CHỜ CHUYỂN (chưa chi hoặc chi lỗi tạm thời) hoặc CHỜ CẬP NHẬT TÀI KHOẢN;
+     *       khóa khi có lệnh PayOS đang xử lý (tiền có thể đang đi) hoặc đã chuyển xong.</li>
+     * </ul>
+     */
+    AccountEditability accountEditability(PaymentDispute d, PaymentRefund refund) {
+        switch (d.getStatus()) {
+            case OPEN, REOPENED:
+                return new AccountEditability(true, null);
+            case RESOLVED_REJECTED:
+                return new AccountEditability(false, "Khiếu nại không được hoàn tiền nên không cần tài khoản nhận.");
+            default:
+                break;
+        }
+        if (refund == null) {
+            return new AccountEditability(false, null);
+        }
+        if (refund.getTransferStatus() == RefundTransferStatus.TRANSFERRED) {
+            return new AccountEditability(false, "Khoản hoàn đã được chuyển.");
+        }
+        if (payosOrderGuard.hasUnsettled(com.lms.common.enums.PayosOrderKind.DISPUTE_REFUND, d.getId())) {
+            return new AccountEditability(false, "Khoản hoàn đang được chuyển; vui lòng chờ kết quả rồi mới đổi tài khoản.");
+        }
+        if (refund.getTransferStatus() == RefundTransferStatus.AWAITING_ACCOUNT) {
+            return new AccountEditability(true, "Chưa chuyển được vào tài khoản đã khai. Hãy kiểm tra và cập nhật tài khoản nhận.");
+        }
+        return new AccountEditability(true, null);
+    }
+
+    private static String accountSummary(PaymentDispute d) {
+        if (d.getRefundBankCode() == null || d.getRefundAccountNumber() == null) {
+            return null;
+        }
+        String number = d.getRefundAccountNumber();
+        String last4 = number.length() <= 4 ? number : number.substring(number.length() - 4);
+        String bank = com.lms.finance.BankDirectory.find(d.getRefundBankCode()).map(b -> b.name()).orElse(d.getRefundBankCode());
+        return bank + " ••••" + last4 + (d.getRefundAccountHolder() == null ? "" : " · " + d.getRefundAccountHolder());
+    }
+
+    /** Học viên cập nhật tài khoản nhận hoàn tiền của khiếu nại của chính mình. Quy tắc ở {@link #accountEditability}. */
+    @Transactional
+    public DisputeDto.Res updateRefundAccount(String email, Long disputeId, DisputeDto.UpdateRefundAccountReq req) {
+        PaymentDispute dispute = disputeRepository.findById(disputeId)
+                .orElseThrow(() -> new ResourceNotFoundException("PaymentDispute", disputeId));
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User", email));
+        if (!dispute.getFiledBy().getId().equals(user.getId())) {
+            throw new BusinessRuleViolationException("Bạn chỉ cập nhật được tài khoản của khiếu nại của chính mình");
+        }
+        PaymentRefund refund = refundRepository.findByPayment_Id(dispute.getPayment().getId()).orElse(null);
+        AccountEditability e = accountEditability(dispute, refund);
+        if (!e.can()) {
+            throw new BusinessRuleViolationException(e.hint() != null ? e.hint() : "Hiện không thể cập nhật tài khoản nhận hoàn tiền");
+        }
+        applyStructuredAccount(dispute, req.refundBankCode(), req.refundAccountNumber(), req.refundAccountHolder(), req.refundAccountOwnConfirmed());
+        dispute.setRefundAccountUpdatedAt(LocalDateTime.now());
+        PaymentDispute saved = disputeRepository.save(dispute);
+        if (refund != null) {
+            refundService.onRefundAccountUpdated(saved, refund);
+        }
+        return toRes(saved);
+    }
+
+    /** Admin yêu cầu học viên cập nhật tài khoản nhận hoàn tiền (lỗi chưa rõ nguyên nhân, hoặc đã hết lượt chi PayOS). */
+    @Transactional
+    public DisputeDto.AdminRes requestAccountUpdate(String actorEmail, Long disputeId, String reason) {
+        PaymentDispute dispute = disputeRepository.findById(disputeId)
+                .orElseThrow(() -> new ResourceNotFoundException("PaymentDispute", disputeId));
+        refundService.awaitAccountUpdate(dispute, actorEmail, reason);
+        return toAdminRes(dispute);
     }
 
     private static boolean notBlank(String s) {

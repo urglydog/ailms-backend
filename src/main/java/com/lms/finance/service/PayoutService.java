@@ -67,6 +67,7 @@ public class PayoutService {
     private final PayoutCrypto crypto;
     private final FinanceRateLimit rateLimit;
     private final PayoutAccountService accountService;
+    private final com.lms.finance.payos.PayosOrderGuard payosOrderGuard;
     private final SecureRandom random = new SecureRandom();
 
     // ── Giảng viên ──────────────────────────────────────────────────────
@@ -300,6 +301,7 @@ public class PayoutService {
     @Transactional
     public PayoutDto.AdminPayoutRes markPaid(String adminEmail, Long payoutId, String transferRef, String proofUrl) {
         InstructorPayout payout = lock(payoutId);
+        payosOrderGuard.assertNoUnsettled(com.lms.common.enums.PayosOrderKind.INSTRUCTOR_PAYOUT, payoutId);
         requireStatus(payout, Set.of(PayoutStatus.APPROVED), "Chỉ ghi nhận đã chi cho yêu cầu đã duyệt");
         if (transferRef == null || transferRef.isBlank()) {
             throw new InvalidRequestException("Cần nhập mã giao dịch chuyển khoản");
@@ -322,6 +324,7 @@ public class PayoutService {
     @Transactional
     public PayoutDto.AdminPayoutRes reject(String adminEmail, Long payoutId, String reason) {
         InstructorPayout payout = lock(payoutId);
+        payosOrderGuard.assertNoUnsettled(com.lms.common.enums.PayosOrderKind.INSTRUCTOR_PAYOUT, payoutId);
         requireStatus(payout, Set.of(PayoutStatus.REQUESTED, PayoutStatus.APPROVED), "Chỉ từ chối được yêu cầu đang chờ xử lý");
         requireReason(reason);
         return toAdminRes(release(payout, PayoutStatus.REJECTED, adminEmail, "PAYOUT_REJECTED", reason.trim()));
@@ -331,6 +334,7 @@ public class PayoutService {
     @Transactional
     public PayoutDto.AdminPayoutRes markFailed(String adminEmail, Long payoutId, String reason) {
         InstructorPayout payout = lock(payoutId);
+        payosOrderGuard.assertNoUnsettled(com.lms.common.enums.PayosOrderKind.INSTRUCTOR_PAYOUT, payoutId);
         requireStatus(payout, Set.of(PayoutStatus.APPROVED), "Chỉ đánh dấu thất bại cho yêu cầu đã duyệt");
         requireReason(reason);
         return toAdminRes(release(payout, PayoutStatus.FAILED, adminEmail, "PAYOUT_FAILED", reason.trim()));

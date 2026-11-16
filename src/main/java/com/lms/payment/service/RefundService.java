@@ -60,6 +60,7 @@ public class RefundService {
     private final NotificationService notificationService;
     private final EmailService emailService;
     private final com.lms.common.service.SystemConfigService systemConfigService;
+    private final com.lms.finance.payos.PayosOrderGuard payosOrderGuard;
 
     /** Phần giảng viên phải trả lại theo chế độ trách nhiệm (không âm). */
     public static BigDecimal instructorCharge(RefundResponsibility responsibility, Payment payment) {
@@ -153,6 +154,8 @@ public class RefundService {
         if (refund.getTransferStatus() == RefundTransferStatus.TRANSFERRED) {
             throw new BusinessRuleViolationException("Khoản hoàn này đã được ghi nhận chuyển tiền trước đó");
         }
+        // Chốt chặn ở tầng service (16/11/2026): đang có lệnh PayOS chưa chốt thì không cho ghi nhận tay — gọi API trực tiếp cũng bị chặn.
+        payosOrderGuard.assertNoUnsettled(com.lms.common.enums.PayosOrderKind.DISPUTE_REFUND, dispute.getId());
         if (transferRef == null || transferRef.isBlank()) {
             throw new BusinessRuleViolationException("Cần nhập mã giao dịch chuyển khoản");
         }
@@ -175,6 +178,60 @@ public class RefundService {
         emailService.sendRefundTransferredEmail(dispute.getFiledBy().getEmail(), payment.getTxnRef(),
                 payment.getCourse().getTitle(), payment.getAmount(), saved.getTransferRef());
         return saved;
+    }
+
+    /**
+     * Khoản hoàn chưa chuyển được vì tài khoản nhận có vấn đề (hoặc admin yêu cầu kiểm tra lại): chuyển sang chờ học viên cập nhật tài khoản và báo
+     * học viên. KHÔNG hủy khoản hoàn — khóa học đã thu hồi và sổ cái giảng viên đã ghi nên khoản vẫn phải trả; chỉ chờ thông tin đúng. Gọi lại khi đã
+     * ở trạng thái này thì không làm gì (idempotent).
+     */
+    @Transactional
+    public PaymentRefund awaitAccountUpdate(PaymentDispute dispute, String actorEmail, String reason) {
+        PaymentRefund refund = refundRepository.findByPayment_Id(dispute.getPayment().getId())
+                .orElseThrow(() -> new BusinessRuleViolationException("Khiếu nại này chưa được duyệt hoàn tiền"));
+        if (refund.getTransferStatus() == RefundTransferStatus.TRANSFERRED) {
+            throw new BusinessRuleViolationException("Khoản hoàn này đã được chuyển, không cần cập nhật tài khoản");
+        }
+        if (refund.getTransferStatus() == RefundTransferStatus.AWAITING_ACCOUNT) {
+            return refund;
+        }
+        payosOrderGuard.assertNoUnsettled(com.lms.common.enums.PayosOrderKind.DISPUTE_REFUND, dispute.getId());
+        refund.setTransferStatus(RefundTransferStatus.AWAITING_ACCOUNT);
+        PaymentRefund saved = refundRepository.save(refund);
+        Payment payment = dispute.getPayment();
+        financeAuditService.record(actorEmail, "REFUND_AWAITING_ACCOUNT", "payment", payment.getTxnRef(),
+                Map.of("transferStatus", "PENDING_TRANSFER"), Map.of("transferStatus", "AWAITING_ACCOUNT", "reason", reason == null ? "" : reason));
+        notificationService.notify(dispute.getFiledBy().getId(), "REFUND_ACCOUNT_REQUIRED",
+                "Cần cập nhật tài khoản nhận hoàn tiền",
+                "Chưa thể chuyển khoản hoàn tiền giao dịch " + payment.getTxnRef() + " vào tài khoản đã khai. Khoản hoàn của bạn vẫn được giữ nguyên; "
+                        + "vui lòng kiểm tra và cập nhật tài khoản nhận để chúng tôi chuyển lại. Cần hỗ trợ? Hãy gửi yêu cầu hỗ trợ.",
+                "/disputes/new");
+        return saved;
+    }
+
+    /**
+     * Học viên vừa đổi tài khoản nhận hoàn tiền: đồng bộ chuỗi tài khoản lưu ở hồ sơ hoàn, đưa khoản đang chờ cập nhật về chờ chuyển, ghi nhật ký
+     * và báo admin (đổi tài khoản trước khi tiền đi cần được admin biết) cùng báo lại chính học viên (phát hiện sớm nếu không phải mình đổi).
+     */
+    @Transactional
+    public void onRefundAccountUpdated(PaymentDispute dispute, PaymentRefund refund) {
+        RefundTransferStatus before = refund.getTransferStatus();
+        refund.setRefundBankInfo(dispute.getRefundBankAccount());
+        if (before == RefundTransferStatus.AWAITING_ACCOUNT) {
+            refund.setTransferStatus(RefundTransferStatus.PENDING_TRANSFER);
+        }
+        refundRepository.save(refund);
+        Payment payment = dispute.getPayment();
+        financeAuditService.record(dispute.getFiledBy().getEmail(), "REFUND_ACCOUNT_UPDATED", "payment", payment.getTxnRef(),
+                Map.of("transferStatus", before.name()), Map.of("transferStatus", refund.getTransferStatus().name()));
+        userRepository.findByRole(com.lms.common.enums.Role.ADMIN).forEach(a -> notificationService.notify(a.getId(), "REFUND_ACCOUNT_UPDATED",
+                "Học viên đã cập nhật tài khoản nhận hoàn tiền",
+                "Giao dịch " + payment.getTxnRef() + ": học viên vừa đổi tài khoản nhận hoàn tiền"
+                        + (before == RefundTransferStatus.AWAITING_ACCOUNT ? "; có thể chi lại." : ". Hãy kiểm tra tài khoản mới trước khi chuyển."),
+                "/admin/transactions/disputes"));
+        notificationService.notify(dispute.getFiledBy().getId(), "REFUND_ACCOUNT_UPDATED_SELF", "Đã cập nhật tài khoản nhận hoàn tiền",
+                "Tài khoản nhận hoàn tiền giao dịch " + payment.getTxnRef() + " đã được thay đổi. Nếu không phải bạn thực hiện, hãy gửi yêu cầu hỗ trợ ngay.",
+                "/disputes/new");
     }
 
     /**

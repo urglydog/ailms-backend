@@ -2,6 +2,7 @@ package com.lms.finance.payos;
 
 import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
+import com.lms.common.enums.PayosFailureCategory;
 import com.lms.common.enums.PayosOrderKind;
 import com.lms.common.enums.PayosOrderStatus;
 import com.lms.common.enums.PayoutStatus;
@@ -39,6 +40,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -64,6 +66,12 @@ public class PayosPayoutService {
 
     static final String KEY_MAX_AMOUNT = "PAYOS_PAYOUT_MAX_AMOUNT";
     static final long DEFAULT_MAX_AMOUNT = 5_000_000L;
+    static final String KEY_RETRY_COOLDOWN_MINUTES = "PAYOS_RETRY_COOLDOWN_MINUTES";
+    static final String KEY_MAX_ATTEMPTS = "PAYOS_MAX_ATTEMPTS";
+    static final int DEFAULT_RETRY_COOLDOWN_MINUTES = 30;
+    static final int DEFAULT_MAX_ATTEMPTS = 3;
+    /** Trang gửi yêu cầu hỗ trợ cho người nhận khi khoản chi gặp sự cố. */
+    static final String SUPPORT_LINK = "/help";
     private static final Set<PayosOrderStatus> IN_FLIGHT = Set.of(PayosOrderStatus.PENDING, PayosOrderStatus.SUBMITTED);
     private static final Pattern ACCOUNT_NUMBER = Pattern.compile("(\\d[\\d ]{4,22}\\d)");
 
@@ -80,6 +88,8 @@ public class PayosPayoutService {
     private final UserRepository userRepository;
     private final NotificationService notificationService;
     private final PlatformTransactionManager txManager;
+    private final PayosOrderGuard orderGuard;
+    private final PayosTransferLock transferLock;
 
     /** Nguồn dữ liệu đã đọc xong từ DB (không còn phụ thuộc phiên Hibernate) cho 1 lệnh chi. */
     record Source(long amount, String bankBin, String accountNumber, String holderName, String description) {
@@ -105,7 +115,7 @@ public class PayosPayoutService {
     }
 
     public List<PayosDto.OrderRes> orders(PayosOrderKind kind, Long entityId) {
-        return orderRepository.findByKindAndEntityIdOrderByAttemptDesc(kind, entityId).stream().map(PayosPayoutService::toRes).toList();
+        return orderRepository.findByKindAndEntityIdOrderByAttemptDesc(kind, entityId).stream().map(this::toRes).toList();
     }
 
     /**
@@ -113,12 +123,7 @@ public class PayosPayoutService {
      * tiền đi hai lần (một lần bằng tay, một lần qua PayOS). Gọi từ các endpoint ghi nhận thủ công; đường tự động không đi qua đây.
      */
     public void assertNoInFlightOrder(PayosOrderKind kind, Long entityId) {
-        orderRepository.findFirstByKindAndEntityIdOrderByAttemptDesc(kind, entityId).ifPresent(o -> {
-            if (IN_FLIGHT.contains(o.getStatus()) || o.getStatus() == PayosOrderStatus.UNKNOWN) {
-                throw new BusinessRuleViolationException("Đang có lệnh chi PayOS (" + o.getReferenceId()
-                        + ") chưa có kết quả; hãy chờ kết quả (hoặc bấm gửi lại) thay vì chuyển tay để tránh chuyển tiền hai lần");
-            }
-        });
+        orderGuard.assertNoUnsettled(kind, entityId);
     }
 
     // ── khởi tạo lệnh chi ────────────────────────────────────────────────
@@ -203,7 +208,13 @@ public class PayosPayoutService {
             throw new BusinessRuleViolationException("Số tiền vượt trần chi tự động (" + maxAmount() + "đ); hãy chuyển thủ công");
         }
         User admin = userRepository.findByEmail(adminEmail).orElseThrow(() -> new ResourceNotFoundException("User", adminEmail));
+        // Khóa ngắn theo từng khoản: hai lần bấm cùng lúc thì chỉ một lần vào (xem PayosTransferLock). Mọi kiểm tra bên dưới nằm trong khóa.
+        try (PayosTransferLock.Handle ignored = transferLock.acquire(kind, entityId)) {
+            return transferLocked(kind, entityId, adminEmail, src, admin);
+        }
+    }
 
+    private PayosDto.OrderRes transferLocked(PayosOrderKind kind, Long entityId, String adminEmail, Source src, User admin) {
         Optional<PayosPayoutOrder> latest = orderRepository.findFirstByKindAndEntityIdOrderByAttemptDesc(kind, entityId);
         PayosPayoutOrder order;
         boolean fresh;
@@ -214,6 +225,13 @@ public class PayosPayoutService {
             }
             if (IN_FLIGHT.contains(st)) {
                 throw new BusinessRuleViolationException("Lệnh chi này đang được PayOS xử lý, vui lòng chờ kết quả");
+            }
+            if (st == PayosOrderStatus.FAILED) {
+                // Chính sách thử lại thực thi Ở ĐÂY (tầng service), không chỉ ở giao diện: gọi API trực tiếp cũng bị chặn như bấm nút.
+                RetryState rs = retryState(kind, entityId, latest.get());
+                if (!rs.allowed()) {
+                    throw new BusinessRuleViolationException(rs.blockedReason());
+                }
             }
             // UNKNOWN: gửi lại với CÙNG referenceId (PayOS trả lại đúng lệnh cũ, không chi lần 2); FAILED: lệnh mới.
             fresh = st == PayosOrderStatus.FAILED;
@@ -226,7 +244,7 @@ public class PayosPayoutService {
 
         if (fresh || order.getId() == null) {
             checkFunds(req);
-            order = orderRepository.save(order);
+            order = saveNewOrder(order);
         } else {
             order.setStatus(PayosOrderStatus.PENDING);
             order = orderRepository.save(order);
@@ -258,6 +276,63 @@ public class PayosPayoutService {
             markUnknown(order, safeMessage(e));
         }
         return toRes(orderRepository.findById(order.getId()).orElse(order));
+    }
+
+    /** Lưu lệnh mới; nếu một thao tác khác đã tạo cùng mã tham chiếu thì báo rõ thay vì lỗi 500 (DB đã chặn chi hai lần nhờ UNIQUE(reference_id)). */
+    private PayosPayoutOrder saveNewOrder(PayosPayoutOrder order) {
+        try {
+            return orderRepository.save(order);
+        } catch (DataIntegrityViolationException e) {
+            throw new BusinessRuleViolationException("Một lệnh chi cho khoản này vừa được tạo bởi thao tác khác; hãy tải lại để xem trạng thái hiện tại");
+        }
+    }
+
+    // ── chính sách thử lại ───────────────────────────────────────────────
+
+    /** Kết quả đánh giá việc chi lại sau thất bại: được phép không, bao giờ được, còn mấy lần, và vì sao bị chặn. */
+    record RetryState(boolean allowed, LocalDateTime nextRetryAt, int attemptsLeft, int failedCount, String blockedReason) {}
+
+    /**
+     * Quy tắc chi lại sau khi lệnh gần nhất thất bại: (1) lỗi do TÀI KHOẢN thì không chi lại cho tới khi người nhận cập nhật tài khoản; (2) tối đa
+     * {@code PAYOS_MAX_ATTEMPTS} lần thất bại (tính từ lần cập nhật tài khoản gần nhất); (3) phải chờ {@code PAYOS_RETRY_COOLDOWN_MINUTES} phút kể
+     * từ lần thất bại gần nhất. Cập nhật tài khoản sau lần thất bại gần nhất là thông tin mới nên bỏ qua (1) và thời gian chờ.
+     */
+    RetryState retryState(PayosOrderKind kind, Long entityId, PayosPayoutOrder latest) {
+        int max = Math.max(1, config.getInt(KEY_MAX_ATTEMPTS, DEFAULT_MAX_ATTEMPTS));
+        int cooldown = Math.max(0, config.getInt(KEY_RETRY_COOLDOWN_MINUTES, DEFAULT_RETRY_COOLDOWN_MINUTES));
+        LocalDateTime accountChangedAt = accountChangedAt(kind, entityId);
+        LocalDateTime failedAt = latest.getCompletedAt() != null ? latest.getCompletedAt() : latest.getCreatedAt();
+        boolean accountFixedSince = accountChangedAt != null && failedAt != null && accountChangedAt.isAfter(failedAt);
+
+        long failedCount = orderRepository.findByKindAndEntityIdOrderByAttemptDesc(kind, entityId).stream()
+                .filter(o -> o.getStatus() == PayosOrderStatus.FAILED)
+                .filter(o -> accountChangedAt == null || o.getCreatedAt() == null || o.getCreatedAt().isAfter(accountChangedAt))
+                .count();
+        int left = (int) Math.max(0, max - failedCount);
+
+        if (latest.getFailureCategory() == PayosFailureCategory.ACCOUNT && !accountFixedSince) {
+            return new RetryState(false, null, left, (int) failedCount, "Lệnh trước thất bại do tài khoản nhận có vấn đề; chỉ chi lại sau khi người nhận cập nhật tài khoản");
+        }
+        if (left <= 0) {
+            return new RetryState(false, null, 0, (int) failedCount, "Đã thất bại " + failedCount + "/" + max
+                    + " lần; nút PayOS bị khóa. Hãy chuyển thủ công hoặc yêu cầu người nhận kiểm tra tài khoản");
+        }
+        if (!accountFixedSince && failedAt != null) {
+            LocalDateTime next = failedAt.plusMinutes(cooldown);
+            if (LocalDateTime.now().isBefore(next)) {
+                long minutes = Math.max(1, java.time.Duration.between(LocalDateTime.now(), next).toMinutes() + 1);
+                return new RetryState(false, next, left, (int) failedCount, "Vừa thất bại; vui lòng chờ khoảng " + minutes + " phút nữa rồi chi lại (còn " + left + " lần)");
+            }
+        }
+        return new RetryState(true, null, left, (int) failedCount, null);
+    }
+
+    /** Mốc người nhận cập nhật tài khoản (chỉ hoàn tiền mới có; yêu cầu rút đã bị hủy khi tài khoản sai nên giảng viên tạo yêu cầu mới). */
+    private LocalDateTime accountChangedAt(PayosOrderKind kind, Long entityId) {
+        if (kind != PayosOrderKind.DISPUTE_REFUND) {
+            return null;
+        }
+        return disputeRepository.findById(entityId).map(PaymentDispute::getRefundAccountUpdatedAt).orElse(null);
     }
 
     /** PayOS báo khóa idempotency đã tồn tại = lệnh này ĐÃ được tạo trước đó (không phải thất bại): phải tra lại thay vì coi là lỗi. */
@@ -377,17 +452,104 @@ public class PayosPayoutService {
     }
 
     private void markFailed(PayosPayoutOrder order, String code, String message) {
+        PayosFailureCategory category = PayosFailureClassifier.classify(code, message);
         order.setStatus(PayosOrderStatus.FAILED);
         order.setErrorCode(code);
         order.setErrorMessage(truncate(message, 500));
+        order.setFailureCategory(category);
         order.setCompletedAt(LocalDateTime.now());
         orderRepository.save(order);
         auditService.record(creatorEmail(order), "PAYOS_PAYOUT_FAILED", "payos_payout_order", String.valueOf(order.getId()), null,
                 orderSnapshot(order));
-        notifyAdmins("PAYOS_PAYOUT_FAILED", "Chi tự động thất bại",
-                "Lệnh " + order.getReferenceId() + ": " + (message == null ? "PayOS từ chối" : message)
-                        + ". Yêu cầu vẫn giữ nguyên trạng thái; hãy kiểm tra số tài khoản/ngân hàng rồi thử lại hoặc chuyển thủ công.",
-                adminLink(order));
+
+        RetryState rs = retryState(order.getKind(), order.getEntityId(), order);
+        notifyAdminsFailure(order, category, message == null ? "PayOS từ chối" : message, rs);
+        notifyRecipientOfFailure(order, category, message == null ? "PayOS từ chối" : message, rs);
+    }
+
+    /** Báo admin theo đúng nhóm nguyên nhân: tạm thời (có thể chi lại sau), tài khoản (hệ thống đã dừng khoản), hay chưa rõ (cần xem xét). */
+    private void notifyAdminsFailure(PayosPayoutOrder order, PayosFailureCategory category, String reason, RetryState rs) {
+        String ref = order.getReferenceId();
+        switch (category) {
+            case TRANSIENT -> notifyAdmins("PAYOS_PAYOUT_FAILED", "Chi tự động thất bại — sự cố tạm thời",
+                    "Lệnh " + ref + ": " + reason + ". Đây là sự cố tạm thời phía hệ thống/ngân hàng, không phải lỗi dữ liệu của khoản này; khoản vẫn giữ nguyên. "
+                            + (rs.attemptsLeft() <= 0
+                            ? "Đã thất bại " + rs.failedCount() + " lần nên nút PayOS bị khóa: hãy chuyển thủ công hoặc liên hệ PayOS."
+                            : "Có thể chi lại sau " + (rs.nextRetryAt() == null ? "ít phút" : "thời gian chờ") + " (còn " + rs.attemptsLeft() + " lần)."),
+                    adminLink(order));
+            case ACCOUNT -> notifyAdmins("PAYOS_PAYOUT_FAILED", "Chi tự động thất bại — tài khoản nhận có vấn đề",
+                    "Lệnh " + ref + ": " + reason + ". Thử lại cùng thông tin sẽ không thành công nên hệ thống đã "
+                            + (order.getKind() == PayosOrderKind.INSTRUCTOR_PAYOUT
+                            ? "dừng yêu cầu rút và hoàn số dư cho giảng viên"
+                            : "chuyển khoản hoàn sang trạng thái chờ học viên cập nhật tài khoản")
+                            + " và đã báo người nhận.", adminLink(order));
+            default -> notifyAdmins("PAYOS_PAYOUT_FAILED", "Chi tự động thất bại — chưa rõ nguyên nhân",
+                    "Lệnh " + ref + ": " + reason + ". Mã lỗi chưa được phân loại nên hệ thống KHÔNG tự dừng khoản và CHƯA báo người nhận; hãy xem xét rồi chi lại, "
+                            + "chuyển thủ công hoặc yêu cầu người nhận cập nhật tài khoản.", adminLink(order));
+        }
+    }
+
+    /**
+     * Báo người nhận (giảng viên/học viên) để họ không phải chờ vô vọng. Tạm thời: báo MỘT lần ở lần thất bại đầu và một lần khi bị khóa (không báo mỗi
+     * lần thử). Tài khoản: dừng khoản + báo kèm cách sửa. Chưa rõ: không báo (đừng đoán). Lỗi khi báo không được làm mất dấu lệnh đã FAILED.
+     */
+    private void notifyRecipientOfFailure(PayosPayoutOrder order, PayosFailureCategory category, String reason, RetryState rs) {
+        try {
+            switch (category) {
+                case TRANSIENT -> {
+                    boolean blocked = rs.attemptsLeft() <= 0;
+                    if (rs.failedCount() == 1 || blocked) {
+                        Recipient r = recipientOf(order);
+                        notificationService.notify(r.userId(), "PAYOS_TRANSFER_DELAYED", "Chuyển tiền gặp gián đoạn",
+                                blocked
+                                        ? r.label() + " (" + r.amountText() + ") chưa chuyển được sau nhiều lần thử. Đội ngũ sẽ xử lý trực tiếp cho bạn; "
+                                        + "nếu cần gấp, hãy gửi yêu cầu hỗ trợ."
+                                        : r.label() + " (" + r.amountText() + ") chưa chuyển được do sự cố tạm thời tại hệ thống ngân hàng. "
+                                        + "Số tiền của bạn vẫn được giữ nguyên và sẽ được chuyển lại; bạn không cần thao tác thêm. Cần hỗ trợ? Hãy gửi yêu cầu hỗ trợ.",
+                                SUPPORT_LINK);
+                    }
+                }
+                case ACCOUNT -> terminateForAccountFault(order, reason);
+                default -> { /* chưa rõ nguyên nhân: chỉ admin biết */ }
+            }
+        } catch (RuntimeException e) {
+            log.error("Lệnh {} thất bại ({}) nhưng xử lý/báo người nhận lỗi: {}", order.getReferenceId(), category, e.getMessage());
+            notifyAdmins("PAYOS_RECIPIENT_NOTIFY_FAILED", "Chưa báo/xử lý được người nhận sau khi chi thất bại",
+                    "Lệnh " + order.getReferenceId() + " thất bại nhưng hệ thống chưa dừng khoản hoặc chưa báo được người nhận: " + safeMessage(e)
+                            + ". Hãy xử lý thủ công.", adminLink(order));
+        }
+    }
+
+    /** Lỗi do tài khoản nhận: rút tiền → từ chối yêu cầu + hoàn số dư (giảng viên tạo yêu cầu mới); hoàn tiền → chờ học viên cập nhật tài khoản. */
+    private void terminateForAccountFault(PayosPayoutOrder order, String reason) {
+        String actor = creatorEmail(order);
+        String why = "Ngân hàng báo tài khoản nhận không hợp lệ hoặc không tìm thấy (" + reason + ")";
+        if (order.getKind() == PayosOrderKind.INSTRUCTOR_PAYOUT) {
+            payoutService.markFailed(actor, order.getEntityId(), why);
+        } else {
+            disputeService.requestAccountUpdate(actor, order.getEntityId(), why);
+        }
+    }
+
+    private record Recipient(Long userId, String label, String amountText) {}
+
+    private Recipient recipientOf(PayosPayoutOrder order) {
+        // Đọc quan hệ lazy trong một giao dịch ngắn (lớp này không @Transactional).
+        return new TransactionTemplate(txManager).execute(s -> {
+            String amount = vnd(order.getAmount());
+            if (order.getKind() == PayosOrderKind.INSTRUCTOR_PAYOUT) {
+                InstructorPayout p = payoutRepository.findById(order.getEntityId())
+                        .orElseThrow(() -> new ResourceNotFoundException("Payout", order.getEntityId()));
+                return new Recipient(p.getInstructor().getId(), "Yêu cầu rút " + p.getCode(), amount);
+            }
+            PaymentDispute d = disputeRepository.findById(order.getEntityId())
+                    .orElseThrow(() -> new ResourceNotFoundException("PaymentDispute", order.getEntityId()));
+            return new Recipient(d.getFiledBy().getId(), "Khoản hoàn tiền giao dịch " + d.getPayment().getTxnRef(), amount);
+        });
+    }
+
+    private static String vnd(long amount) {
+        return String.format(java.util.Locale.ROOT, "%,d", amount).replace(',', '.') + "đ";
     }
 
     private void markUnknown(PayosPayoutOrder order, String message) {
@@ -473,11 +635,21 @@ public class PayosPayoutService {
         return s == null || s.length() <= max ? s : s.substring(0, max);
     }
 
-    static PayosDto.OrderRes toRes(PayosPayoutOrder o) {
+    PayosDto.OrderRes toRes(PayosPayoutOrder o) {
         boolean mismatch = o.getResolvedAccountName() != null && o.getHolderNameEntered() != null
                 && !NameNormalizer.matches(o.getResolvedAccountName(), o.getHolderNameEntered());
+        RetryState rs = null;
+        if (o.getStatus() == PayosOrderStatus.FAILED) {
+            boolean latest = orderRepository.findFirstByKindAndEntityIdOrderByAttemptDesc(o.getKind(), o.getEntityId())
+                    .map(l -> l.getId() != null && l.getId().equals(o.getId())).orElse(false);
+            if (latest) {
+                rs = retryState(o.getKind(), o.getEntityId(), o);
+            }
+        }
         return new PayosDto.OrderRes(o.getId(), o.getKind(), o.getEntityId(), o.getAttempt(), o.getReferenceId(), o.getAmount(),
                 o.getAccountLast4(), o.getStatus(), o.getPayosState(), o.getResolvedAccountName(), o.getHolderNameEntered(),
-                mismatch, o.getErrorMessage(), o.getCreatedAt(), o.getCompletedAt());
+                mismatch, o.getErrorMessage(), o.getCreatedAt(), o.getCompletedAt(), o.getFailureCategory(),
+                rs == null ? null : rs.nextRetryAt(), rs == null ? null : rs.attemptsLeft(),
+                rs == null ? null : rs.allowed(), rs == null ? null : rs.blockedReason());
     }
 }

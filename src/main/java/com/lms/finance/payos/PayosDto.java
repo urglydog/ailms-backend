@@ -1,5 +1,6 @@
 package com.lms.finance.payos;
 
+import com.lms.common.enums.PayosFailureCategory;
 import com.lms.common.enums.PayosOrderKind;
 import com.lms.common.enums.PayosOrderStatus;
 import java.time.LocalDateTime;
@@ -25,6 +26,16 @@ public class PayosDto {
             boolean nameMismatch,
             String errorMessage,
             LocalDateTime createdAt,
-            LocalDateTime completedAt
+            LocalDateTime completedAt,
+            /** Nhóm nguyên nhân khi FAILED (tạm thời / tài khoản / chưa rõ); null nếu không thất bại. */
+            PayosFailureCategory failureCategory,
+            /** Chỉ có ở lệnh FAILED mới nhất: thời điểm sớm nhất được chi lại (null = không bị chờ). */
+            LocalDateTime nextRetryAt,
+            /** Chỉ có ở lệnh FAILED mới nhất: số lần chi lại còn lại. */
+            Integer attemptsLeft,
+            /** Chỉ có ở lệnh FAILED mới nhất: BE có cho chi lại ngay lúc này không. */
+            Boolean canRetry,
+            /** Lý do không cho chi lại (null nếu được phép hoặc không áp dụng). */
+            String retryBlockedReason
     ) {}
 }

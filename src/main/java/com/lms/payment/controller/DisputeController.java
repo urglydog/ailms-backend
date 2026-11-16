@@ -21,7 +21,6 @@ public class DisputeController {
 
     private final DisputeService disputeService;
     private final com.lms.payment.service.RefundAppealService appealService;
-    private final com.lms.finance.payos.PayosPayoutService payosPayoutService;
 
     /** multipart thay vì JSON thuần (23/10/2026) — cho đính kèm minh chứng ảnh/video ngay lúc
      * gửi khiếu nại, field "files" optional (0-5 file). */
@@ -66,8 +65,23 @@ public class DisputeController {
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<DisputeDto.AdminRes> markTransferred(
             Principal principal, @PathVariable Long id, @Valid @RequestBody DisputeDto.MarkTransferredReq req) {
-        payosPayoutService.assertNoInFlightOrder(com.lms.common.enums.PayosOrderKind.DISPUTE_REFUND, id);
         return ResponseEntity.ok(disputeService.markTransferred(principal.getName(), id, req));
+    }
+
+    /** Admin yêu cầu học viên cập nhật tài khoản nhận hoàn tiền (16/11/2026). */
+    @PostMapping("/admin/{id}/request-account-update")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<DisputeDto.AdminRes> requestAccountUpdate(
+            Principal principal, @PathVariable Long id, @Valid @RequestBody DisputeDto.RequestAccountUpdateReq req) {
+        return ResponseEntity.ok(disputeService.requestAccountUpdate(principal.getName(), id, req.reason()));
+    }
+
+    /** Học viên cập nhật tài khoản nhận hoàn tiền (16/11/2026); BE kiểm tra được phép hay không theo trạng thái khoản hoàn. */
+    @PutMapping("/mine/{id}/refund-account")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
+    public ResponseEntity<DisputeDto.Res> updateRefundAccount(
+            Principal principal, @PathVariable Long id, @Valid @RequestBody DisputeDto.UpdateRefundAccountReq req) {
+        return ResponseEntity.ok(disputeService.updateRefundAccount(principal.getName(), id, req));
     }
 
     /** Admin quyết định khiếu nại của giảng viên với quyết định "giảng viên chịu toàn bộ" (14/11/2026). */

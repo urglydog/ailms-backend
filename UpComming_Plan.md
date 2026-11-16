@@ -11,7 +11,7 @@
 | # | Việc | Ghi chú |
 |---|---|---|
 | 1 | **Sao lưu DB** | V163–V167 đã áp dụng khi CHƯA sao lưu. |
-| 2 | **2 lệnh PayOS đầu tiên THẤT BẠI (16/11)**: `LLR5-1` (hoàn 10.000đ) và `LLP1-1` (rút 20.000đ) bị Techcombank từ chối `PAYOUT_BANK_SYSTEM_ERROR` (ngân hàng gián đoạn). Cần: bấm **gửi lại** trên giao diện admin khi ngân hàng hoạt động (tạo `LLR5-2`/`LLP1-2`, an toàn, không chi trùng) để kiểm đường THÀNH CÔNG; và thêm khóa Redis + thông báo rõ khi bấm song song | Báo cáo: `docs/PAYOS_PAYOUT_VERIFICATION_20261116.md`. Tracking hóa đơn tạm dừng cho tới khi đường thành công chạy thật. |
+| 2 | **Triển khai bản vá chi PayOS (V168) rồi gửi lại 2 lệnh thất bại** (`LLR5-1` hoàn 10.000đ, `LLP1-1` rút 20.000đ bị ngân hàng báo gián đoạn 16/11). Code đã xong + 748 test đạt, đã push; cần bạn duyệt deploy BE (Flyway chạy V168; DB đã sao lưu 15/11). Sau đó bấm **Chi lại** (tạo `LLR5-2`/`LLP1-2`) để kiểm đường THÀNH CÔNG; thử thêm 1 khoản nhỏ sang tài khoản ngân hàng khác để tách nguyên nhân | Báo cáo: `docs/PAYOS_PAYOUT_VERIFICATION_20261116.md`. Hóa đơn bắt đầu sau khi đường thành công chạy thật. |
 | 3 | **Hỏi PayOS** (đang có email hỗ trợ): số dư tối thiểu 1.000.000đ là nạp một lần hay phải duy trì; số dư tài khoản chi có rút ngược được không; IP/hạn mức; lệnh chi có cần duyệt trên dashboard | Tài liệu API không nêu các điểm này. |
 | 4 | **Trả cấu hình test về mặc định** sau khi thử xong: `PAYOUT_MIN_AMOUNT` (đang hạ xuống 20.000) → `100000`; `PAYOS_PAYOUT_MAX_AMOUNT`; `PAYOS_PAYOUT_ENABLED` (để 0 nếu chưa dùng thật) | Admin → Cài đặt. |
 | 5 | **Duyệt hướng triển khai Hóa đơn & Thống kê** (mục 2.A) | Đã chốt toàn bộ câu hỏi 15/11 (mục 8 của `docs/INVOICE_AND_REPORTING_PLAN.md`); chỉ còn duyệt hướng triển khai ở mục 7 và chờ 2 lệnh PayOS xong. |
