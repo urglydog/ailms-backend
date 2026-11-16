@@ -11,7 +11,7 @@
 | # | Việc | Ghi chú |
 |---|---|---|
 | 1 | **Sao lưu DB** | V163–V167 đã áp dụng khi CHƯA sao lưu. |
-| 2 | **Chờ tiền về Techcombank** cho 2 lệnh PayOS đang "đang xử lý": hoàn tiền `LLR5-1` (10.000đ, khiếu nại AI Agent) và rút tiền giảng viên `LLP1-1` (20.000đ, `PO-202611-815615`) | Khi PayOS báo thành công hệ thống tự ghi "đã chuyển". Quá 1–2 ngày làm việc vẫn chưa về → gửi hỗ trợ PayOS/Baokim kèm mã lệnh. |
+| 2 | **2 lệnh PayOS đầu tiên THẤT BẠI (16/11)**: `LLR5-1` (hoàn 10.000đ) và `LLP1-1` (rút 20.000đ) bị Techcombank từ chối `PAYOUT_BANK_SYSTEM_ERROR` (ngân hàng gián đoạn). Cần: bấm **gửi lại** trên giao diện admin khi ngân hàng hoạt động (tạo `LLR5-2`/`LLP1-2`, an toàn, không chi trùng) để kiểm đường THÀNH CÔNG; và thêm khóa Redis + thông báo rõ khi bấm song song | Báo cáo: `docs/PAYOS_PAYOUT_VERIFICATION_20261116.md`. Tracking hóa đơn tạm dừng cho tới khi đường thành công chạy thật. |
 | 3 | **Hỏi PayOS** (đang có email hỗ trợ): số dư tối thiểu 1.000.000đ là nạp một lần hay phải duy trì; số dư tài khoản chi có rút ngược được không; IP/hạn mức; lệnh chi có cần duyệt trên dashboard | Tài liệu API không nêu các điểm này. |
 | 4 | **Trả cấu hình test về mặc định** sau khi thử xong: `PAYOUT_MIN_AMOUNT` (đang hạ xuống 20.000) → `100000`; `PAYOS_PAYOUT_MAX_AMOUNT`; `PAYOS_PAYOUT_ENABLED` (để 0 nếu chưa dùng thật) | Admin → Cài đặt. |
 | 5 | **Duyệt hướng triển khai Hóa đơn & Thống kê** (mục 2.A) | Đã chốt toàn bộ câu hỏi 15/11 (mục 8 của `docs/INVOICE_AND_REPORTING_PLAN.md`); chỉ còn duyệt hướng triển khai ở mục 7 và chờ 2 lệnh PayOS xong. |
