@@ -28,7 +28,6 @@ import org.springframework.web.bind.annotation.RestController;
 public class AdminPayoutController {
 
     private final PayoutService payoutService;
-    private final com.lms.finance.payos.PayosPayoutService payosPayoutService;
 
     @GetMapping
     public ResponseEntity<List<PayoutDto.AdminPayoutRes>> list(@RequestParam(required = false) PayoutStatus status) {
@@ -43,21 +42,18 @@ public class AdminPayoutController {
     @PostMapping("/{id}/mark-paid")
     public ResponseEntity<PayoutDto.AdminPayoutRes> markPaid(
             Principal principal, @PathVariable Long id, @Valid @RequestBody PayoutDto.MarkPaidReq req) {
-        payosPayoutService.assertNoInFlightOrder(com.lms.common.enums.PayosOrderKind.INSTRUCTOR_PAYOUT, id);
         return ResponseEntity.ok(payoutService.markPaid(principal.getName(), id, req.transferRef(), req.proofUrl()));
     }
 
     @PostMapping("/{id}/reject")
     public ResponseEntity<PayoutDto.AdminPayoutRes> reject(
             Principal principal, @PathVariable Long id, @Valid @RequestBody PayoutDto.ReasonReq req) {
-        payosPayoutService.assertNoInFlightOrder(com.lms.common.enums.PayosOrderKind.INSTRUCTOR_PAYOUT, id);
         return ResponseEntity.ok(payoutService.reject(principal.getName(), id, req.reason()));
     }
 
     @PostMapping("/{id}/mark-failed")
     public ResponseEntity<PayoutDto.AdminPayoutRes> markFailed(
             Principal principal, @PathVariable Long id, @Valid @RequestBody PayoutDto.ReasonReq req) {
-        payosPayoutService.assertNoInFlightOrder(com.lms.common.enums.PayosOrderKind.INSTRUCTOR_PAYOUT, id);
         return ResponseEntity.ok(payoutService.markFailed(principal.getName(), id, req.reason()));
     }
 

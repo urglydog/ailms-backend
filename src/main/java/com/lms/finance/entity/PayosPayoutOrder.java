@@ -1,6 +1,7 @@
 package com.lms.finance.entity;
 
 import com.lms.common.entity.BaseEntity;
+import com.lms.common.enums.PayosFailureCategory;
 import com.lms.common.enums.PayosOrderKind;
 import com.lms.common.enums.PayosOrderStatus;
 import jakarta.persistence.Column;
@@ -61,6 +62,11 @@ public class PayosPayoutOrder extends BaseEntity {
 
     @Column(name = "bank_reference", length = 100)
     private String bankReference;
+
+    /** Nhóm nguyên nhân khi FAILED (xem {@link PayosFailureCategory}); null với lệnh chưa/không thất bại. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "failure_category", length = 20)
+    private PayosFailureCategory failureCategory;
 
     @Column(name = "error_code", length = 50)
     private String errorCode;

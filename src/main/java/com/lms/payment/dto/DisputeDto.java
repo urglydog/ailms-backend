@@ -63,7 +63,13 @@ public class DisputeDto {
             /** null nếu chưa duyệt hoàn tiền; PENDING_TRANSFER = đã duyệt, chờ chuyển khoản. */
             RefundTransferStatus refundTransferStatus,
             /** Hạn cuối được xin hoàn tiền của giao dịch (để hiển thị cho học viên). */
-            LocalDateTime refundDeadline
+            LocalDateTime refundDeadline,
+            /** Học viên có được sửa tài khoản nhận hoàn tiền lúc này không (BE là bên quyết định; xem DisputeService.accountEditability). */
+            boolean canEditRefundAccount,
+            /** Giải thích ngắn: vì sao đang khóa, hoặc vì sao cần cập nhật. */
+            String refundAccountHint,
+            /** Tài khoản nhận hoàn tiền đang khai (đã che số: chỉ 4 số cuối), null nếu chưa khai có cấu trúc. */
+            String refundAccountSummary
     ) {}
 
     public record AdminRes(
@@ -110,8 +116,21 @@ public class DisputeDto {
             com.lms.common.enums.AppealStatus appealStatus,
             String appealReason,
             LocalDateTime appealAt,
-            String appealDecisionNote
+            String appealDecisionNote,
+            /** Lần cuối học viên đổi tài khoản nhận hoàn tiền sau khi gửi khiếu nại (admin cần biết trước khi chuyển tiền). */
+            LocalDateTime refundAccountUpdatedAt
     ) {}
+
+    /** Học viên cập nhật tài khoản nhận hoàn tiền (khi chuyển khoản lỗi hoặc nhập nhầm). */
+    public record UpdateRefundAccountReq(
+            @NotBlank String refundBankCode,
+            @NotBlank String refundAccountNumber,
+            @NotBlank String refundAccountHolder,
+            Boolean refundAccountOwnConfirmed
+    ) {}
+
+    /** Admin yêu cầu học viên cập nhật tài khoản (khi không chuyển được mà chưa rõ nguyên nhân, hoặc đã hết lượt PayOS). */
+    public record RequestAccountUpdateReq(@NotBlank @Size(max = 300) String reason) {}
 
     /**
      * {@code responsibility} optional (null = STANDARD): STANDARD giảng viên trả lại đúng phần đã nhận;

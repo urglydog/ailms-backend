@@ -64,6 +64,7 @@ class DisputeServiceTest {
     @Mock private EnrollmentRepository enrollmentRepository;
     @Mock private SystemConfigService systemConfigService;
     @Mock private PaymentRefundRepository refundRepository;
+    @Mock private com.lms.finance.payos.PayosOrderGuard payosOrderGuard;
 
     @InjectMocks
     private DisputeService disputeService;
@@ -294,5 +295,119 @@ class DisputeServiceTest {
         disputeService.markTransferred(ADMIN_EMAIL, 500L, new DisputeDto.MarkTransferredReq("FT123"));
 
         verify(refundService).markTransferred(d, ADMIN_EMAIL, "FT123");
+    }
+
+    // ── cập nhật tài khoản nhận hoàn tiền (16/11/2026) ───────────────────────────────────────────
+
+    private PaymentDispute resolvedRefunded(com.lms.common.enums.RefundTransferStatus transfer) {
+        PaymentDispute d = openDispute();
+        d.setStatus(DisputeStatus.RESOLVED_REFUNDED);
+        com.lms.payment.entity.PaymentRefund refund = new com.lms.payment.entity.PaymentRefund();
+        refund.setPayment(payment);
+        refund.setTransferStatus(transfer);
+        lenient().when(refundRepository.findByPayment_Id(100L)).thenReturn(Optional.of(refund));
+        return d;
+    }
+
+    /** Hồ sơ KHÔNG stub repository (cho test thuần logic, tránh UnnecessaryStubbing). */
+    private PaymentDispute plain(DisputeStatus status) {
+        PaymentDispute d = new PaymentDispute();
+        d.setId(500L);
+        d.setPayment(payment);
+        d.setFiledBy(learner);
+        d.setStatus(status);
+        return d;
+    }
+
+    private com.lms.payment.entity.PaymentRefund plainRefund(com.lms.common.enums.RefundTransferStatus transfer) {
+        com.lms.payment.entity.PaymentRefund r = new com.lms.payment.entity.PaymentRefund();
+        r.setPayment(payment);
+        r.setTransferStatus(transfer);
+        return r;
+    }
+
+    private DisputeDto.UpdateRefundAccountReq newAccount() {
+        return new DisputeDto.UpdateRefundAccountReq("TCB", "19070154183018", "Nguyen Chi Thien", true);
+    }
+
+    @Test
+    void accountEditability_followsTheRefundState() {
+        PaymentDispute d = plain(DisputeStatus.OPEN);
+        assertThat(disputeService.accountEditability(d, null).can()).isTrue();
+
+        d.setStatus(DisputeStatus.RESOLVED_REJECTED);
+        assertThat(disputeService.accountEditability(d, null).can()).isFalse();
+
+        d.setStatus(DisputeStatus.RESOLVED_REFUNDED);
+        assertThat(disputeService.accountEditability(d, plainRefund(com.lms.common.enums.RefundTransferStatus.PENDING_TRANSFER)).can()).isTrue();
+
+        DisputeService.AccountEditability awaiting =
+                disputeService.accountEditability(d, plainRefund(com.lms.common.enums.RefundTransferStatus.AWAITING_ACCOUNT));
+        assertThat(awaiting.can()).isTrue();
+        assertThat(awaiting.hint()).contains("cập nhật");
+
+        assertThat(disputeService.accountEditability(d, plainRefund(com.lms.common.enums.RefundTransferStatus.TRANSFERRED)).can()).isFalse();
+    }
+
+    @Test
+    void accountEditability_isLockedWhileAPayosOrderIsUnsettled() {
+        PaymentDispute d = plain(DisputeStatus.RESOLVED_REFUNDED);
+        when(payosOrderGuard.hasUnsettled(com.lms.common.enums.PayosOrderKind.DISPUTE_REFUND, 500L)).thenReturn(true);
+
+        DisputeService.AccountEditability e =
+                disputeService.accountEditability(d, plainRefund(com.lms.common.enums.RefundTransferStatus.PENDING_TRANSFER));
+
+        assertThat(e.can()).isFalse();
+        assertThat(e.hint()).contains("đang được chuyển");
+    }
+
+    @Test
+    void updateRefundAccount_whileAwaiting_savesTheNewAccount_andResumesTheTransfer() {
+        PaymentDispute d = resolvedRefunded(com.lms.common.enums.RefundTransferStatus.AWAITING_ACCOUNT);
+        com.lms.payment.entity.PaymentRefund r = refundRepository.findByPayment_Id(100L).orElseThrow();
+
+        disputeService.updateRefundAccount(LEARNER_EMAIL, 500L, newAccount());
+
+        assertThat(d.getRefundAccountNumber()).isEqualTo("19070154183018");
+        assertThat(d.getRefundAccountHolder()).isEqualTo("NGUYEN CHI THIEN");
+        assertThat(d.getRefundAccountUpdatedAt()).isNotNull();
+        verify(refundService).onRefundAccountUpdated(d, r);
+    }
+
+    @Test
+    void updateRefundAccount_isRefusedWhenLocked_andNothingIsSaved() {
+        resolvedRefunded(com.lms.common.enums.RefundTransferStatus.TRANSFERRED);
+
+        assertThatThrownBy(() -> disputeService.updateRefundAccount(LEARNER_EMAIL, 500L, newAccount()))
+                .isInstanceOf(BusinessRuleViolationException.class);
+
+        verify(disputeRepository, never()).save(any());
+        verify(refundService, never()).onRefundAccountUpdated(any(), any());
+    }
+
+    @Test
+    void updateRefundAccount_rejectsSomeoneElsesDispute_andUnconfirmedOwnership() {
+        resolvedRefunded(com.lms.common.enums.RefundTransferStatus.AWAITING_ACCOUNT);
+        User other = new User();
+        other.setId(77L);
+        other.setEmail("khac@lms.local");
+        when(userRepository.findByEmail("khac@lms.local")).thenReturn(Optional.of(other));
+
+        assertThatThrownBy(() -> disputeService.updateRefundAccount("khac@lms.local", 500L, newAccount()))
+                .isInstanceOf(BusinessRuleViolationException.class).hasMessageContaining("của chính mình");
+        assertThatThrownBy(() -> disputeService.updateRefundAccount(LEARNER_EMAIL, 500L,
+                new DisputeDto.UpdateRefundAccountReq("TCB", "19070154183018", "Nguyen Chi Thien", false)))
+                .isInstanceOf(BusinessRuleViolationException.class).hasMessageContaining("của chính bạn");
+
+        verify(disputeRepository, never()).save(any());
+    }
+
+    @Test
+    void requestAccountUpdate_delegatesToTheRefundService() {
+        PaymentDispute d = resolvedRefunded(com.lms.common.enums.RefundTransferStatus.PENDING_TRANSFER);
+
+        disputeService.requestAccountUpdate(ADMIN_EMAIL, 500L, "Cần kiểm tra lại tài khoản");
+
+        verify(refundService).awaitAccountUpdate(d, ADMIN_EMAIL, "Cần kiểm tra lại tài khoản");
     }
 }

@@ -3,6 +3,7 @@ package com.lms.finance.payos;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -13,6 +14,7 @@ import static org.mockito.Mockito.when;
 
 import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
+import com.lms.common.enums.PayosFailureCategory;
 import com.lms.common.enums.PayosOrderKind;
 import com.lms.common.enums.PayosOrderStatus;
 import com.lms.common.enums.PayoutStatus;
@@ -37,6 +39,7 @@ import com.lms.payment.repository.PaymentDisputeRepository;
 import com.lms.payment.repository.PaymentRefundRepository;
 import com.lms.payment.service.DisputeService;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -67,6 +70,8 @@ class PayosPayoutServiceTest {
     @Mock private UserRepository userRepository;
     @Mock private NotificationService notificationService;
     @Mock private PlatformTransactionManager txManager;
+    @Mock private com.lms.finance.payos.PayosOrderGuard payosOrderGuard;
+    @Mock private PayosTransferLock transferLock;
 
     @InjectMocks private PayosPayoutService service;
 
@@ -83,6 +88,8 @@ class PayosPayoutServiceTest {
         lenient().when(userRepository.findById(1L)).thenReturn(Optional.of(admin));
         lenient().when(userRepository.findByRole(Role.ADMIN)).thenReturn(List.of(admin));
         lenient().when(gateway.isEnabled()).thenReturn(true);
+        lenient().when(config.getInt(eq("PAYOS_MAX_ATTEMPTS"), anyInt())).thenReturn(3);
+        lenient().when(config.getInt(eq("PAYOS_RETRY_COOLDOWN_MINUTES"), anyInt())).thenReturn(30);
         lenient().when(config.getDecimal(eq("PAYOS_PAYOUT_MAX_AMOUNT"), any())).thenReturn(new BigDecimal("5000000"));
         lenient().when(orderRepository.save(any(PayosPayoutOrder.class))).thenAnswer(inv -> {
             PayosPayoutOrder o = inv.getArgument(0);
@@ -296,22 +303,11 @@ class PayosPayoutServiceTest {
     }
 
     @Test
-    void manualRecording_isBlockedWhileAPayosOrderIsInFlightOrUnknown_butAllowedAfterFailure() {
-        for (PayosOrderStatus st : new PayosOrderStatus[] {PayosOrderStatus.PENDING, PayosOrderStatus.SUBMITTED, PayosOrderStatus.UNKNOWN}) {
-            PayosPayoutOrder o = new PayosPayoutOrder();
-            o.setReferenceId("LLP5-1");
-            o.setStatus(st);
-            when(orderRepository.findFirstByKindAndEntityIdOrderByAttemptDesc(PayosOrderKind.INSTRUCTOR_PAYOUT, 5L)).thenReturn(Optional.of(o));
-            assertThatThrownBy(() -> service.assertNoInFlightOrder(PayosOrderKind.INSTRUCTOR_PAYOUT, 5L))
-                    .as(st.name()).isInstanceOf(BusinessRuleViolationException.class);
-        }
-        PayosPayoutOrder failed = new PayosPayoutOrder();
-        failed.setReferenceId("LLP5-1");
-        failed.setStatus(PayosOrderStatus.FAILED);
-        when(orderRepository.findFirstByKindAndEntityIdOrderByAttemptDesc(PayosOrderKind.INSTRUCTOR_PAYOUT, 5L)).thenReturn(Optional.of(failed));
+    void manualRecordingGuard_isTheSharedServiceLayerGuard() {
+        // Logic chặn nằm ở PayosOrderGuard (có test riêng); lớp này chỉ ủy quyền để mọi đường vào dùng chung một cửa.
         service.assertNoInFlightOrder(PayosOrderKind.INSTRUCTOR_PAYOUT, 5L);
-        when(orderRepository.findFirstByKindAndEntityIdOrderByAttemptDesc(PayosOrderKind.INSTRUCTOR_PAYOUT, 6L)).thenReturn(Optional.empty());
-        service.assertNoInFlightOrder(PayosOrderKind.INSTRUCTOR_PAYOUT, 6L);
+
+        verify(payosOrderGuard).assertNoUnsettled(PayosOrderKind.INSTRUCTOR_PAYOUT, 5L);
     }
 
     @Test
@@ -387,5 +383,178 @@ class PayosPayoutServiceTest {
         assertThatThrownBy(() -> service.transferInstructorPayout(ADMIN, 5L))
                 .isInstanceOf(BusinessRuleViolationException.class).hasMessageContaining("không đủ");
         verify(gateway, never()).create(any());
+    }
+
+    // ── chính sách thử lại / phân loại lỗi / khóa (16/11/2026) ───────────────────────────────────
+
+    private PayosPayoutOrder failedOrder(int attempt, PayosFailureCategory category, LocalDateTime completedAt) {
+        PayosPayoutOrder o = new PayosPayoutOrder();
+        o.setId(100L + attempt);
+        o.setKind(PayosOrderKind.INSTRUCTOR_PAYOUT);
+        o.setEntityId(5L);
+        o.setAttempt(attempt);
+        o.setReferenceId("LLP5-" + attempt);
+        o.setAmount(200_000L);
+        o.setBankBin("970407");
+        o.setAccountLast4("3018");
+        o.setStatus(PayosOrderStatus.FAILED);
+        o.setFailureCategory(category);
+        o.setCreatedAt(completedAt.minusMinutes(1));
+        o.setCompletedAt(completedAt);
+        return o;
+    }
+
+    private void history(PayosPayoutOrder... orders) {
+        // findFirst… trả bản mới nhất, findBy… trả cả danh sách (mới → cũ), đúng như repository thật.
+        when(orderRepository.findFirstByKindAndEntityIdOrderByAttemptDesc(PayosOrderKind.INSTRUCTOR_PAYOUT, 5L)).thenReturn(Optional.of(orders[0]));
+        lenient().when(orderRepository.findByKindAndEntityIdOrderByAttemptDesc(PayosOrderKind.INSTRUCTOR_PAYOUT, 5L)).thenReturn(List.of(orders));
+    }
+
+    @Test
+    void retryRightAfterAFailure_isBlockedByTheCooldown_evenWhenCalledDirectly() {
+        approvedPayout(200_000);
+        history(failedOrder(1, PayosFailureCategory.TRANSIENT, LocalDateTime.now().minusMinutes(2)));
+
+        assertThatThrownBy(() -> service.transferInstructorPayout(ADMIN, 5L))
+                .isInstanceOf(BusinessRuleViolationException.class).hasMessageContaining("chờ");
+
+        verify(gateway, never()).create(any());
+        verify(orderRepository, never()).save(any());
+    }
+
+    @Test
+    void retryAfterTheCooldown_createsTheNextAttemptWithANewReference() {
+        approvedPayout(200_000);
+        fundsOk();
+        history(failedOrder(1, PayosFailureCategory.TRANSIENT, LocalDateTime.now().minusMinutes(31)));
+        when(gateway.create(any())).thenReturn(result("SUCCEEDED", null));
+
+        service.transferInstructorPayout(ADMIN, 5L);
+
+        ArgumentCaptor<TransferRequest> req = ArgumentCaptor.forClass(TransferRequest.class);
+        verify(gateway).create(req.capture());
+        assertThat(req.getValue().referenceId()).isEqualTo("LLP5-2");
+    }
+
+    @Test
+    void afterTheMaximumNumberOfFailures_payosIsLocked_onlyManualRemains() {
+        approvedPayout(200_000);
+        LocalDateTime old = LocalDateTime.now().minusHours(5);
+        history(failedOrder(3, PayosFailureCategory.TRANSIENT, old), failedOrder(2, PayosFailureCategory.TRANSIENT, old.minusHours(1)),
+                failedOrder(1, PayosFailureCategory.TRANSIENT, old.minusHours(2)));
+
+        assertThatThrownBy(() -> service.transferInstructorPayout(ADMIN, 5L))
+                .isInstanceOf(BusinessRuleViolationException.class).hasMessageContaining("3/3");
+
+        verify(gateway, never()).create(any());
+    }
+
+    @Test
+    void afterAnAccountFault_retryIsRefused_untilTheRecipientFixesTheAccount() {
+        approvedPayout(200_000);
+        history(failedOrder(1, PayosFailureCategory.ACCOUNT, LocalDateTime.now().minusHours(3)));
+
+        assertThatThrownBy(() -> service.transferInstructorPayout(ADMIN, 5L))
+                .isInstanceOf(BusinessRuleViolationException.class).hasMessageContaining("tài khoản");
+
+        verify(gateway, never()).create(any());
+    }
+
+    @Test
+    void whenAnotherRequestHoldsTheLock_nothingIsSentToPayos() {
+        approvedPayout(200_000);
+        when(transferLock.acquire(PayosOrderKind.INSTRUCTOR_PAYOUT, 5L)).thenThrow(new BusinessRuleViolationException("đang được một thao tác chi khác xử lý"));
+
+        assertThatThrownBy(() -> service.transferInstructorPayout(ADMIN, 5L))
+                .isInstanceOf(BusinessRuleViolationException.class).hasMessageContaining("thao tác chi khác");
+
+        verify(gateway, never()).create(any());
+        verify(orderRepository, never()).save(any());
+    }
+
+    @Test
+    void aDuplicateReferenceInsert_isReportedClearly_notAsAServerError() {
+        approvedPayout(200_000);
+        fundsOk();
+        when(orderRepository.save(any(PayosPayoutOrder.class))).thenThrow(new org.springframework.dao.DataIntegrityViolationException("Duplicate entry LLP5-1"));
+
+        assertThatThrownBy(() -> service.transferInstructorPayout(ADMIN, 5L))
+                .isInstanceOf(BusinessRuleViolationException.class).hasMessageContaining("vừa được tạo");
+
+        verify(gateway, never()).create(any());
+    }
+
+    private void payoutWithInstructor() {
+        User ins = new User();
+        ins.setId(9L);
+        InstructorPayout p = new InstructorPayout();
+        p.setStatus(PayoutStatus.APPROVED);
+        p.setAmount(new BigDecimal(200_000));
+        p.setBankCode("TCB");
+        p.setHolderName("NGUYEN CHI THIEN");
+        p.setAccountNumberEnc("v1:enc");
+        p.setCode("PO-1");
+        p.setInstructor(ins);
+        when(payoutRepository.findById(5L)).thenReturn(Optional.of(p));
+        when(accountService.decryptForAdmin("v1:enc")).thenReturn("19070154183018");
+    }
+
+    @Test
+    void transientBankFailure_notifiesTheRecipientOnce_andKeepsThePayoutApproved() {
+        payoutWithInstructor();
+        fundsOk();
+        when(gateway.create(any())).thenThrow(new APIException("bank down", 400, "PAYOUT_BANK_SYSTEM_ERROR", "Hệ thống ngân hàng gián đoạn, vui lòng thử lại sau"));
+        when(orderRepository.findByKindAndEntityIdOrderByAttemptDesc(PayosOrderKind.INSTRUCTOR_PAYOUT, 5L))
+                .thenAnswer(inv -> stored == null ? List.of() : List.of(stored));
+
+        PayosDto.OrderRes res = service.transferInstructorPayout(ADMIN, 5L);
+
+        assertThat(res.status()).isEqualTo(PayosOrderStatus.FAILED);
+        assertThat(res.failureCategory()).isEqualTo(PayosFailureCategory.TRANSIENT);
+        verify(notificationService).notify(eq(9L), eq("PAYOS_TRANSFER_DELAYED"), anyString(), anyString(), anyString());
+        verify(payoutService, never()).markFailed(anyString(), anyLong(), anyString());
+    }
+
+    @Test
+    void accountFault_terminatesThePayout_andReleasesTheBalanceThroughTheNormalPath() {
+        payoutWithInstructor();
+        fundsOk();
+        when(gateway.create(any())).thenThrow(new APIException("bad", 400, "X", "Tài khoản nhận không tìm thấy"));
+
+        PayosDto.OrderRes res = service.transferInstructorPayout(ADMIN, 5L);
+
+        assertThat(res.failureCategory()).isEqualTo(PayosFailureCategory.ACCOUNT);
+        verify(payoutService).markFailed(eq(ADMIN), eq(5L), org.mockito.ArgumentMatchers.contains("tài khoản nhận không hợp lệ"));
+        verify(notificationService, never()).notify(eq(9L), eq("PAYOS_TRANSFER_DELAYED"), anyString(), anyString(), anyString());
+    }
+
+    @Test
+    void unclassifiedFailure_onlyTellsTheAdmins_doesNotGuessAnything() {
+        payoutWithInstructor();
+        fundsOk();
+        when(gateway.create(any())).thenThrow(new APIException("weird", 400, "SOMETHING_NEW", "Lỗi lạ chưa từng thấy"));
+
+        PayosDto.OrderRes res = service.transferInstructorPayout(ADMIN, 5L);
+
+        assertThat(res.failureCategory()).isEqualTo(PayosFailureCategory.UNKNOWN);
+        verify(payoutService, never()).markFailed(anyString(), anyLong(), anyString());
+        verify(notificationService, never()).notify(eq(9L), anyString(), anyString(), anyString(), anyString());
+        verify(notificationService).notify(eq(1L), eq("PAYOS_PAYOUT_FAILED"), anyString(), anyString(), anyString());
+    }
+
+    @Test
+    void ordersList_exposesTheRetryStateOnlyOnTheLatestFailedOrder() {
+        LocalDateTime recent = LocalDateTime.now().minusMinutes(3);
+        PayosPayoutOrder latest = failedOrder(2, PayosFailureCategory.TRANSIENT, recent);
+        PayosPayoutOrder older = failedOrder(1, PayosFailureCategory.TRANSIENT, recent.minusHours(1));
+        when(orderRepository.findByKindAndEntityIdOrderByAttemptDesc(PayosOrderKind.INSTRUCTOR_PAYOUT, 5L)).thenReturn(List.of(latest, older));
+        when(orderRepository.findFirstByKindAndEntityIdOrderByAttemptDesc(PayosOrderKind.INSTRUCTOR_PAYOUT, 5L)).thenReturn(Optional.of(latest));
+
+        List<PayosDto.OrderRes> res = service.orders(PayosOrderKind.INSTRUCTOR_PAYOUT, 5L);
+
+        assertThat(res.get(0).canRetry()).isFalse();
+        assertThat(res.get(0).attemptsLeft()).isEqualTo(1);
+        assertThat(res.get(0).nextRetryAt()).isNotNull();
+        assertThat(res.get(1).canRetry()).isNull();
     }
 }

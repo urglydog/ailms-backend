@@ -59,6 +59,7 @@ class PayoutServiceTest {
     @Mock private PayoutCrypto crypto;
     @Mock private FinanceRateLimit rateLimit;
     @Mock private PayoutAccountService accountService;
+    @Mock private com.lms.finance.payos.PayosOrderGuard payosOrderGuard;
 
     @InjectMocks
     private PayoutService service;
@@ -447,5 +448,18 @@ class PayoutServiceTest {
         assertThat(s.nextPayoutDate()).isAfter(LocalDate.now());
         assertThat(s.cryptoConfigured()).isTrue();
         assertThat(s.hasOpenPayout()).isFalse();
+    }
+
+    @Test
+    void manualActions_areBlockedAtTheServiceLayerWhileAPayosOrderIsUnsettled() {
+        payout(PayoutStatus.APPROVED);
+        org.mockito.Mockito.doThrow(new BusinessRuleViolationException("Đang có lệnh chi PayOS")).when(payosOrderGuard)
+                .assertNoUnsettled(com.lms.common.enums.PayosOrderKind.INSTRUCTOR_PAYOUT, 90L);
+
+        assertThatThrownBy(() -> service.markPaid(ADMIN_EMAIL, 90L, "FT1", null)).isInstanceOf(BusinessRuleViolationException.class);
+        assertThatThrownBy(() -> service.reject(ADMIN_EMAIL, 90L, "lý do")).isInstanceOf(BusinessRuleViolationException.class);
+        assertThatThrownBy(() -> service.markFailed(ADMIN_EMAIL, 90L, "lý do")).isInstanceOf(BusinessRuleViolationException.class);
+
+        verify(payoutRepository, org.mockito.Mockito.never()).save(any());
     }
 }
