@@ -92,7 +92,9 @@ Mọi khoản tiền (thanh toán, hoàn, chi trả, nợ) cần chứng từ b�
 - Exam: HTTP 500 khi nộp bài không tự kết thúc phiên (chỉ 404/410) — cố ý để tránh mất bài do lỗi tạm.
 
 - **Vấn đề mới phát hiện khi làm đợt chỉnh 3 (21/11/2026), chưa sửa:**
-  - Giới hạn tần suất của đường công khai/đăng nhập đọc IP từ phần tử ĐẦU của `X-Forwarded-For` — client tự gửi header này có thể giả IP để né giới hạn; cần chỉ tin IP do Caddy gắn (phần tử cuối hoặc `X-Real-IP` từ proxy tin cậy).
+  - ✅ **Đã sửa 21/11:** đăng nhập, AI Discovery, hỗ trợ và chứng từ công khai từng đọc IP từ phần tử ĐẦU của `X-Forwarded-For` (client tự giả được) — nay dùng chung `RateLimitFilter.clientIp` (IP do proxy nối vào cuối).
+  - ✅ **Đã sửa 21/11:** danh sách thông báo giới hạn 200 mới nhất; thẻ số liệu Giám sát AI Queue lấy từ bảng job thật (`/api/v1/admin/dubbing-jobs/summary`) thay vì bộ nhớ tạm Celery; dọn đĩa (93% → 79%: xóa volume MySQL/Redis tạm do các lần kiểm thử + cache FE không dùng).
+  - **Chưa tính vào chi phí AI:** (a) phiên học trực tiếp dùng Gemini Live API (`app/live/providers/gemini.py`, tính theo token âm thanh) chưa báo mức dùng; (b) AI Tutor bật Google Search grounding (miễn phí 5.000 truy vấn/tháng rồi 14 USD/1.000) chưa tính; (c) ghi nhận chi phí quá khứ chỉ làm được bằng ước tính từ dữ liệu đã lưu hoặc đối chiếu bảng điều khiển Google/Groq.
   - Hỏi đáp (Q&A) của giảng viên: phân trang phía máy chủ nhưng ô tìm kiếm chỉ lọc trong trang đang xem — cần đưa tìm kiếm vào truy vấn BE.
   - Thống kê học viên ở khu giảng viên đang tính phía trình duyệt từ danh sách đã tải — nên chuyển sang truy vấn tổng hợp BE.
   - Danh sách thông báo của người dùng chưa giới hạn số lượng khi tải.
