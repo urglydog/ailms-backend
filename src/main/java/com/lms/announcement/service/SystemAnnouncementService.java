@@ -98,6 +98,46 @@ public class SystemAnnouncementService {
         return announcementRepository.findAllByOrderByCreatedAtDesc().stream().map(this::toRes).toList();
     }
 
+    /** Danh sách cho admin: tìm theo tiêu đề/nội dung, phân trang (tối đa 50/trang). */
+    @Transactional(readOnly = true)
+    public List<Res> search(String query, int page, int size) {
+        String q = query == null || query.isBlank() ? null : "%" + query.trim().toLowerCase(java.util.Locale.ROOT) + "%";
+        var pageable = org.springframework.data.domain.PageRequest.of(Math.max(0, page), Math.max(1, Math.min(size, 50)));
+        return announcementRepository.search(q, pageable).stream().map(this::toRes).toList();
+    }
+
+    /** Sửa tiêu đề/nội dung/hạn banner; cập nhật luôn các thông báo đã gửi tới người dùng. Thông báo đã thu hồi thì không sửa được. */
+    @Transactional
+    public Res update(Long id, com.lms.announcement.dto.SystemAnnouncementDto.UpdateReq req) {
+        SystemAnnouncement a = announcementRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("SystemAnnouncement", id));
+        if (a.getRevokedAt() != null) {
+            throw new InvalidRequestException("Thông báo này đã được thu hồi nên không thể chỉnh sửa.");
+        }
+        a.setTitle(req.title().trim());
+        a.setContent(req.content().trim());
+        a.setExpiresAt(req.expiresAt());
+        SystemAnnouncement saved = announcementRepository.save(a);
+        notificationService.updateBySource(sourceRef(id), saved.getTitle(), saved.getContent());
+        return toRes(saved);
+    }
+
+    /** Thu hồi: ẩn khỏi mọi người dùng (kể cả banner), giữ bản ghi ở admin. Gọi lại khi đã thu hồi thì không làm gì (idempotent). */
+    @Transactional
+    public Res revoke(Long id) {
+        SystemAnnouncement a = announcementRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("SystemAnnouncement", id));
+        if (a.getRevokedAt() == null) {
+            a.setRevokedAt(LocalDateTime.now());
+            announcementRepository.save(a);
+            int hidden = notificationService.hideBySource(sourceRef(id));
+            log.info("Da thu hoi thong bao he thong {} ({} thong bao nguoi dung bi an)", id, hidden);
+        }
+        return toRes(a);
+    }
+
+    static String sourceRef(Long announcementId) {
+        return "ANN:" + announcementId;
+    }
+
     @Transactional(readOnly = true)
     public BannerRes getActiveBanner() {
         return announcementRepository.findLatestActiveHighSeverity(LocalDateTime.now())
@@ -132,6 +172,10 @@ public class SystemAnnouncementService {
         SystemAnnouncement announcement = announcementRepository.findById(announcementId).orElse(null);
         if (announcement == null) {
             log.warn("Khong tim thay SystemAnnouncement {} de phat tan (co the da bi xoa)", announcementId);
+            return;
+        }
+        if (announcement.getRevokedAt() != null) {
+            log.info("Thong bao he thong {} da bi thu hoi truoc khi phat tan, bo qua", announcementId);
             return;
         }
 
@@ -174,7 +218,7 @@ public class SystemAnnouncementService {
         int sent = 0;
         for (Long userId : userIds) {
             try {
-                notificationService.notify(userId, notifyType, announcement.getTitle(), announcement.getContent(), null);
+                notificationService.notify(userId, notifyType, announcement.getTitle(), announcement.getContent(), null, sourceRef(announcementId));
                 sent++;
             } catch (Exception e) {
                 log.error("Khong gui duoc thong bao he thong {} cho user {}", announcementId, userId, e);
@@ -187,7 +231,7 @@ public class SystemAnnouncementService {
         return new Res(
                 a.getId(), a.getTitle(), a.getContent(), a.getSeverity(), a.getAudience(), a.getTargetUserId(),
                 a.getExpiresAt(), a.getDispatchStatus(), a.getTotalRecipients(), a.getSentCount(),
-                a.getCreatedByAdmin().getFullName(), a.getCreatedAt()
+                a.getCreatedByAdmin().getFullName(), a.getCreatedAt(), a.getRevokedAt()
         );
     }
 }

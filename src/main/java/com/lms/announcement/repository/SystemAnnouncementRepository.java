@@ -18,9 +18,13 @@ public interface SystemAnnouncementRepository extends JpaRepository<SystemAnnoun
      * thị cho MỌI người xem trang, kể cả khi audience gốc chỉ nhắm Giảng viên/Học viên — mức độ
      * HIGH ưu tiên hiển thị rộng hơn phạm vi gửi thông báo trong app. */
     @Query("SELECT a FROM SystemAnnouncement a WHERE a.severity = com.lms.common.enums.AnnouncementSeverity.HIGH "
-            + "AND (a.expiresAt IS NULL OR a.expiresAt > :now) ORDER BY a.createdAt DESC")
+            + "AND a.revokedAt IS NULL AND (a.expiresAt IS NULL OR a.expiresAt > :now) ORDER BY a.createdAt DESC")
     Optional<SystemAnnouncement> findLatestActiveHighSeverity(@Param("now") LocalDateTime now);
 
     /** Lịch sử cho Admin xem lại đã gửi những gì, trạng thái phát tán tới đâu. */
     List<SystemAnnouncement> findAllByOrderByCreatedAtDesc();
+
+    /** Danh sách cho admin: tìm theo tiêu đề/nội dung, luôn phân trang. */
+    @Query("SELECT a FROM SystemAnnouncement a WHERE (:q IS NULL OR LOWER(a.title) LIKE :q OR LOWER(a.content) LIKE :q) ORDER BY a.createdAt DESC")
+    List<SystemAnnouncement> search(@Param("q") String q, org.springframework.data.domain.Pageable pageable);
 }

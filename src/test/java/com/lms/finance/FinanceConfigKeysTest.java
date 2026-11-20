@@ -65,8 +65,9 @@ class FinanceConfigKeysTest {
                 .isInstanceOf(InvalidRequestException.class);
         assertThatThrownBy(() -> FinanceConfigKeys.validate("QUOTA_TUTOR", "x".repeat(256)))
                 .isInstanceOf(InvalidRequestException.class);
-        // Khóa không thuộc nhóm tài chính (QUOTA_*) giữ hành vi cũ: không kiểm tra nội dung.
-        assertThatCode(() -> FinanceConfigKeys.validate("QUOTA_TUTOR", "bất kỳ")).doesNotThrowAnyException();
+        // Hạn mức AI (QUOTA_*) nay cũng được kiểm tra chặt (số nguyên không âm); chỉ khóa không có quy tắc nào mới bỏ qua nội dung.
+        assertThatThrownBy(() -> FinanceConfigKeys.validate("QUOTA_TUTOR", "bất kỳ")).isInstanceOf(InvalidRequestException.class);
+        assertThatCode(() -> FinanceConfigKeys.validate("SOME_FUTURE_KEY", "bất kỳ")).doesNotThrowAnyException();
     }
 
     @Test

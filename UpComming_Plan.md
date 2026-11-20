@@ -27,6 +27,8 @@
 ## 2. TASK MỚI / ĐANG LÀM
 
 ### A. Hóa đơn / chứng từ & Thống kê – báo cáo tự động — ✅ H1–H4 ĐÃ CODE & DEPLOY 20/11, CHỜ NGHIỆM THU
+**Đợt chỉnh sau nghiệm thu 2 (20/11/2026):** chi tiết ở `docs/UI_ROUND2_PLAN_20261120.md` — V171 (mã truy cập chứng từ, thu hồi thông báo, lưu trữ gói khóa). PDF chứng từ thiết kế lại (bảng căn chỉnh, mã kiểm SHA-256, QR mở thẳng bản gốc qua đường công khai `/api/v1/public/invoices/{mã}` có giới hạn tần suất và công tắc tắt khẩn cấp); thông báo hệ thống có Sửa/Thu hồi; gói khóa học Xóa/Lưu trữ; học viên có lọc/tìm/phân trang giao dịch; giảng viên có lọc/phân trang sao kê, lịch sử rút, giao tiếp; admin: AI Analytics có bộ lọc, AI Queue gọn lại, cấu hình hệ thống chỉ còn thông số sửa được với điều khiển đúng kiểu và ma trận kiểm thử toàn bộ khóa.
+
 **Đợt chỉnh sau nghiệm thu 1 (20/11/2026):** chi tiết ở `docs/UI_REDESIGN_PROPOSAL_20261120.md` — tra cứu-trước cho dữ liệu lớn, chứng từ gắn vào giao dịch/rút tiền/bảng kê, thống kê dạng biểu đồ, nút Chia sẻ thống nhất, cấu hình hệ thống theo nhóm, bỏ chữ "demo", phí PayOS là hằng số, bảng kê tháng bù các tháng đã qua.
 
 

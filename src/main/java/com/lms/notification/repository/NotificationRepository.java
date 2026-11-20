@@ -16,7 +16,18 @@ import org.springframework.stereotype.Repository;
  */
 @Repository
 public interface NotificationRepository extends JpaRepository<Notification, Long> {
-    List<Notification> findByUser_IdOrderByCreatedAtDesc(Long userId);
+    /** Thông báo của một người dùng, bỏ qua các thông báo đã thu hồi, mới nhất trước. */
+    List<Notification> findByUser_IdAndHiddenAtIsNullOrderByCreatedAtDesc(Long userId);
+
+    /** Sửa tiêu đề/nội dung của mọi thông báo đã gửi từ một nguồn (thông báo hệ thống được sửa). */
+    @Modifying
+    @Query("UPDATE Notification n SET n.title = :title, n.content = :content WHERE n.sourceRef = :ref")
+    int updateBySource(@Param("ref") String ref, @Param("title") String title, @Param("content") String content);
+
+    /** Thu hồi: ẩn mọi thông báo của một nguồn khỏi người dùng (không xóa). */
+    @Modifying
+    @Query("UPDATE Notification n SET n.hiddenAt = :now WHERE n.sourceRef = :ref AND n.hiddenAt IS NULL")
+    int hideBySource(@Param("ref") String ref, @Param("now") java.time.LocalDateTime now);
 
     /** (26/09/2026, sửa lỗi) — trước đây "Đánh dấu đã đọc" chỉ đổi state ở FE, không lưu DB nên
      * tải lại trang là mất, badge số chưa đọc không giảm. Điều kiện `userId` trong WHERE (không

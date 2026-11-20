@@ -13,6 +13,9 @@ import java.util.Optional;
 public interface CourseBundleRepository extends JpaRepository<CourseBundle, Long> {
 
     Page<CourseBundle> findByInstructorId(Long instructorId, Pageable pageable);
+
+    /** Danh sách của giảng viên, bỏ các gói đã lưu trữ. */
+    Page<CourseBundle> findByInstructorIdAndArchivedAtIsNull(Long instructorId, Pageable pageable);
     
     @Query("SELECT cb FROM CourseBundle cb JOIN cb.courses c WHERE c.id = :courseId AND cb.isActive = true")
     List<CourseBundle> findActiveBundlesByCourseId(@Param("courseId") Long courseId);

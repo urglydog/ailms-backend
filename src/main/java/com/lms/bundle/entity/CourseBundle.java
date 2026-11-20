@@ -28,6 +28,10 @@ public class CourseBundle extends BaseEntity {
     @Column(name = "discount_percent", nullable = false)
     private Integer discountPercent = 0;
 
+    /** Đã lưu trữ (gói từng có người mua nên không xóa được): ngừng bán, ẩn khỏi danh sách của giảng viên, giữ nguyên lịch sử đơn. */
+    @Column(name = "archived_at")
+    private java.time.LocalDateTime archivedAt;
+
     @Column(name = "is_active", nullable = false)
     private Boolean isActive = true;
 

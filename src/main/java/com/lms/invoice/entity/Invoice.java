@@ -70,6 +70,13 @@ public class Invoice extends BaseEntity {
     @Column(name = "snapshot_json", nullable = false, columnDefinition = "TEXT", updatable = false)
     private String snapshotJson;
 
+    /**
+     * Mã truy cập ngẫu nhiên (256 bit, base64url 43 ký tự) trong liên kết/QR in trên PDF để mở thẳng file. Là "chìa khóa" của liên kết nên không bao giờ
+     * trả ra trong API danh sách/chi tiết; cấp lúc phát hành (chứng từ cũ được cấp bằng job bù một lần).
+     */
+    @Column(name = "access_token", length = 64, unique = true)
+    private String accessToken;
+
     @Column(name = "template_version", nullable = false, updatable = false)
     private Integer templateVersion = 1;
 }

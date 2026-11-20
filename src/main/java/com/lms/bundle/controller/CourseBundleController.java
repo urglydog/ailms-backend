@@ -39,6 +39,14 @@ public class CourseBundleController {
         return ResponseEntity.ok(bundleService.updateBundle(id, principal.getName(), req));
     }
 
+    /** Xóa gói (chưa ai mua) hoặc lưu trữ (đã có đơn mua) — phản hồi cho biết kết quả cụ thể. */
+    @PreAuthorize("hasAnyRole('INSTRUCTOR', 'ADMIN')")
+    @DeleteMapping("/instructor/bundles/{id}")
+    public ResponseEntity<java.util.Map<String, Object>> deleteBundle(Principal principal, @PathVariable Long id) {
+        boolean deleted = bundleService.deleteBundle(id, principal.getName());
+        return ResponseEntity.ok(java.util.Map.of("deleted", deleted, "archived", !deleted));
+    }
+
     @PreAuthorize("hasAnyRole('INSTRUCTOR', 'ADMIN')")
     @GetMapping("/instructor/bundles")
     public ResponseEntity<Page<CourseBundleDto.Res>> getBundles(

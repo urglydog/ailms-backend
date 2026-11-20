@@ -29,6 +29,7 @@ public class CourseBundleService {
     private final CourseBundleRepository bundleRepository;
     private final CourseRepository courseRepository;
     private final UserRepository userRepository;
+    private final com.lms.payment.repository.PaymentRepository paymentRepository;
 
     @Transactional
     public CourseBundleDto.Res createBundle(String instructorEmail, CourseBundleDto.CreateReq req) {
@@ -104,12 +105,33 @@ public class CourseBundleService {
         return courses;
     }
 
+    /**
+     * Xóa gói khóa học (20/11/2026): gói CHƯA TỪNG có người mua thì xóa hẳn; gói đã có đơn mua thì chuyển sang "lưu trữ" (ngừng bán, ẩn khỏi danh sách,
+     * giữ nguyên lịch sử đơn và chứng từ). Trả {@code true} nếu đã xóa hẳn, {@code false} nếu chỉ lưu trữ. Chỉ chủ gói được thao tác.
+     */
+    @Transactional
+    public boolean deleteBundle(Long bundleId, String instructorEmail) {
+        CourseBundle bundle = bundleRepository.findByIdWithCourses(bundleId)
+                .orElseThrow(() -> new ResourceNotFoundException("Bundle", bundleId));
+        if (!bundle.getInstructor().getEmail().equals(instructorEmail)) {
+            throw new BusinessRuleViolationException("Bạn không có quyền xóa gói khóa học này");
+        }
+        if (paymentRepository.existsByBundle_Id(bundleId)) {
+            bundle.setIsActive(false);
+            bundle.setArchivedAt(java.time.LocalDateTime.now());
+            bundleRepository.save(bundle);
+            return false;
+        }
+        bundleRepository.delete(bundle);
+        return true;
+    }
+
     @Transactional(readOnly = true)
     public Page<CourseBundleDto.Res> getBundlesByInstructor(String email, Pageable pageable) {
         User instructor = userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("Instructor", email));
         
-        return bundleRepository.findByInstructorId(instructor.getId(), pageable).map(this::mapToRes);
+        return bundleRepository.findByInstructorIdAndArchivedAtIsNull(instructor.getId(), pageable).map(this::mapToRes);
     }
 
     @Transactional(readOnly = true)

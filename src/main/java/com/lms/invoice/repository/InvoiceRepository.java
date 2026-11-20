@@ -22,6 +22,12 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
 
     boolean existsByTypeAndSourceId(InvoiceType type, Long sourceId);
 
+    /** Tra chứng từ theo mã truy cập (chỉ dùng cho liên kết/QR công khai). Cột có chỉ mục duy nhất. */
+    Optional<Invoice> findByAccessToken(String accessToken);
+
+    /** Chứng từ chưa có mã truy cập (cũ) — job bù cấp mã theo lô nhỏ. */
+    List<Invoice> findByAccessTokenIsNull(Pageable pageable);
+
     @EntityGraph(attributePaths = {"party", "relatedInvoice"})
     List<Invoice> findByParty_IdOrderByIssuedAtDescIdDesc(Long partyId, Pageable pageable);
 

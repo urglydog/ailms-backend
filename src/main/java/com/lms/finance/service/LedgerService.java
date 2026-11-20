@@ -162,6 +162,30 @@ public class LedgerService {
 
     /** Các dòng sổ cái gần đây của giảng viên (sao kê). */
     @Transactional(readOnly = true)
+    /** Nhóm loại khoản trên giao diện: EARNING, REFUND (hoàn tiền bị trừ), PAYOUT (giữ chỗ/trả lại khi rút), DEBT (trả nợ), ADJUSTMENT; ALL/null = tất cả. */
+    public static java.util.List<com.lms.common.enums.LedgerEntryType> typeGroup(String group) {
+        if (group == null) {
+            return null;
+        }
+        return switch (group.toUpperCase(java.util.Locale.ROOT)) {
+            case "EARNING" -> java.util.List.of(com.lms.common.enums.LedgerEntryType.EARNING);
+            case "REFUND" -> java.util.List.of(com.lms.common.enums.LedgerEntryType.REFUND_REVERSAL);
+            case "PAYOUT" -> java.util.List.of(com.lms.common.enums.LedgerEntryType.PAYOUT_RESERVE, com.lms.common.enums.LedgerEntryType.PAYOUT_RELEASE);
+            case "DEBT" -> java.util.List.of(com.lms.common.enums.LedgerEntryType.DEBT_REPAYMENT);
+            case "ADJUSTMENT" -> java.util.List.of(com.lms.common.enums.LedgerEntryType.ADJUSTMENT);
+            default -> null;
+        };
+    }
+
+    /** Sao kê có lọc nhóm loại khoản + khoảng ngày, phân trang (tối đa 100 dòng/trang). */
+    public org.springframework.data.domain.Page<InstructorLedgerEntry> searchStatement(Long instructorId, String group, java.time.LocalDate from, java.time.LocalDate to,
+                                                                                      int page, int size) {
+        java.util.List<com.lms.common.enums.LedgerEntryType> types = typeGroup(group);
+        return repository.search(instructorId, types == null, types == null ? java.util.List.of(com.lms.common.enums.LedgerEntryType.EARNING) : types,
+                from == null ? null : from.atStartOfDay(), to == null ? null : to.plusDays(1).atStartOfDay(),
+                org.springframework.data.domain.PageRequest.of(Math.max(0, page), Math.min(Math.max(1, size), 100)));
+    }
+
     public org.springframework.data.domain.Page<InstructorLedgerEntry> getStatement(Long instructorId, int page, int size) {
         return repository.findByInstructor_IdOrderByCreatedAtDescIdDesc(instructorId,
                 org.springframework.data.domain.PageRequest.of(Math.max(0, page), Math.min(Math.max(1, size), 100)));

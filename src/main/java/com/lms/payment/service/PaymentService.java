@@ -586,22 +586,67 @@ public class PaymentService {
 
     @Transactional(readOnly = true)
     public java.util.List<PaymentDto.Res> getMyPayments(String email) {
-        return paymentRepository.findByUser_EmailOrderByCreatedAtDesc(email).stream()
-                .map(p -> new PaymentDto.Res(
-                        p.getTxnRef(),
-                        p.getAmount(),
-                        p.getPaymentMethod(),
-                        p.getStatus(),
-                        p.getPaidAt(),
-                        p.getCourse().getTitle(),
-                        p.getGatewayTxnNo(),
-                        p.getBillingName(),
-                        p.getBillingPhone(),
-                        p.getOriginalAmount(),
-                        p.getDiscountAmount(),
-                        p.getCoupon() != null ? p.getCoupon().getCode() : null,
-                        p.getOrderGroupRef()
-                )).toList();
+        return paymentRepository.findByUser_EmailOrderByCreatedAtDesc(email).stream().map(PaymentService::toRes).toList();
+    }
+
+    /** Nhóm trạng thái trên giao diện học viên: SUCCESS = đã thanh toán, PENDING, FAILED = thất bại + hết hạn, REFUNDED = hoàn tiền; ALL/null = tất cả. */
+    static java.util.List<PaymentStatus> statusGroup(String group) {
+        if (group == null) {
+            return null;
+        }
+        return switch (group.toUpperCase(java.util.Locale.ROOT)) {
+            case "SUCCESS" -> java.util.List.of(PaymentStatus.PAID);
+            case "PENDING" -> java.util.List.of(PaymentStatus.PENDING);
+            case "FAILED" -> java.util.List.of(PaymentStatus.FAILED, PaymentStatus.EXPIRED);
+            case "REFUNDED" -> java.util.List.of(PaymentStatus.REFUNDED);
+            default -> null;
+        };
+    }
+
+    /** Lịch sử giao dịch của chính mình có lọc nhóm trạng thái, khoảng ngày, từ khóa và phân trang (tối đa 50/trang). */
+    @Transactional(readOnly = true)
+    public PaymentDto.MinePage searchMine(String email, String group, java.time.LocalDate from, java.time.LocalDate to, String query, int page, int size) {
+        Long userId = userRepository.findByEmail(email).orElseThrow(() -> new ResourceNotFoundException("User", email)).getId();
+        java.util.List<PaymentStatus> statuses = statusGroup(group);
+        String q = query == null || query.isBlank() ? null : "%" + query.trim().toLowerCase(java.util.Locale.ROOT) + "%";
+        int safeSize = Math.max(1, Math.min(size, 50));
+        var result = paymentRepository.searchMine(userId, statuses == null, statuses == null ? java.util.List.of(PaymentStatus.PAID) : statuses,
+                from == null ? null : from.atStartOfDay(), to == null ? null : to.plusDays(1).atStartOfDay(), q,
+                org.springframework.data.domain.PageRequest.of(Math.max(0, page), safeSize));
+        java.util.Map<String, Long> counts = new java.util.LinkedHashMap<>();
+        for (String k : new String[] {"ALL", "SUCCESS", "PENDING", "FAILED", "REFUNDED"}) {
+            counts.put(k, 0L);
+        }
+        for (Object[] row : paymentRepository.countMineByStatus(userId)) {
+            PaymentStatus st = (PaymentStatus) row[0];
+            long n = ((Number) row[1]).longValue();
+            counts.merge("ALL", n, Long::sum);
+            String key = switch (st) {
+                case PAID -> "SUCCESS";
+                case PENDING -> "PENDING";
+                case FAILED, EXPIRED -> "FAILED";
+                case REFUNDED -> "REFUNDED";
+            };
+            counts.merge(key, n, Long::sum);
+        }
+        return new PaymentDto.MinePage(result.getContent().stream().map(PaymentService::toRes).toList(), result.getTotalElements(), result.getNumber(), safeSize, counts);
+    }
+
+    private static PaymentDto.Res toRes(Payment p) {
+        return new PaymentDto.Res(
+                p.getTxnRef(),
+                p.getAmount(),
+                p.getPaymentMethod(),
+                p.getStatus(),
+                p.getPaidAt(),
+                p.getCourse().getTitle(),
+                p.getGatewayTxnNo(),
+                p.getBillingName(),
+                p.getBillingPhone(),
+                p.getOriginalAmount(),
+                p.getDiscountAmount(),
+                p.getCoupon() != null ? p.getCoupon().getCode() : null,
+                p.getOrderGroupRef());
     }
 
     /**

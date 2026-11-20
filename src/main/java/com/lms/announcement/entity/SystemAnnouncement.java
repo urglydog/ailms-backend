@@ -60,6 +60,10 @@ public class SystemAnnouncement extends BaseEntity {
     @Column(name = "dispatch_status", nullable = false, length = 20)
     private AnnouncementDispatchStatus dispatchStatus = AnnouncementDispatchStatus.PENDING;
 
+    /** Thời điểm thu hồi (ẩn khỏi người dùng); null = còn hiệu lực. Bản ghi vẫn được giữ ở admin. */
+    @Column(name = "revoked_at")
+    private LocalDateTime revokedAt;
+
     @Column(name = "total_recipients")
     private Integer totalRecipients;
 

@@ -42,7 +42,7 @@ public final class FinanceConfigKeys {
 
     private FinanceConfigKeys() {}
 
-    /** Kiểm tra giá trị trước khi lưu. Khóa không thuộc nhóm tài chính (vd QUOTA_*) bỏ qua. */
+    /** Kiểm tra giá trị trước khi lưu (tài chính, hạn mức AI, báo cáo, chứng từ). Khóa không có quy tắc thì chỉ kiểm độ dài. */
     public static void validate(String key, String value) {
         if (value == null) {
             throw invalid(key, "không được để trống");
@@ -87,6 +87,17 @@ public final class FinanceConfigKeys {
         } else if (key.equals("REPORT_DAILY_ENABLED") || key.equals("REPORT_WEEKLY_ENABLED") || key.equals("REPORT_MONTHLY_ENABLED")
                 || key.equals("STATEMENT_EMAIL_INSTRUCTORS")) {
             requireIntRange(key, v, 0, 1);
+        } else if (key.startsWith("QUOTA_")) {
+            // Hạn mức sử dụng AI mỗi ngày/giờ: số nguyên không âm, trần theo từng loại để gõ nhầm không mở toang hạn mức.
+            requireIntRange(key, v, 0, key.equals("QUOTA_TUTOR") ? 10_000 : 1_000);
+        } else if (key.equals("PAYOS_RETRY_COOLDOWN_MINUTES")) {
+            requireIntRange(key, v, 0, 1_440);
+        } else if (key.equals("PAYOS_MAX_ATTEMPTS")) {
+            requireIntRange(key, v, 1, 20);
+        } else if (key.equals("INVOICE_ISSUER_NOTE") && v.length() > 200) {
+            throw invalid(key, "tối đa 200 ký tự");
+        } else if (key.equals("PUBLIC_INVOICE_LINK_ENABLED")) {
+            requireIntRange(key, v, 0, 1);
         } else if (key.equals("REPORT_RECIPIENTS")) {
             validateRecipients(key, v);
         } else if (key.equals("INVOICE_ISSUER_NAME") && v.isBlank()) {
@@ -117,8 +128,12 @@ public final class FinanceConfigKeys {
         if (parts.length > 4) {
             throw invalid(key, "tối đa 4 ngày chi trả mỗi tháng");
         }
+        java.util.Set<Integer> seen = new java.util.HashSet<>();
         for (String p : parts) {
             requireIntRange(key, p.trim(), 1, 28);
+            if (!seen.add(Integer.parseInt(p.trim()))) {
+                throw invalid(key, "ngày " + p.trim() + " bị lặp");
+            }
         }
     }
 
@@ -126,30 +141,38 @@ public final class FinanceConfigKeys {
         if (v.isEmpty()) {
             return;
         }
-        for (String p : v.split(",")) {
+        String[] parts = v.split(",");
+        if (parts.length > 60) {
+            throw invalid(key, "tối đa 60 ngày");
+        }
+        java.util.Set<LocalDate> seen = new java.util.HashSet<>();
+        for (String p : parts) {
+            LocalDate d;
             try {
-                LocalDate.parse(p.trim());
+                d = LocalDate.parse(p.trim());
             } catch (DateTimeParseException e) {
                 throw invalid(key, "ngày \"" + p.trim() + "\" không đúng dạng YYYY-MM-DD");
+            }
+            if (!seen.add(d)) {
+                throw invalid(key, "ngày " + p.trim() + " bị lặp");
             }
         }
     }
 
+    /** Số thập phân dạng thường (tối đa 2 chữ số lẻ), không dấu +/-, không ký hiệu khoa học (1e2), không khoảng trắng giữa chừng. */
     private static BigDecimal parseDecimal(String key, String v) {
-        try {
-            return new BigDecimal(v);
-        } catch (NumberFormatException e) {
-            throw invalid(key, "phải là số");
+        if (!v.matches("\\d{1,3}(\\.\\d{1,2})?")) {
+            throw invalid(key, "phải là số không âm, tối đa 2 chữ số sau dấu chấm (vd 37 hoặc 97.5)");
         }
+        return new BigDecimal(v);
     }
 
     private static void requireIntRange(String key, String v, int min, int max) {
-        int n;
-        try {
-            n = Integer.parseInt(v);
-        } catch (NumberFormatException e) {
-            throw invalid(key, "phải là số nguyên");
+        // Chỉ chữ số: loại số âm, số thập phân, dấu +, ký hiệu khoa học và chuỗi rỗng; tối đa 9 chữ số để không tràn int.
+        if (!v.matches("\\d{1,9}")) {
+            throw invalid(key, "phải là số nguyên không âm (chỉ gồm chữ số)");
         }
+        int n = Integer.parseInt(v);
         if (n < min || n > max) {
             throw invalid(key, "phải trong khoảng " + min + "–" + max);
         }

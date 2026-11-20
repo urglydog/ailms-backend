@@ -22,7 +22,7 @@ public class NotificationService {
 
     @Transactional(readOnly = true)
     public List<NotificationRes> getNotifications(Long userId) {
-        return notificationRepository.findByUser_IdOrderByCreatedAtDesc(userId)
+        return notificationRepository.findByUser_IdAndHiddenAtIsNullOrderByCreatedAtDesc(userId)
                 .stream()
                 .map(this::convertToDto)
                 .collect(Collectors.toList());
@@ -47,7 +47,14 @@ public class NotificationService {
      */
     @Transactional
     public void notify(Long userId, String type, String title, String content, String linkUrl) {
+        notify(userId, type, title, content, linkUrl, null);
+    }
+
+    /** Như {@link #notify(Long, String, String, String, String)} nhưng gắn nguồn (vd {@code ANN:12}) để sau này sửa/thu hồi hàng loạt. */
+    @Transactional
+    public void notify(Long userId, String type, String title, String content, String linkUrl, String sourceRef) {
         Notification notification = new Notification();
+        notification.setSourceRef(sourceRef);
         notification.setUser(userRepository.getReferenceById(userId));
         notification.setType(type);
         notification.setTitle(title);
@@ -56,6 +63,18 @@ public class NotificationService {
         Notification saved = notificationRepository.save(notification);
 
         messagingTemplate.convertAndSend("/topic/notifications/" + userId, convertToDto(saved));
+    }
+
+    /** Sửa tiêu đề/nội dung của các thông báo đã gửi từ một nguồn (vd thông báo hệ thống được sửa). Trả số thông báo đã cập nhật. */
+    @Transactional
+    public int updateBySource(String sourceRef, String title, String content) {
+        return notificationRepository.updateBySource(sourceRef, title, content);
+    }
+
+    /** Thu hồi: ẩn các thông báo của một nguồn khỏi người dùng (không xóa). Trả số thông báo bị ẩn. */
+    @Transactional
+    public int hideBySource(String sourceRef) {
+        return notificationRepository.hideBySource(sourceRef, java.time.LocalDateTime.now());
     }
 
     private NotificationRes convertToDto(Notification n) {

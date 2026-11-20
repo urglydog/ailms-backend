@@ -34,6 +34,14 @@ public class Notification extends BaseEntity {
     @Column(name = "link_url", length = 500)
     private String linkUrl;
 
+    /** Nguồn của thông báo (vd {@code ANN:12} = thông báo hệ thống số 12) để sửa/thu hồi hàng loạt; null với thông báo thường. */
+    @Column(name = "source_ref", length = 40)
+    private String sourceRef;
+
+    /** Đã thu hồi (ẩn khỏi người dùng nhưng không xóa). */
+    @Column(name = "hidden_at")
+    private java.time.LocalDateTime hiddenAt;
+
     @Column(name = "is_read", nullable = false)
     private Boolean isRead = false;
 

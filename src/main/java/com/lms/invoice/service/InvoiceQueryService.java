@@ -35,6 +35,10 @@ public class InvoiceQueryService {
     static final int MAX_PAGE_SIZE = 100;
     static final int MAX_EXPORT_ROWS = 5000;
 
+    /** Gốc URL công khai của API (in trong QR trên PDF); cấu hình ở application.yml, có thể ghi đè bằng biến môi trường PUBLIC_API_BASE_URL. */
+    @org.springframework.beans.factory.annotation.Value("${lms.public-api-base-url:}")
+    private String publicApiBaseUrl;
+
     private final InvoiceRepository invoiceRepository;
     private final InvoiceLineRepository lineRepository;
     private final UserRepository userRepository;
@@ -105,17 +109,36 @@ public class InvoiceQueryService {
         if (viewer.getRole() != Role.ADMIN && !inv.getParty().getId().equals(viewer.getId())) {
             throw new ResourceNotFoundException("Invoice", invoiceId);
         }
+        return new PdfFile(inv.getNumber() + ".pdf", renderPdf(inv));
+    }
+
+    /** Sinh PDF của một chứng từ: bố cục chuẩn + mã kiểm + QR mở thẳng bản gốc (nếu đã cấu hình gốc URL công khai và chứng từ có mã truy cập). */
+    byte[] renderPdf(Invoice inv) {
         List<InvoiceLine> lines = lineRepository.findByInvoice_IdOrderByLineNoAsc(inv.getId());
-        byte[] bytes = InvoicePdfRenderer.render(inv, lines, parse(inv.getSnapshotJson()));
-        return new PdfFile(inv.getNumber() + ".pdf", bytes);
+        String checksum = com.lms.invoice.util.InvoiceChecksum.display(com.lms.invoice.util.InvoiceChecksum.sha256(inv, lines));
+        return InvoicePdfRenderer.render(inv, lines, parse(inv.getSnapshotJson()), qrUrl(inv), checksum);
+    }
+
+    /** Địa chỉ mở thẳng PDF gốc từ QR; null nếu chưa cấu hình gốc URL hoặc chứng từ chưa có mã truy cập. */
+    String qrUrl(Invoice inv) {
+        if (inv.getAccessToken() == null || publicApiBaseUrl == null || publicApiBaseUrl.isBlank()) {
+            return null;
+        }
+        String base = publicApiBaseUrl.endsWith("/") ? publicApiBaseUrl.substring(0, publicApiBaseUrl.length() - 1) : publicApiBaseUrl;
+        return base + "/api/v1/public/invoices/" + inv.getAccessToken();
+    }
+
+    /** PDF của chứng từ theo mã truy cập (liên kết/QR công khai). Không kiểm quyền — mã là chìa khóa; không có hoặc sai mã đều trả rỗng như nhau. */
+    @Transactional(readOnly = true)
+    public java.util.Optional<byte[]> pdfByAccessToken(String token) {
+        return invoiceRepository.findByAccessToken(token).map(this::renderPdf);
     }
 
     /** Dữ liệu để gửi email chứng từ (không kiểm quyền — chỉ job nội bộ gọi, người nhận luôn là chủ chứng từ). */
     @Transactional(readOnly = true)
     public MailPayload mailPayload(Long invoiceId) {
         Invoice inv = invoiceRepository.findById(invoiceId).orElseThrow(() -> new ResourceNotFoundException("Invoice", invoiceId));
-        List<InvoiceLine> lines = lineRepository.findByInvoice_IdOrderByLineNoAsc(inv.getId());
-        byte[] bytes = InvoicePdfRenderer.render(inv, lines, parse(inv.getSnapshotJson()));
+        byte[] bytes = renderPdf(inv);
         return new MailPayload(inv.getParty().getEmail(), inv.getParty().getFullName(), inv.getType(), inv.getNumber(), inv.getTotal(),
                 inv.getIssuedAt(), inv.getNumber() + ".pdf", bytes);
     }
