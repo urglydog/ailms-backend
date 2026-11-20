@@ -54,11 +54,11 @@ public interface UserRepository extends JpaRepository<User, Long> {
      * phân trang NGAY TRONG DB (hiệu năng đợt 3; trước đây tải toàn bộ người dùng về trình duyệt).
      * {@code q} đã chuẩn hóa thành {@code %từ khóa%} (chữ thường) hoặc null.
      */
-    @Query("SELECT u FROM User u WHERE (:q IS NULL OR LOWER(u.fullName) LIKE :q OR LOWER(u.email) LIKE :q) "
+    @Query("SELECT u FROM User u WHERE (:q IS NULL OR LOWER(u.fullName) LIKE :q OR LOWER(u.email) LIKE :q OR u.id = :qId) "
             + "AND (:role IS NULL OR u.role = :role) "
             + "AND (:lockedOnly = false OR u.isActive = false) "
             + "AND (:spamOnly = false OR u.isSpamFlagged = true)")
-    Page<User> searchForAdmin(@Param("q") String q, @Param("role") Role role, @Param("lockedOnly") boolean lockedOnly,
+    Page<User> searchForAdmin(@Param("q") String q, @Param("qId") long qId, @Param("role") Role role, @Param("lockedOnly") boolean lockedOnly,
                               @Param("spamOnly") boolean spamOnly, Pageable pageable);
 
     /** Số người dùng theo vai trò — mỗi dòng là [Role, Long]. */

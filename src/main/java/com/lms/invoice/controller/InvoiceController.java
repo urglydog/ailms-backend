@@ -28,6 +28,11 @@ public class InvoiceController {
         return ResponseEntity.ok(queryService.listMine(principal.getName()));
     }
 
+    @GetMapping("/{id}")
+    public ResponseEntity<InvoiceDto.Detail> detail(Principal principal, @PathVariable Long id) {
+        return ResponseEntity.ok(queryService.detail(principal.getName(), id));
+    }
+
     @GetMapping("/{id}/pdf")
     public ResponseEntity<byte[]> pdf(Principal principal, @PathVariable Long id) {
         InvoiceQueryService.PdfFile file = queryService.pdf(principal.getName(), id);

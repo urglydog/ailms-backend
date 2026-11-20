@@ -13,6 +13,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -26,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AdminInvoiceController {
 
     private final InvoiceQueryService queryService;
+    private final com.lms.invoice.service.InvoiceMailer mailer;
 
     @GetMapping
     public ResponseEntity<InvoiceDto.AdminPage> list(
@@ -49,6 +51,18 @@ public class AdminInvoiceController {
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"invoices.csv\"")
                 .contentType(new MediaType("text", "csv", StandardCharsets.UTF_8))
                 .body(csv.getBytes(StandardCharsets.UTF_8));
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<InvoiceDto.Detail> detail(@PathVariable Long id) {
+        return ResponseEntity.ok(queryService.adminDetail(id));
+    }
+
+    /** Gửi lại email chứng từ (kèm PDF) cho người nhận. */
+    @PostMapping("/{id}/resend-email")
+    public ResponseEntity<java.util.Map<String, Boolean>> resend(@PathVariable Long id) {
+        queryService.adminDetail(id); // 404 nếu không tồn tại
+        return ResponseEntity.ok(java.util.Map.of("sent", mailer.resend(id)));
     }
 
     @GetMapping("/{id}/pdf")

@@ -30,8 +30,12 @@ public class AdminPayoutController {
     private final PayoutService payoutService;
 
     @GetMapping
-    public ResponseEntity<List<PayoutDto.AdminPayoutRes>> list(@RequestParam(required = false) PayoutStatus status) {
-        return ResponseEntity.ok(payoutService.listForAdmin(status));
+    public ResponseEntity<List<PayoutDto.AdminPayoutRes>> list(
+            @RequestParam(required = false) PayoutStatus status,
+            @RequestParam(required = false) String q,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "30") int size) {
+        return ResponseEntity.ok(payoutService.listForAdmin(status, q, page, size));
     }
 
     @PostMapping("/{id}/approve")

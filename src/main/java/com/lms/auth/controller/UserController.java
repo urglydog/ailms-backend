@@ -29,15 +29,6 @@ public class UserController {
     private final com.lms.auth.service.AuthService authService;
 
     /**
-     * Lấy danh sách toàn bộ người dùng (Chỉ dành cho Admin).
-     */
-    @GetMapping
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<List<UserRes>> getAllUsers() {
-        return ResponseEntity.ok(userService.getAllUsers());
-    }
-
-    /**
      * Trang Quản lý người dùng (Admin) — tìm/lọc/sắp xếp/phân trang phía server (hiệu năng đợt 3).
      * Thay cho {@code GET /api/v1/users} (trả toàn bộ người dùng) ở giao diện admin.
      */

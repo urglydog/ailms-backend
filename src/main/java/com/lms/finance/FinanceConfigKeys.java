@@ -87,8 +87,6 @@ public final class FinanceConfigKeys {
         } else if (key.equals("REPORT_DAILY_ENABLED") || key.equals("REPORT_WEEKLY_ENABLED") || key.equals("REPORT_MONTHLY_ENABLED")
                 || key.equals("STATEMENT_EMAIL_INSTRUCTORS")) {
             requireIntRange(key, v, 0, 1);
-        } else if (key.equals("PAYOS_PAYOUT_FEE")) {
-            requireIntRange(key, v, 0, 100_000);
         } else if (key.equals("REPORT_RECIPIENTS")) {
             validateRecipients(key, v);
         } else if (key.equals("INVOICE_ISSUER_NAME") && v.isBlank()) {

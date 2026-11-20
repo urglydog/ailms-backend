@@ -32,8 +32,12 @@ public class SupportTicketController {
 
     @GetMapping("/api/v1/admin/support/tickets")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<List<SupportDto.AdminRes>> list(@RequestParam(required = false) SupportTicketStatus status) {
-        return ResponseEntity.ok(supportTicketService.listForAdmin(status));
+    public ResponseEntity<List<SupportDto.AdminRes>> list(
+            @RequestParam(required = false) SupportTicketStatus status,
+            @RequestParam(required = false) String q,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "30") int size) {
+        return ResponseEntity.ok(supportTicketService.listForAdmin(status, q, page, size));
     }
 
     @GetMapping("/api/v1/admin/support/tickets/open-count")

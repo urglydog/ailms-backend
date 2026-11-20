@@ -272,11 +272,11 @@ public class PayoutService {
     // ── Admin ───────────────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
-    public List<PayoutDto.AdminPayoutRes> listForAdmin(PayoutStatus status) {
-        List<InstructorPayout> rows = status == null
-                ? payoutRepository.findAllByOrderByCreatedAtDesc()
-                : payoutRepository.findByStatusOrderByCreatedAtDesc(status);
-        return rows.stream().map(PayoutService::toAdminRes).toList();
+    public List<PayoutDto.AdminPayoutRes> listForAdmin(PayoutStatus status, String query, int page, int size) {
+        String q = query == null || query.isBlank() ? null : "%" + query.trim().toLowerCase(java.util.Locale.ROOT) + "%";
+        long qId = query != null && query.trim().matches("\\d{1,18}") ? Long.parseLong(query.trim()) : -1L;
+        var pageable = org.springframework.data.domain.PageRequest.of(Math.max(0, page), Math.max(1, Math.min(size, 100)));
+        return payoutRepository.searchForAdmin(status, q, qId, pageable).stream().map(PayoutService::toAdminRes).toList();
     }
 
     @Transactional

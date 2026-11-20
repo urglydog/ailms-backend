@@ -97,6 +97,9 @@ public class PaymentDto {
             String orderGroupRef
     ) {}
 
+    /** Một trang kết quả tra cứu giao dịch của admin. */
+    public record AdminPage(java.util.List<AdminRes> items, long total, int page, int size) {}
+
     public record AdminRes(
             String txnRef,
             BigDecimal amount,

@@ -114,9 +114,14 @@ public class PaymentController {
         return ResponseEntity.ok(paymentService.getMyPayments(principal.getName()));
     }
 
-    @GetMapping("/admin/all")
+    /** Tra cứu giao dịch (admin): theo từ khóa và/hoặc trạng thái, phân trang. Thay cho {@code /admin/all} (đã bỏ vì tải toàn bộ giao dịch). */
+    @GetMapping("/admin/search")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<java.util.List<PaymentDto.AdminRes>> getAllPayments() {
-        return ResponseEntity.ok(paymentService.getAllPayments());
+    public ResponseEntity<PaymentDto.AdminPage> searchPayments(
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) com.lms.common.enums.PaymentStatus status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(paymentService.searchPayments(q, status, page, size));
     }
 }

@@ -72,7 +72,6 @@ class FinanceConfigKeysTest {
     @Test
     void validate_reportAndInvoiceKeys() {
         FinanceConfigKeys.validate("REPORT_WEEKLY_ENABLED", "1");
-        FinanceConfigKeys.validate("PAYOS_PAYOUT_FEE", "2950");
         FinanceConfigKeys.validate("REPORT_RECIPIENTS", "");
         FinanceConfigKeys.validate("REPORT_RECIPIENTS", "a@b.com, c@d.vn");
         FinanceConfigKeys.validate("INVOICE_EXCLUDED_EMAIL_SUFFIX", "@example.com");

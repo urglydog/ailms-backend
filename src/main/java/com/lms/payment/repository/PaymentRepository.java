@@ -45,6 +45,19 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"user", "course"})
     List<Payment> findAllByOrderByCreatedAtDesc();
 
+    /**
+     * Tra cứu giao dịch cho admin (20/11/2026): theo mã đơn/mã nhóm đơn/mã cổng, email/tên/ID người mua, tên/SĐT thanh toán, tên khóa học. Luôn phân trang;
+     * {@code q} là mẫu LIKE chữ thường (hoặc null), {@code qId} là số nếu q là số (không thì -1).
+     */
+    @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"user", "course", "coupon"})
+    @Query("SELECT p FROM Payment p JOIN p.user u JOIN p.course c WHERE (:status IS NULL OR p.status = :status) AND (:q IS NULL "
+            + "OR LOWER(p.txnRef) LIKE :q OR LOWER(p.gatewayTxnNo) LIKE :q OR LOWER(p.orderGroupRef) LIKE :q OR LOWER(u.email) LIKE :q "
+            + "OR LOWER(u.fullName) LIKE :q OR LOWER(p.billingName) LIKE :q OR p.billingPhone LIKE :q OR LOWER(c.title) LIKE :q "
+            + "OR u.id = :qId OR p.id = :qId) ORDER BY p.createdAt DESC")
+    org.springframework.data.domain.Page<Payment> searchForAdmin(@Param("q") String q, @Param("qId") long qId,
+                                                                  @Param("status") PaymentStatus status,
+                                                                  org.springframework.data.domain.Pageable pageable);
+
     /** Hạn mức coupon (15/09/2026, mở rộng) — chỉ đếm giao dịch đã THÀNH CÔNG, tránh giỏ hàng
      * bỏ dở/thất bại chiếm suất dùng của người khác. */
     long countByCoupon_IdAndStatus(Long couponId, PaymentStatus status);

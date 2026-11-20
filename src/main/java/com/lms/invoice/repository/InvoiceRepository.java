@@ -29,8 +29,9 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
     @EntityGraph(attributePaths = {"party", "relatedInvoice"})
     @Query("SELECT i FROM Invoice i JOIN i.party u WHERE (:type IS NULL OR i.type = :type) "
             + "AND (:from IS NULL OR i.issuedAt >= :from) AND (:to IS NULL OR i.issuedAt < :to) "
-            + "AND (:q IS NULL OR LOWER(i.number) LIKE :q OR LOWER(u.email) LIKE :q OR LOWER(u.fullName) LIKE :q) "
+            + "AND (:q IS NULL OR LOWER(i.number) LIKE :q OR LOWER(i.sourceKey) LIKE :q OR LOWER(i.snapshotJson) LIKE :q OR LOWER(u.email) LIKE :q OR LOWER(u.fullName) LIKE :q "
+            + "OR u.id = :qId OR EXISTS (SELECT 1 FROM InvoiceLine l WHERE l.invoice = i AND LOWER(l.description) LIKE :q)) "
             + "ORDER BY i.issuedAt DESC, i.id DESC")
     Page<Invoice> search(@Param("type") InvoiceType type, @Param("from") LocalDateTime from, @Param("to") LocalDateTime to,
-                         @Param("q") String q, Pageable pageable);
+                         @Param("q") String q, @Param("qId") long qId, Pageable pageable);
 }

@@ -604,27 +604,44 @@ public class PaymentService {
                 )).toList();
     }
 
+    /**
+     * Tra cứu giao dịch cho admin theo từ khóa/trạng thái, LUÔN phân trang (tối đa 50/trang). Không có điều kiện tìm nào thì trả trang rỗng —
+     * màn admin chỉ hiện dữ liệu sau khi người dùng nhập điều kiện (nguyên tắc tìm-kiếm-trước, 20/11/2026).
+     */
     @Transactional(readOnly = true)
-    public java.util.List<PaymentDto.AdminRes> getAllPayments() {
-        return paymentRepository.findAllByOrderByCreatedAtDesc().stream()
-                .map(p -> new PaymentDto.AdminRes(
-                        p.getTxnRef(),
-                        p.getAmount(),
-                        p.getPlatformFee(),
-                        p.getInstructorEarning(),
-                        p.getPaymentMethod(),
-                        p.getStatus(),
-                        p.getPaidAt(),
-                        p.getCourse().getTitle(),
-                        p.getGatewayTxnNo(),
-                        p.getUser().getEmail(),
-                        p.getBillingName(),
-                        p.getBillingPhone(),
-                        p.getOriginalAmount(),
-                        p.getDiscountAmount(),
-                        p.getCoupon() != null ? p.getCoupon().getCode() : null,
-                        p.getRevenueSource(),
-                        p.getPlatformRate()
-                )).toList();
+    public PaymentDto.AdminPage searchPayments(String query, PaymentStatus status, int page, int size) {
+        int safeSize = Math.max(1, Math.min(size, 50));
+        String q = query == null || query.isBlank() ? null : "%" + query.trim().toLowerCase(java.util.Locale.ROOT) + "%";
+        if (q == null && status == null) {
+            return new PaymentDto.AdminPage(java.util.List.of(), 0, 0, safeSize);
+        }
+        long qId = -1;
+        if (query != null && query.trim().matches("\\d{1,18}")) {
+            qId = Long.parseLong(query.trim());
+        }
+        var result = paymentRepository.searchForAdmin(q, qId, status, org.springframework.data.domain.PageRequest.of(Math.max(0, page), safeSize));
+        return new PaymentDto.AdminPage(result.getContent().stream().map(PaymentService::toAdminRes).toList(), result.getTotalElements(),
+                result.getNumber(), safeSize);
+    }
+
+    private static PaymentDto.AdminRes toAdminRes(Payment p) {
+        return new PaymentDto.AdminRes(
+                p.getTxnRef(),
+                p.getAmount(),
+                p.getPlatformFee(),
+                p.getInstructorEarning(),
+                p.getPaymentMethod(),
+                p.getStatus(),
+                p.getPaidAt(),
+                p.getCourse().getTitle(),
+                p.getGatewayTxnNo(),
+                p.getUser().getEmail(),
+                p.getBillingName(),
+                p.getBillingPhone(),
+                p.getOriginalAmount(),
+                p.getDiscountAmount(),
+                p.getCoupon() != null ? p.getCoupon().getCode() : null,
+                p.getRevenueSource(),
+                p.getPlatformRate());
     }
 }
