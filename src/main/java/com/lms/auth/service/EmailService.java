@@ -524,6 +524,86 @@ public class EmailService {
 
     private static final DateTimeFormatter SUPPORT_TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm dd/MM/yyyy");
 
+    /**
+     * Email chứng từ (biên lai/phiếu hoàn/phiếu chi/biên lai công nợ) kèm PDF — 20/11/2026. Nội dung do bên gọi soạn (đã là văn bản thuần, hàm tự escape khi
+     * dựng HTML); {@code linkPath} là đường dẫn trong ứng dụng để người nhận xem lại mọi chứng từ. Best-effort: lỗi gửi chỉ ghi log, không ném ra ngoài.
+     */
+    public void sendDocumentEmail(String toEmail, String recipientName, String subject, String heading, String intro, String numberLabel,
+                                  String number, String amountLabel, BigDecimal amount, LocalDateTime when, String note,
+                                  String linkPath, String linkLabel, String attachmentName, byte[] pdf) {
+        try {
+            String time = (when == null ? LocalDateTime.now() : when).format(SUPPORT_TIME_FORMAT);
+            String link = frontendBaseUrl + linkPath;
+            String text = "Kính gửi " + recipientName + ",\n\n" + intro + "\n\n" + numberLabel + ": " + number + "\n" + amountLabel + ": "
+                    + formatVnd(amount) + "\nThời gian: " + time + "\n\n" + note + "\n\n" + linkLabel + ": " + link
+                    + "\n\nTrân trọng,\nĐội ngũ hỗ trợ LinguaLearn";
+            String html = supportMailShell(HtmlUtils.htmlEscape(heading),
+                    greeting(recipientName)
+                            + paragraph(HtmlUtils.htmlEscape(intro))
+                            + summaryTable(new String[][]{
+                                    {HtmlUtils.htmlEscape(numberLabel), "<span style=\"font-family:monospace;\">" + HtmlUtils.htmlEscape(number) + "</span>"},
+                                    {HtmlUtils.htmlEscape(amountLabel), "<strong>" + formatVnd(amount) + "</strong>"},
+                                    {"Thời gian", time}})
+                            + section("Lưu ý", paragraph(HtmlUtils.htmlEscape(note) + " <a href=\"" + HtmlUtils.htmlEscape(link)
+                            + "\" style=\"color:#1A6FE0;\">" + HtmlUtils.htmlEscape(linkLabel) + "</a>."))
+                            + closing("Trân trọng,", null, "Đội ngũ hỗ trợ LinguaLearn"));
+            sendHtmlMail(toEmail, subject, text, html, attachmentName, pdf);
+            log.info("Da gui email chung tu {} den {}", number, toEmail);
+        } catch (Exception e) {
+            log.error("Loi khi gui email chung tu {} den {}: {}", number, toEmail, e.getMessage());
+        }
+    }
+
+    /**
+     * Email báo cáo tài chính kèm nhiều tệp (XLSX/PDF) cho quản trị viên — 20/11/2026. {@code rows} là các cặp "chỉ tiêu - giá trị" (văn bản thuần, hàm tự escape).
+     * Best-effort: trả {@code true} nếu gửi được, {@code false} nếu lỗi (chỉ ghi log).
+     */
+    public boolean sendReportEmail(String toEmail, String subject, String heading, String intro, java.util.List<String[]> rows,
+                                   java.util.Map<String, byte[]> attachments) {
+        try {
+            StringBuilder text = new StringBuilder("Kính gửi quản trị viên,\n\n").append(intro).append("\n\n");
+            String[][] escaped = new String[rows.size()][];
+            for (int i = 0; i < rows.size(); i++) {
+                text.append(rows.get(i)[0]).append(": ").append(rows.get(i)[1]).append('\n');
+                escaped[i] = new String[]{HtmlUtils.htmlEscape(rows.get(i)[0]), HtmlUtils.htmlEscape(rows.get(i)[1])};
+            }
+            text.append("\nBáo cáo đầy đủ được đính kèm. Bạn cũng có thể xem trực tiếp tại ").append(frontendBaseUrl).append("/admin/finance-reports\n\nTrân trọng,\nĐội ngũ hỗ trợ LinguaLearn");
+            String html = supportMailShell(HtmlUtils.htmlEscape(heading),
+                    greetingHtml("Kính gửi quản trị viên,")
+                            + paragraph(HtmlUtils.htmlEscape(intro))
+                            + summaryTable(escaped)
+                            + paragraph("Báo cáo đầy đủ được đính kèm trong email này. Bạn cũng có thể xem trực tiếp tại <a href=\"" + frontendBaseUrl
+                            + "/admin/finance-reports\" style=\"color:#1A6FE0;\">trang Thống kê tài chính</a>.")
+                            + closing("Trân trọng,", null, "Đội ngũ hỗ trợ LinguaLearn"));
+            MimeMessage mimeMessage = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
+            helper.setFrom(fromAddress);
+            helper.setTo(toEmail);
+            helper.setSubject(subject);
+            helper.setText(text.toString(), html);
+            for (java.util.Map.Entry<String, byte[]> a : attachments.entrySet()) {
+                helper.addAttachment(a.getKey(), new org.springframework.core.io.ByteArrayResource(a.getValue()));
+            }
+            mailSender.send(mimeMessage);
+            log.info("Da gui email bao cao tai chinh den {}", toEmail);
+            return true;
+        } catch (Exception e) {
+            log.error("Loi khi gui email bao cao tai chinh den {}: {}", toEmail, e.getMessage());
+            return false;
+        }
+    }
+
+    private void sendHtmlMail(String toEmail, String subject, String text, String html, String attachmentName, byte[] attachment) throws Exception {
+        MimeMessage mimeMessage = mailSender.createMimeMessage();
+        MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
+        helper.setFrom(fromAddress);
+        helper.setTo(toEmail);
+        helper.setSubject(subject);
+        helper.setText(text, html);
+        helper.addAttachment(attachmentName, new org.springframework.core.io.ByteArrayResource(attachment), "application/pdf");
+        mailSender.send(mimeMessage);
+    }
+
     private void sendHtmlMail(String toEmail, String subject, String text, String html) throws Exception {
         MimeMessage mimeMessage = mailSender.createMimeMessage();
         MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");

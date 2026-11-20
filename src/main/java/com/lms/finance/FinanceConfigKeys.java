@@ -84,6 +84,30 @@ public final class FinanceConfigKeys {
             validateDaysOfMonth(key, v);
         } else if (REFUND_HOLIDAYS.equals(key)) {
             validateHolidays(key, v);
+        } else if (key.equals("REPORT_DAILY_ENABLED") || key.equals("REPORT_WEEKLY_ENABLED") || key.equals("REPORT_MONTHLY_ENABLED")
+                || key.equals("STATEMENT_EMAIL_INSTRUCTORS")) {
+            requireIntRange(key, v, 0, 1);
+        } else if (key.equals("PAYOS_PAYOUT_FEE")) {
+            requireIntRange(key, v, 0, 100_000);
+        } else if (key.equals("REPORT_RECIPIENTS")) {
+            validateRecipients(key, v);
+        } else if (key.equals("INVOICE_ISSUER_NAME") && v.isBlank()) {
+            throw invalid(key, "không được để trống");
+        } else if (key.equals("INVOICE_EXCLUDED_EMAIL_SUFFIX") && !v.isEmpty() && (v.contains(" ") || v.contains("%") || v.contains("_"))) {
+            throw invalid(key, "chỉ gồm đuôi email như @example.com, không chứa khoảng trắng, % hoặc _");
+        }
+    }
+
+    /** Danh sách email cách nhau dấu phẩy (để trống = tất cả quản trị viên). */
+    private static void validateRecipients(String key, String v) {
+        if (v.isEmpty()) {
+            return;
+        }
+        for (String part : v.split(",")) {
+            String e = part.trim();
+            if (!e.matches("[^@\\s,]+@[^@\\s,]+\\.[^@\\s,]+")) {
+                throw invalid(key, "\"" + e + "\" không phải email hợp lệ; nhập các email cách nhau bằng dấu phẩy");
+            }
         }
     }
 
