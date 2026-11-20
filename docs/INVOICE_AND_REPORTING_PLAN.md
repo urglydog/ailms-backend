@@ -1,6 +1,6 @@
 # Kế hoạch: Hóa đơn / chứng từ & Thống kê – Báo cáo tự động (đề xuất 15/11/2026)
 
-> Trạng thái: **ĐÃ CHỐT PHẠM VI (15/11/2026), CHƯA LÀM** — chủ dự án đã trả lời các câu hỏi (mục 8). Bắt đầu code **sau khi hai lệnh chi PayOS LLR5-1 và LLP1-1 hoàn tất** và sau khi chủ dự án duyệt hướng triển khai ở mục 7 (theo CLAUDE.md: việc mới / đổi schema phải confirm trước).
+> Trạng thái: **ĐÃ CHỐT PHẠM VI (15/11/2026); H1 phần BE ĐÃ CODE (20/11/2026), chờ sao lưu DB + deploy; email/FE/H2–H4 CHƯA LÀM** — chủ dự án đã trả lời các câu hỏi (mục 8). Bắt đầu code **sau khi hai lệnh chi PayOS LLR5-1 và LLP1-1 hoàn tất** và sau khi chủ dự án duyệt hướng triển khai ở mục 7 (theo CLAUDE.md: việc mới / đổi schema phải confirm trước).
 
 ## 1. Vấn đề
 - Mọi khoản tiền (học viên trả, hoàn tiền, chi trả giảng viên, trả nợ) hiện chỉ có **bản ghi trong DB và email chữ thuần**, không có chứng từ chính thức; email thanh toán không đính kèm hóa đơn/biên lai.
