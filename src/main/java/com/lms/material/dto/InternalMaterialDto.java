@@ -16,6 +16,8 @@ public class InternalMaterialDto {
             Long scopeRefId,
             String quantityLevel,
             String difficultyLevel,
+            /** Số bài của cả khóa đã có transcript gốc (mẫu số tính tỷ lệ số câu/thẻ cho phạm vi hẹp); worker bản cũ bỏ qua trường này. */
+            Long courseLessonCount,
             /** Theo TỪNG bài trong phạm vi — BR-MAT-01: dịch trực tiếp từ transcript gốc, không
              * phụ thuộc bài đã lồng tiếng ngôn ngữ đích hay chưa. Nếu ngôn ngữ đích ĐÃ có bản dịch
              * sẵn (do lồng tiếng hoặc lần sinh học liệu trước đó), dùng thẳng, khỏi dịch lại. */
