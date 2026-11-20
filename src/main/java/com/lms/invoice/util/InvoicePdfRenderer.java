@@ -144,6 +144,15 @@ public final class InvoicePdfRenderer {
                 optionalMeta(meta, "Bank transfer reference", text(snap, "transferRef", ""), label, value);
             }
             case DEBT_RECEIPT -> optionalMeta(meta, "Payment code", text(snap, "orderCode", ""), label, value);
+            case STATEMENT -> {
+                optionalMeta(meta, "Period", text(snap, "periodLabel", text(snap, "period", "")), label, value);
+                optionalMeta(meta, "Earnings", amount(snap, "earnings"), label, value);
+                optionalMeta(meta, "Refund reversals", amount(snap, "refundReversals"), label, value);
+                optionalMeta(meta, "Adjustments", amount(snap, "adjustments"), label, value);
+                optionalMeta(meta, "Debt repayments", amount(snap, "debtRepayments"), label, value);
+                optionalMeta(meta, "Payouts paid", amount(snap, "payoutsPaid"), label, value);
+                optionalMeta(meta, "Platform share on these orders", amount(snap, "platformShare"), label, value);
+            }
         }
     }
 
@@ -153,6 +162,7 @@ public final class InvoicePdfRenderer {
             case REFUND -> "Refund Voucher";
             case PAYOUT -> "Payout Voucher";
             case DEBT_RECEIPT -> "Debt Repayment Receipt";
+            case STATEMENT -> "Monthly Earnings Statement";
         };
     }
 
@@ -166,12 +176,18 @@ public final class InvoicePdfRenderer {
             case REFUND -> "Total refunded";
             case PAYOUT -> "Total paid out";
             case DEBT_RECEIPT -> "Total repaid";
+            case STATEMENT -> "Net movement";
         };
     }
 
     private static String text(JsonNode snap, String field, String fallback) {
         JsonNode n = snap == null ? null : snap.get(field);
         return n == null || n.isNull() ? fallback : n.asText();
+    }
+
+    private static String amount(JsonNode snap, String field) {
+        JsonNode n = snap == null ? null : snap.get(field);
+        return n == null || n.isNull() ? "" : money(BigDecimal.valueOf(n.asLong()));
     }
 
     private static String formatTime(String iso) {

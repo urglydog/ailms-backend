@@ -5,7 +5,9 @@ public enum InvoiceType {
     RECEIPT("RCP"),
     REFUND("RFD"),
     PAYOUT("PAY"),
-    DEBT_RECEIPT("DBT");
+    DEBT_RECEIPT("DBT"),
+    /** Bảng kê thu nhập tháng của giảng viên (STM) — tổng hợp từ sổ cái, không phải một giao dịch tiền. */
+    STATEMENT("STM");
 
     private final String prefix;
 

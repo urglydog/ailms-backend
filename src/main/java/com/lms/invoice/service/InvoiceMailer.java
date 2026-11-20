@@ -63,6 +63,12 @@ public class InvoiceMailer {
                     "Số biên lai", "Số tiền đã trả",
                     "Bạn có thể xem lại các chứng từ và công nợ còn lại tại mục Thu nhập, phần",
                     "/instructor/earnings", "Chứng từ");
+            case STATEMENT -> new Copy("Bảng kê thu nhập tháng", "Bảng kê thu nhập tháng của bạn",
+                    "LinguaLearn gửi bạn bảng kê thu nhập của tháng vừa qua, gồm thu nhập từng đơn, các khoản hoàn tiền, khoản đã rút và công nợ nếu có. "
+                            + "Bảng kê được đính kèm trong email này.",
+                    "Số bảng kê", "Biến động trong tháng",
+                    "Bạn có thể xem lại các bảng kê tại mục Thu nhập, phần",
+                    "/instructor/earnings", "Chứng từ");
         };
     }
 }

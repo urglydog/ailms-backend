@@ -146,6 +146,26 @@ public class InvoiceIssueService {
         return Optional.of(persist(InvoiceType.DEBT_RECEIPT, user, String.valueOf(payment.getId()), payment.getId(), null, amount, BigDecimal.ZERO, amount, issuedAt, snap, lines));
     }
 
+    /** Dòng của bảng kê tháng: {@code amount} có dấu (thu nhập dương, hoàn/rút/điều chỉnh âm). */
+    public record StatementLine(String description, BigDecimal amount) {}
+
+    /**
+     * Bảng kê thu nhập tháng của giảng viên, khóa nguồn {@code YYYYMM:instructorId} (mỗi giảng viên mỗi tháng đúng một bảng kê). {@code net} là tổng thay đổi
+     * trong tháng. Chỉ phát hành một lần — dữ liệu tháng đã qua được chụp và không đổi.
+     */
+    @Transactional
+    public Optional<Invoice> issueStatement(User instructor, String period, BigDecimal net, Map<String, Object> extra, List<StatementLine> lines) {
+        String key = period + ":" + instructor.getId();
+        if (invoiceRepository.existsByTypeAndSourceKey(InvoiceType.STATEMENT, key)) {
+            return Optional.empty();
+        }
+        Map<String, Object> snap = baseSnapshot(instructor);
+        snap.put("period", period);
+        snap.putAll(extra);
+        List<LineDraft> drafts = lines.stream().map(l -> new LineDraft(l.description(), 1, l.amount(), l.amount())).toList();
+        return Optional.of(persist(InvoiceType.STATEMENT, instructor, key, null, null, net, BigDecimal.ZERO, net, LocalDateTime.now(), snap, drafts));
+    }
+
     static String receiptKey(Payment p) {
         return p.getOrderGroupRef() != null ? p.getOrderGroupRef() : p.getTxnRef();
     }

@@ -554,6 +554,45 @@ public class EmailService {
         }
     }
 
+    /**
+     * Email báo cáo tài chính kèm nhiều tệp (XLSX/PDF) cho quản trị viên — 20/11/2026. {@code rows} là các cặp "chỉ tiêu - giá trị" (văn bản thuần, hàm tự escape).
+     * Best-effort: trả {@code true} nếu gửi được, {@code false} nếu lỗi (chỉ ghi log).
+     */
+    public boolean sendReportEmail(String toEmail, String subject, String heading, String intro, java.util.List<String[]> rows,
+                                   java.util.Map<String, byte[]> attachments) {
+        try {
+            StringBuilder text = new StringBuilder("Kính gửi quản trị viên,\n\n").append(intro).append("\n\n");
+            String[][] escaped = new String[rows.size()][];
+            for (int i = 0; i < rows.size(); i++) {
+                text.append(rows.get(i)[0]).append(": ").append(rows.get(i)[1]).append('\n');
+                escaped[i] = new String[]{HtmlUtils.htmlEscape(rows.get(i)[0]), HtmlUtils.htmlEscape(rows.get(i)[1])};
+            }
+            text.append("\nBáo cáo đầy đủ được đính kèm. Bạn cũng có thể xem trực tiếp tại ").append(frontendBaseUrl).append("/admin/finance-reports\n\nTrân trọng,\nĐội ngũ hỗ trợ LinguaLearn");
+            String html = supportMailShell(HtmlUtils.htmlEscape(heading),
+                    greetingHtml("Kính gửi quản trị viên,")
+                            + paragraph(HtmlUtils.htmlEscape(intro))
+                            + summaryTable(escaped)
+                            + paragraph("Báo cáo đầy đủ được đính kèm trong email này. Bạn cũng có thể xem trực tiếp tại <a href=\"" + frontendBaseUrl
+                            + "/admin/finance-reports\" style=\"color:#1A6FE0;\">trang Thống kê tài chính</a>.")
+                            + closing("Trân trọng,", null, "Đội ngũ hỗ trợ LinguaLearn"));
+            MimeMessage mimeMessage = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
+            helper.setFrom(fromAddress);
+            helper.setTo(toEmail);
+            helper.setSubject(subject);
+            helper.setText(text.toString(), html);
+            for (java.util.Map.Entry<String, byte[]> a : attachments.entrySet()) {
+                helper.addAttachment(a.getKey(), new org.springframework.core.io.ByteArrayResource(a.getValue()));
+            }
+            mailSender.send(mimeMessage);
+            log.info("Da gui email bao cao tai chinh den {}", toEmail);
+            return true;
+        } catch (Exception e) {
+            log.error("Loi khi gui email bao cao tai chinh den {}: {}", toEmail, e.getMessage());
+            return false;
+        }
+    }
+
     private void sendHtmlMail(String toEmail, String subject, String text, String html, String attachmentName, byte[] attachment) throws Exception {
         MimeMessage mimeMessage = mailSender.createMimeMessage();
         MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
