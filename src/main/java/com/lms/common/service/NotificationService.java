@@ -22,7 +22,7 @@ public class NotificationService {
 
     @Transactional(readOnly = true)
     public List<NotificationRes> getNotifications(Long userId) {
-        return notificationRepository.findByUser_IdAndHiddenAtIsNullOrderByCreatedAtDesc(userId)
+        return notificationRepository.findTop200ByUser_IdAndHiddenAtIsNullOrderByCreatedAtDesc(userId)
                 .stream()
                 .map(this::convertToDto)
                 .collect(Collectors.toList());

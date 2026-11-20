@@ -16,8 +16,8 @@ import org.springframework.stereotype.Repository;
  */
 @Repository
 public interface NotificationRepository extends JpaRepository<Notification, Long> {
-    /** Thông báo của một người dùng, bỏ qua các thông báo đã thu hồi, mới nhất trước. */
-    List<Notification> findByUser_IdAndHiddenAtIsNullOrderByCreatedAtDesc(Long userId);
+    /** 200 thông báo mới nhất của một người dùng, bỏ qua các thông báo đã thu hồi (giới hạn để người dùng nhiều thông báo không làm nặng máy chủ và trình duyệt). */
+    List<Notification> findTop200ByUser_IdAndHiddenAtIsNullOrderByCreatedAtDesc(Long userId);
 
     /** Sửa tiêu đề/nội dung của mọi thông báo đã gửi từ một nguồn (thông báo hệ thống được sửa). */
     @Modifying

@@ -138,4 +138,19 @@ class AiJobAdminServiceTest {
         assertThat(res.superseded()).isFalse();
         assertThat(res.retryable()).isFalse();
     }
+
+    @Test
+    void summary_countsComeFromTheJobTableNotFromWorkerCache() {
+        when(aiJobRepository.countByStatus(JobStatus.PENDING)).thenReturn(2L);
+        when(aiJobRepository.countByStatus(JobStatus.PROCESSING)).thenReturn(1L);
+        when(aiJobRepository.countByStatus(JobStatus.COMPLETED)).thenReturn(10L);
+        when(aiJobRepository.countNeedingAttention()).thenReturn(1L);
+
+        AiJobAdminService.Summary summary = aiJobAdminService.getSummary();
+
+        assertThat(summary.pending()).isEqualTo(2L);
+        assertThat(summary.processing()).isEqualTo(1L);
+        assertThat(summary.completed()).isEqualTo(10L);
+        assertThat(summary.needsAttention()).isEqualTo(1L);
+    }
 }

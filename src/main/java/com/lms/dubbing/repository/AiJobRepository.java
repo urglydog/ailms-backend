@@ -22,6 +22,14 @@ public interface AiJobRepository extends JpaRepository<AiJob, Long> {
     /** Loc job theo trang thai trong PHAM VI 1 bai hoc. */
     List<AiJob> findByLesson_IdAndStatusIn(Long lessonId, Collection<JobStatus> statuses);
 
+    long countByStatus(JobStatus status);
+
+    /** Số job lỗi CÒN CẦN XỬ LÝ: bài học + ngôn ngữ đó chưa có bản lồng tiếng thành công (cùng điều kiện với bộ lọc "Cần xử lý"). */
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT COUNT(j) FROM AiJob j WHERE j.status = com.lms.common.enums.JobStatus.FAILED AND NOT EXISTS (SELECT 1 FROM AiJob o WHERE o.lesson = j.lesson "
+            + "AND o.targetLanguage = j.targetLanguage AND o.status = com.lms.common.enums.JobStatus.COMPLETED)")
+    long countNeedingAttention();
+
     /** UC45 — Admin giam sat hang doi TOAN HE THONG, phan trang theo trang thai. */
     Page<AiJob> findByStatusIn(Collection<JobStatus> statuses, Pageable pageable);
 

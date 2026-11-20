@@ -95,7 +95,8 @@ class DiscoveryControllerTest {
         when(restTemplate.postForEntity(anyString(), any(HttpEntity.class), eq(Object.class)))
                 .thenReturn(ResponseEntity.ok((Object) Map.of("reply", "ok")));
         MockHttpServletRequest req = new MockHttpServletRequest();
-        req.addHeader("X-Forwarded-For", "9.9.9.9, 10.0.0.1");
+        // Proxy nối IP thật vào CUỐI; phần đầu do client tự gửi nên không được tin.
+        req.addHeader("X-Forwarded-For", "1.2.3.4, 9.9.9.9");
 
         ResponseEntity<?> res = controller.chat(null, body("hi"), req);
 

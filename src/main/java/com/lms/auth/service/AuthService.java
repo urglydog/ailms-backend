@@ -182,11 +182,7 @@ public class AuthService {
     }
 
     private String extractClientIp() {
-        String forwarded = request.getHeader("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isBlank()) {
-            return forwarded.split(",")[0].trim();
-        }
-        return request.getRemoteAddr();
+        return com.lms.common.ratelimit.RateLimitFilter.clientIp(request);
     }
 
     /** Suy luận tên thiết bị đơn giản từ User-Agent (không cần thư viện ngoài cho nhu cầu hiển thị cơ bản). */

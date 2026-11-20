@@ -118,12 +118,8 @@ public class DiscoveryController {
         }
     }
 
-    /** Sau reverse proxy (Caddy) — lấy IP đầu của X-Forwarded-For, cùng cách {@code AuthService.extractClientIp}. */
+    /** Sau reverse proxy (Caddy) — dùng IP do proxy nối vào CUỐI X-Forwarded-For (phần đầu client tự gửi được nên không tin). */
     private String extractClientIp(jakarta.servlet.http.HttpServletRequest http) {
-        String forwarded = http.getHeader("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isBlank()) {
-            return forwarded.split(",")[0].trim();
-        }
-        return http.getRemoteAddr();
+        return com.lms.common.ratelimit.RateLimitFilter.clientIp(http);
     }
 }
