@@ -48,7 +48,11 @@ public class InternalMaterialDto {
     public record UsageMetadataDto(
             Integer promptTokens,
             Integer completionTokens,
-            Integer totalTokens
+            Integer totalTokens,
+            /** Token "suy nghĩ" ẩn của Gemini (tính tiền như token đầu ra); null với worker bản cũ. */
+            Integer thinkingTokens,
+            /** Model thực tế đã trả lời (để tính giá theo model); null với worker bản cũ. */
+            String model
     ) {}
 
     public record FlashcardDto(
