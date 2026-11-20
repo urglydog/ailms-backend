@@ -86,18 +86,9 @@ public class LessonChatService {
 
     @Transactional(readOnly = true)
     public Page<QuestionRes> listQuestionsForInstructor(
-            String email, Long courseId, boolean onlyUnanswered, Pageable pageable) {
-        Page<LessonChat> page = courseId != null
-                ? chatRepository.findByParentIsNullAndLesson_Chapter_Course_IdAndLesson_Chapter_Course_Instructor_EmailOrderByCreatedAtDesc(
-                        courseId, email, pageable)
-                : chatRepository.findByParentIsNullAndLesson_Chapter_Course_Instructor_EmailOrderByCreatedAtDesc(
-                        email, pageable);
-
-        List<QuestionRes> mapped = page.getContent().stream()
-                .map(this::toQuestionRes)
-                .filter(q -> !onlyUnanswered || q.answerCount() == 0)
-                .toList();
-        return new org.springframework.data.domain.PageImpl<>(mapped, pageable, page.getTotalElements());
+            String email, Long courseId, boolean onlyUnanswered, String search, Pageable pageable) {
+        String kw = (search == null || search.isBlank()) ? null : "%" + search.trim().toLowerCase(java.util.Locale.ROOT) + "%";
+        return chatRepository.searchQuestionsForInstructor(email, courseId, onlyUnanswered, kw, pageable).map(this::toQuestionRes);
     }
 
     @Transactional(readOnly = true)

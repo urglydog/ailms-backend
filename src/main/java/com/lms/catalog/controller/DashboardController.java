@@ -152,6 +152,26 @@ public class DashboardController {
         return ResponseEntity.ok(dashboardService.getStudents(principal.getName(), courseId));
     }
 
+    @GetMapping("/instructor/students/search")
+    @PreAuthorize("hasRole('INSTRUCTOR')")
+    public ResponseEntity<org.springframework.data.domain.Page<Map<String, Object>>> searchStudents(
+            java.security.Principal principal,
+            @RequestParam(required = false) Long courseId,
+            @RequestParam(defaultValue = "false") boolean atRiskOnly,
+            @RequestParam(required = false) String q,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "15") int size) {
+        return ResponseEntity.ok(dashboardService.searchStudents(principal.getName(), courseId, atRiskOnly, q,
+                org.springframework.data.domain.PageRequest.of(Math.max(0, page), Math.min(Math.max(1, size), 50))));
+    }
+
+    @GetMapping("/instructor/students/summary")
+    @PreAuthorize("hasRole('INSTRUCTOR')")
+    public ResponseEntity<Map<String, Object>> getStudentSummary(
+            java.security.Principal principal, @RequestParam(required = false) Long courseId) {
+        return ResponseEntity.ok(dashboardService.getStudentSummary(principal.getName(), courseId));
+    }
+
     @GetMapping("/instructor/reviews")
     @PreAuthorize("hasRole('INSTRUCTOR')")
     public ResponseEntity<List<Map<String, Object>>> getReviews(

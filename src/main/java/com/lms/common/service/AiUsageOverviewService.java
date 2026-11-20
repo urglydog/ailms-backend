@@ -21,6 +21,7 @@ public class AiUsageOverviewService {
     private final AiUsageLogRepository repository;
     private final AiPricing pricing;
     private final SystemConfigService config;
+    private final com.lms.common.repository.AiBillingEntryRepository billingRepository;
 
     public record Totals(BigDecimal costUsd, long tokens, long requests, long audioSeconds) {}
 
@@ -28,8 +29,11 @@ public class AiUsageOverviewService {
 
     public record DayFeature(String day, String feature, BigDecimal costUsd) {}
 
+    /** So sánh với hóa đơn Google AI Studio (chỉ phần Gemini) trên các hóa đơn nằm trọn trong khoảng đang xem: hóa đơn thực tế, phần đã quy được từ token (cùng các ngày), chênh lệch chưa quy được. */
+    public record Reconciliation(long billedVnd, long trackedVnd, long unexplainedVnd, int entries) {}
+
     public record Overview(LocalDate from, LocalDate to, Totals totals, Totals previous, List<FeatureRow> byFeature, List<DayFeature> daily,
-                           BigDecimal usdToVnd, String trackingSince, boolean partialCoverage) {}
+                           BigDecimal usdToVnd, String trackingSince, boolean partialCoverage, Reconciliation reconciliation) {}
 
     @Transactional(readOnly = true)
     public Overview overview(LocalDate from, LocalDate to, String feature) {
@@ -59,7 +63,21 @@ public class AiUsageOverviewService {
         } catch (RuntimeException ignored) {
             // Ngày cấu hình sai định dạng: bỏ qua cảnh báo phạm vi, không làm vỡ trang.
         }
-        return new Overview(start, end, totals(a, b, feat), totals(pa, a, feat), byFeature, daily, pricing.usdToVndRate(), since, partial);
+        return new Overview(start, end, totals(a, b, feat), totals(pa, a, feat), byFeature, daily, pricing.usdToVndRate(), since, partial, reconcile(start, end));
+    }
+
+    private Reconciliation reconcile(LocalDate start, LocalDate end) {
+        var entries = billingRepository.findWithin(start, end);
+        if (entries.isEmpty()) return null;
+        BigDecimal rate = pricing.usdToVndRate();
+        long billed = 0;
+        BigDecimal trackedUsd = BigDecimal.ZERO;
+        for (var e : entries) {
+            billed += e.getAmountVnd();
+            trackedUsd = trackedUsd.add(repository.sumCost(e.getPeriodStart().atStartOfDay(), e.getPeriodEnd().plusDays(1).atStartOfDay()));
+        }
+        long tracked = trackedUsd.multiply(rate).setScale(0, java.math.RoundingMode.HALF_UP).longValue();
+        return new Reconciliation(billed, tracked, Math.max(0, billed - tracked), entries.size());
     }
 
     private Totals totals(java.time.LocalDateTime a, java.time.LocalDateTime b, String feature) {

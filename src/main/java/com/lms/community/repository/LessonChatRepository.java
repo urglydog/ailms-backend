@@ -24,6 +24,23 @@ public interface LessonChatRepository extends JpaRepository<LessonChat, String> 
     Page<LessonChat> findByParentIsNullAndLesson_Chapter_Course_IdAndLesson_Chapter_Course_Instructor_EmailOrderByCreatedAtDesc(
             Long courseId, String email, Pageable pageable);
 
+    /**
+     * Hộp thư Hỏi đáp của giảng viên (21/11/2026): lọc khóa học, "chưa có ai trả lời" và tìm kiếm NGAY TRONG truy vấn để phân trang đúng
+     * (trước đây lọc/tìm sau khi đã lấy trang nên trang có thể thiếu hoặc không tìm thấy câu hỏi ở trang khác). {@code search} là mẫu LIKE chữ thường hoặc null.
+     */
+    @EntityGraph(attributePaths = {"lesson", "lesson.chapter", "lesson.chapter.course", "user"})
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT q FROM LessonChat q JOIN q.lesson l JOIN l.chapter ch JOIN ch.course c "
+            + "WHERE q.parent IS NULL AND c.instructor.email = :email AND (:courseId IS NULL OR c.id = :courseId) "
+            + "AND (:unanswered = false OR NOT EXISTS (SELECT 1 FROM LessonChat r WHERE r.parent = q)) "
+            + "AND (:search IS NULL OR LOWER(q.content) LIKE :search OR LOWER(q.userName) LIKE :search OR LOWER(l.title) LIKE :search OR LOWER(c.title) LIKE :search)")
+    Page<LessonChat> searchQuestionsForInstructor(
+            @org.springframework.data.repository.query.Param("email") String email,
+            @org.springframework.data.repository.query.Param("courseId") Long courseId,
+            @org.springframework.data.repository.query.Param("unanswered") boolean unanswered,
+            @org.springframework.data.repository.query.Param("search") String search,
+            Pageable pageable);
+
     @EntityGraph(attributePaths = {"user"})
     List<LessonChat> findByParent_IdOrderByCreatedAtAsc(String parentId);
 

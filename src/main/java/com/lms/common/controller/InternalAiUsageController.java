@@ -63,7 +63,7 @@ public class InternalAiUsageController {
         log.setEstimated(Boolean.TRUE.equals(req.estimated()));
         log.setUserId(resolveUser(req));
         BigDecimal cost = audio > 0 ? pricing.audioCost(audio)
-                : Boolean.TRUE.equals(req.embedding()) ? pricing.embeddingCost(prompt) : pricing.textCost(prompt, completion, thinking);
+                : Boolean.TRUE.equals(req.embedding()) ? pricing.embeddingCost(prompt) : pricing.textCost(log.getModel(), null, prompt, completion, thinking);
         log.setCostUsd(cost);
         repository.save(log);
         return ResponseEntity.ok().build();
