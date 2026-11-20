@@ -229,12 +229,17 @@ public class InternalMaterialService {
             int promptTokens = req.usageMetadata().promptTokens() != null ? req.usageMetadata().promptTokens() : 0;
             int completionTokens = req.usageMetadata().completionTokens() != null ? req.usageMetadata().completionTokens() : 0;
 
+            int thinkingTokens = req.usageMetadata().thinkingTokens() != null ? Math.max(0, req.usageMetadata().thinkingTokens()) : 0;
+            String model = req.usageMetadata().model();
+
             usageLog.setPromptTokens(promptTokens);
             usageLog.setCompletionTokens(completionTokens);
-            usageLog.setTotalTokens(promptTokens + completionTokens);
+            usageLog.setThinkingTokens(thinkingTokens);
+            usageLog.setTotalTokens(promptTokens + completionTokens + thinkingTokens);
+            usageLog.setModel(model == null || model.isBlank() ? null : model.substring(0, Math.min(80, model.length())));
 
-            // Cùng đơn giá cấu hình với mọi tính năng AI khác (xem AiPricing) để số liệu chi phí nhất quán.
-            usageLog.setCostUsd(aiPricing.textCost(promptTokens, completionTokens, 0));
+            // Cùng bảng giá theo model với mọi tính năng AI khác (xem AiPricing); token suy nghĩ tính như token đầu ra.
+            usageLog.setCostUsd(aiPricing.textCost(usageLog.getModel(), null, promptTokens, completionTokens, thinkingTokens));
 
             aiUsageLogRepository.save(usageLog);
         }
