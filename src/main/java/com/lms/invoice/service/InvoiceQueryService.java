@@ -15,6 +15,7 @@ import com.lms.invoice.entity.InvoiceType;
 import com.lms.invoice.repository.InvoiceLineRepository;
 import com.lms.invoice.repository.InvoiceRepository;
 import com.lms.invoice.util.InvoicePdfRenderer;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -57,6 +58,16 @@ public class InvoiceQueryService {
         List<InvoiceLine> lines = lineRepository.findByInvoice_IdOrderByLineNoAsc(inv.getId());
         byte[] bytes = InvoicePdfRenderer.render(inv, lines, parse(inv.getSnapshotJson()));
         return new PdfFile(inv.getNumber() + ".pdf", bytes);
+    }
+
+    /** Dữ liệu để gửi email chứng từ (không kiểm quyền — chỉ job nội bộ gọi, người nhận luôn là chủ chứng từ). */
+    @Transactional(readOnly = true)
+    public MailPayload mailPayload(Long invoiceId) {
+        Invoice inv = invoiceRepository.findById(invoiceId).orElseThrow(() -> new ResourceNotFoundException("Invoice", invoiceId));
+        List<InvoiceLine> lines = lineRepository.findByInvoice_IdOrderByLineNoAsc(inv.getId());
+        byte[] bytes = InvoicePdfRenderer.render(inv, lines, parse(inv.getSnapshotJson()));
+        return new MailPayload(inv.getParty().getEmail(), inv.getParty().getFullName(), inv.getType(), inv.getNumber(), inv.getTotal(),
+                inv.getIssuedAt(), inv.getNumber() + ".pdf", bytes);
     }
 
     @Transactional(readOnly = true)
@@ -127,5 +138,9 @@ public class InvoiceQueryService {
     }
 
     public record PdfFile(String filename, byte[] bytes) {
+    }
+
+    public record MailPayload(String toEmail, String recipientName, InvoiceType type, String number, BigDecimal total,
+                              LocalDateTime issuedAt, String filename, byte[] pdf) {
     }
 }

@@ -24,6 +24,7 @@ public class InvoiceIssueJob {
 
     private final InvoiceSourceFinder finder;
     private final InvoiceIssueService issueService;
+    private final InvoiceMailer mailer;
 
     @Scheduled(fixedDelay = 120_000, initialDelay = 180_000)
     public void run() {
@@ -51,8 +52,10 @@ public class InvoiceIssueJob {
         int n = 0;
         for (T source : sources) {
             try {
-                if (issuer.apply(source).isPresent()) {
+                Optional<Invoice> issued = issuer.apply(source);
+                if (issued.isPresent()) {
                     n++;
+                    mailer.sendIfRecent(issued.get().getId());
                 }
             } catch (RuntimeException e) {
                 log.warn("Không phát hành được {}: {}", label, e.getMessage());

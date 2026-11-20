@@ -22,6 +22,7 @@ class InvoiceIssueJobTest {
 
     @Mock private InvoiceSourceFinder finder;
     @Mock private InvoiceIssueService issueService;
+    @Mock private com.lms.invoice.service.InvoiceMailer mailer;
     @InjectMocks private com.lms.invoice.service.InvoiceIssueJob job;
 
     @Test
