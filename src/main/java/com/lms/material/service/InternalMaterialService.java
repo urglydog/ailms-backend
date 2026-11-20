@@ -100,6 +100,7 @@ public class InternalMaterialService {
                 .scopeRefId(generation.getScopeRefId())
                 .quantityLevel(generation.getQuantityLevel() != null ? generation.getQuantityLevel().name() : null)
                 .difficultyLevel(generation.getDifficultyLevel() != null ? generation.getDifficultyLevel().name() : null)
+                .courseLessonCount(transcriptRepository.countLessonsWithSourceTranscriptByCourseId(generation.getCourse().getId()))
                 .lessons(lessonDtos)
                 .build();
     }

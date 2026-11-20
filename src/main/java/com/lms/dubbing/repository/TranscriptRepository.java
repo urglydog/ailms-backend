@@ -33,6 +33,11 @@ public interface TranscriptRepository extends JpaRepository<Transcript, Long> {
             + "WHERE l.id IN :lessonIds AND t.isSource = true")
     boolean existsSourceTranscriptByLessonIdIn(@Param("lessonIds") List<Long> lessonIds);
 
+    /** Số bài của khóa đã có transcript gốc — mẫu số để tính tỷ lệ số câu/thẻ khi phạm vi sinh học liệu hẹp hơn cả khóa (BR-MAT-05). */
+    @Query("SELECT COUNT(DISTINCT l.id) FROM Transcript t JOIN t.lesson l JOIN l.chapter c "
+            + "WHERE c.course.id = :courseId AND t.isSource = true")
+    long countLessonsWithSourceTranscriptByCourseId(@Param("courseId") Long courseId);
+
     /** "Danh sách bài trong khoá đã sẵn sàng sinh học liệu" cho UI chọn phạm vi Chương/Bài tuỳ chọn. */
     @Query("SELECT l.id FROM Transcript t JOIN t.lesson l JOIN l.chapter c "
             + "WHERE c.course.id = :courseId AND t.isSource = true")
