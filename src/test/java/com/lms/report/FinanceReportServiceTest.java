@@ -104,14 +104,19 @@ class FinanceReportServiceTest {
     void recipients_fallsBackToActiveAdminsWhenNotConfigured() {
         when(config.getString("REPORT_RECIPIENTS", "")).thenReturn("");
         User admin = new User();
-        admin.setEmail("admin@lms.local");
+        admin.setEmail("quantri@gmail.com");
         admin.setRole(Role.ADMIN);
         admin.setIsActive(true);
+        // Admin nội bộ (.local) không có hộp thư thật: bị bỏ qua để thư không bị trả lại.
+        User internal = new User();
+        internal.setEmail("admin@lms.local");
+        internal.setRole(Role.ADMIN);
+        internal.setIsActive(true);
         User off = new User();
         off.setEmail("old@lms.local");
         off.setIsActive(false);
-        when(userRepository.findByRole(Role.ADMIN)).thenReturn(List.of(admin, off));
+        when(userRepository.findByRole(Role.ADMIN)).thenReturn(List.of(admin, internal, off));
 
-        assertThat(service.recipients()).containsExactly("admin@lms.local");
+        assertThat(service.recipients()).containsExactly("quantri@gmail.com");
     }
 }

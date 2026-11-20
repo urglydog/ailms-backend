@@ -63,6 +63,9 @@ public class PayoutDto {
             boolean hasOpenPayout
     ) {}
 
+    /** Một trang sao kê kèm tổng số dòng (cho phân trang). */
+    public record LedgerPage(java.util.List<LedgerEntryRes> items, long total, int page, int size) {}
+
     public record LedgerEntryRes(
             Long id,
             LedgerEntryType type,

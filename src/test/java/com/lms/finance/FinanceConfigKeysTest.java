@@ -65,14 +65,14 @@ class FinanceConfigKeysTest {
                 .isInstanceOf(InvalidRequestException.class);
         assertThatThrownBy(() -> FinanceConfigKeys.validate("QUOTA_TUTOR", "x".repeat(256)))
                 .isInstanceOf(InvalidRequestException.class);
-        // Khóa không thuộc nhóm tài chính (QUOTA_*) giữ hành vi cũ: không kiểm tra nội dung.
-        assertThatCode(() -> FinanceConfigKeys.validate("QUOTA_TUTOR", "bất kỳ")).doesNotThrowAnyException();
+        // Hạn mức AI (QUOTA_*) nay cũng được kiểm tra chặt (số nguyên không âm); chỉ khóa không có quy tắc nào mới bỏ qua nội dung.
+        assertThatThrownBy(() -> FinanceConfigKeys.validate("QUOTA_TUTOR", "bất kỳ")).isInstanceOf(InvalidRequestException.class);
+        assertThatCode(() -> FinanceConfigKeys.validate("SOME_FUTURE_KEY", "bất kỳ")).doesNotThrowAnyException();
     }
 
     @Test
     void validate_reportAndInvoiceKeys() {
         FinanceConfigKeys.validate("REPORT_WEEKLY_ENABLED", "1");
-        FinanceConfigKeys.validate("PAYOS_PAYOUT_FEE", "2950");
         FinanceConfigKeys.validate("REPORT_RECIPIENTS", "");
         FinanceConfigKeys.validate("REPORT_RECIPIENTS", "a@b.com, c@d.vn");
         FinanceConfigKeys.validate("INVOICE_EXCLUDED_EMAIL_SUFFIX", "@example.com");

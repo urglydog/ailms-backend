@@ -27,8 +27,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Component
 public class FinanceReportQueries {
 
-    static final String CFG_PAYOS_FEE = "PAYOS_PAYOUT_FEE";
-    static final long DEFAULT_PAYOS_FEE = 2950L;
+    /** Phí PayOS cho mỗi lệnh chi thành công, do PayOS quy định (không phải cấu hình của LinguaLearn); đổi khi PayOS đổi biểu phí. */
+    static final long PAYOS_PAYOUT_FEE_VND = 2950L;
     private static final String MATCH_NOTHING = "%\u0001";
 
     @PersistenceContext
@@ -46,15 +46,15 @@ public class FinanceReportQueries {
     }
 
     public long payosFee() {
-        return config.getInt(CFG_PAYOS_FEE, (int) DEFAULT_PAYOS_FEE);
+        return PAYOS_PAYOUT_FEE_VND;
     }
 
     private Query q(String sql, LocalDateTime from, LocalDateTime to) {
         Query query = em.createNativeQuery(sql);
-        if (sql.contains(":from")) {
+        if (sql.contains(":from") && from != null) {
             query.setParameter("from", from);
         }
-        if (sql.contains(":to")) {
+        if (sql.contains(":to") && to != null) {
             query.setParameter("to", to);
         }
         if (sql.contains(":ex")) {
@@ -169,6 +169,58 @@ public class FinanceReportQueries {
         long outflow = l(payos[1]);
         long recorded = l(ref[1]) + l(out[1]);
         return new Reconciliation(outflow, l(ref[1]), l(out[1]), outflow - recorded, l(payos[0]), l(ref[0]) + l(out[0]));
+    }
+
+    @Transactional(readOnly = true)
+    public List<FinanceReport.ReasonRow> refundReasons(LocalDateTime from, LocalDateTime to) {
+        return rows(q("SELECT COALESCE(r.reason_code, 'OTHER'), COUNT(*), COALESCE(SUM(r.amount),0)" + REFUND_BASE
+                + " GROUP BY 1 ORDER BY SUM(r.amount) DESC", from, to)).stream()
+                .map(r -> new FinanceReport.ReasonRow(s(r[0]), l(r[1]), l(r[2]))).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<FinanceReport.SourceRow> sources(LocalDateTime from, LocalDateTime to) {
+        return rows(q("SELECT p.revenue_source, COUNT(*), COALESCE(SUM(p.amount),0)" + PAY_BASE + " GROUP BY 1 ORDER BY SUM(p.amount) DESC", from, to)).stream()
+                .map(r -> new FinanceReport.SourceRow(s(r[0]), l(r[1]), l(r[2]))).toList();
+    }
+
+    /** Yêu cầu rút đang chờ (tại thời điểm xem), không phụ thuộc kỳ. */
+    @Transactional(readOnly = true)
+    public List<FinanceReport.PayoutStage> payoutPipeline() {
+        return rows(q("SELECT o.status, COUNT(*), COALESCE(SUM(o.amount),0), COALESCE(MAX(DATEDIFF(NOW(), o.created_at)),0) "
+                + "FROM instructor_payouts o JOIN users u ON u.id = o.instructor_id WHERE o.status IN ('REQUESTED','APPROVED') "
+                + "AND LOWER(u.email) NOT LIKE :ex GROUP BY o.status ORDER BY o.status", null, null)).stream()
+                .map(r -> new FinanceReport.PayoutStage(s(r[0]), l(r[1]), l(r[2]), l(r[3]))).toList();
+    }
+
+    /** Các lệnh chi PayOS và sổ sách không khớp nhau trong kỳ (tối đa 50 dòng mỗi chiều), để lần ra đúng khoản lệch. */
+    @Transactional(readOnly = true)
+    public List<FinanceReport.Mismatch> mismatches(LocalDateTime from, LocalDateTime to) {
+        List<FinanceReport.Mismatch> out = new java.util.ArrayList<>();
+        for (Object[] r : rows(q("SELECT o.reference_id, o.kind, o.amount, o.completed_at FROM payos_payout_orders o "
+                + "WHERE o.status = 'SUCCEEDED' AND o.completed_at >= :from AND o.completed_at < :to "
+                + "AND NOT EXISTS (SELECT 1 FROM payment_refunds r WHERE o.kind = 'DISPUTE_REFUND' AND r.dispute_id = o.entity_id AND r.transfer_status = 'TRANSFERRED') "
+                + "AND NOT EXISTS (SELECT 1 FROM instructor_payouts p WHERE o.kind = 'INSTRUCTOR_PAYOUT' AND p.id = o.entity_id AND p.status = 'PAID') "
+                + "ORDER BY o.completed_at DESC LIMIT 50", from, to))) {
+            out.add(new FinanceReport.Mismatch(s(r[1]), s(r[0]), l(r[2]), ts(r[3]), "PayOS đã chi nhưng hệ thống chưa ghi nhận đã chuyển tiền"));
+        }
+        for (Object[] r : rows(q("SELECT CONCAT('HOAN-', r.id), 'DISPUTE_REFUND', r.amount, r.transferred_at FROM payment_refunds r "
+                + "WHERE r.transfer_status = 'TRANSFERRED' AND r.transfer_ref LIKE 'PAYOS-%' AND r.transferred_at >= :from AND r.transferred_at < :to "
+                + "AND NOT EXISTS (SELECT 1 FROM payos_payout_orders o WHERE o.kind = 'DISPUTE_REFUND' AND o.entity_id = r.dispute_id AND o.status = 'SUCCEEDED') "
+                + "ORDER BY r.transferred_at DESC LIMIT 50", from, to))) {
+            out.add(new FinanceReport.Mismatch(s(r[1]), s(r[0]), l(r[2]), ts(r[3]), "Ghi nhận đã hoàn bằng PayOS nhưng không có lệnh chi PayOS thành công"));
+        }
+        for (Object[] r : rows(q("SELECT p.code, 'INSTRUCTOR_PAYOUT', p.amount, p.paid_at FROM instructor_payouts p "
+                + "WHERE p.status = 'PAID' AND p.transfer_ref LIKE 'PAYOS-%' AND p.paid_at >= :from AND p.paid_at < :to "
+                + "AND NOT EXISTS (SELECT 1 FROM payos_payout_orders o WHERE o.kind = 'INSTRUCTOR_PAYOUT' AND o.entity_id = p.id AND o.status = 'SUCCEEDED') "
+                + "ORDER BY p.paid_at DESC LIMIT 50", from, to))) {
+            out.add(new FinanceReport.Mismatch(s(r[1]), s(r[0]), l(r[2]), ts(r[3]), "Ghi nhận đã chi bằng PayOS nhưng không có lệnh chi PayOS thành công"));
+        }
+        return out;
+    }
+
+    private static LocalDateTime ts(Object o) {
+        return o instanceof java.sql.Timestamp t ? t.toLocalDateTime() : o instanceof LocalDateTime d ? d : null;
     }
 
     /** Chuyển BigDecimal (cột DECIMAL) sang VND nguyên, làm tròn tới đồng. */

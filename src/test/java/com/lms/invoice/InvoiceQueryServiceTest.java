@@ -93,4 +93,42 @@ class InvoiceQueryServiceTest {
         assertThat(InvoiceQueryService.csv("a\"b")).isEqualTo("\"a\"\"b\"");
         assertThat(InvoiceQueryService.csv(null)).isEqualTo("\"\"");
     }
+
+    @Test
+    void search_withoutAnyCriteriaReturnsNothingAndNeverQueriesTheRepository() {
+        var page = service.search(null, null, null, "   ", 0, 20);
+
+        assertThat(page.items()).isEmpty();
+        assertThat(page.total()).isZero();
+        org.mockito.Mockito.verifyNoInteractions(invoiceRepository);
+    }
+
+    @Test
+    void exportCsv_requiresAtLeastOneCriterion() {
+        assertThatThrownBy(() -> service.exportCsv(null, null, null, null)).isInstanceOf(com.lms.common.exception.InvalidRequestException.class);
+    }
+
+    @Test
+    void breakdown_sumsEarningLinesPerCourseForStatementsOnly() {
+        com.lms.invoice.entity.InvoiceLine a = line("Earning - Java (order T1): learner paid 100000 VND, platform share 63%", "37000");
+        com.lms.invoice.entity.InvoiceLine b = line("Earning - Java (order T2): learner paid 100000 VND, platform share 63%", "37000");
+        com.lms.invoice.entity.InvoiceLine c = line("Earning - Unity (order T3): learner paid 50000 VND, platform share 63%", "18500");
+        com.lms.invoice.entity.InvoiceLine refund = line("Refund reversal - Java (order T1)", "-37000");
+        invoice.setType(InvoiceType.STATEMENT);
+
+        var slices = InvoiceQueryService.breakdown(invoice, List.of(a, b, c, refund));
+
+        assertThat(slices).extracting("label").containsExactly("Java", "Unity");
+        assertThat(slices.get(0).amount()).isEqualByComparingTo("74000");
+
+        invoice.setType(InvoiceType.RECEIPT);
+        assertThat(InvoiceQueryService.breakdown(invoice, List.of(a))).isEmpty();
+    }
+
+    private static com.lms.invoice.entity.InvoiceLine line(String description, String amount) {
+        com.lms.invoice.entity.InvoiceLine l = new com.lms.invoice.entity.InvoiceLine();
+        l.setDescription(description);
+        l.setAmount(new BigDecimal(amount));
+        return l;
+    }
 }

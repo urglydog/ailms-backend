@@ -586,45 +586,107 @@ public class PaymentService {
 
     @Transactional(readOnly = true)
     public java.util.List<PaymentDto.Res> getMyPayments(String email) {
-        return paymentRepository.findByUser_EmailOrderByCreatedAtDesc(email).stream()
-                .map(p -> new PaymentDto.Res(
-                        p.getTxnRef(),
-                        p.getAmount(),
-                        p.getPaymentMethod(),
-                        p.getStatus(),
-                        p.getPaidAt(),
-                        p.getCourse().getTitle(),
-                        p.getGatewayTxnNo(),
-                        p.getBillingName(),
-                        p.getBillingPhone(),
-                        p.getOriginalAmount(),
-                        p.getDiscountAmount(),
-                        p.getCoupon() != null ? p.getCoupon().getCode() : null,
-                        p.getOrderGroupRef()
-                )).toList();
+        return paymentRepository.findByUser_EmailOrderByCreatedAtDesc(email).stream().map(PaymentService::toRes).toList();
     }
 
+    /** Nhóm trạng thái trên giao diện học viên: SUCCESS = đã thanh toán, PENDING, FAILED = thất bại + hết hạn, REFUNDED = hoàn tiền; ALL/null = tất cả. */
+    static java.util.List<PaymentStatus> statusGroup(String group) {
+        if (group == null) {
+            return null;
+        }
+        return switch (group.toUpperCase(java.util.Locale.ROOT)) {
+            case "SUCCESS" -> java.util.List.of(PaymentStatus.PAID);
+            case "PENDING" -> java.util.List.of(PaymentStatus.PENDING);
+            case "FAILED" -> java.util.List.of(PaymentStatus.FAILED, PaymentStatus.EXPIRED);
+            case "REFUNDED" -> java.util.List.of(PaymentStatus.REFUNDED);
+            default -> null;
+        };
+    }
+
+    /** Lịch sử giao dịch của chính mình có lọc nhóm trạng thái, khoảng ngày, từ khóa và phân trang (tối đa 50/trang). */
     @Transactional(readOnly = true)
-    public java.util.List<PaymentDto.AdminRes> getAllPayments() {
-        return paymentRepository.findAllByOrderByCreatedAtDesc().stream()
-                .map(p -> new PaymentDto.AdminRes(
-                        p.getTxnRef(),
-                        p.getAmount(),
-                        p.getPlatformFee(),
-                        p.getInstructorEarning(),
-                        p.getPaymentMethod(),
-                        p.getStatus(),
-                        p.getPaidAt(),
-                        p.getCourse().getTitle(),
-                        p.getGatewayTxnNo(),
-                        p.getUser().getEmail(),
-                        p.getBillingName(),
-                        p.getBillingPhone(),
-                        p.getOriginalAmount(),
-                        p.getDiscountAmount(),
-                        p.getCoupon() != null ? p.getCoupon().getCode() : null,
-                        p.getRevenueSource(),
-                        p.getPlatformRate()
-                )).toList();
+    public PaymentDto.MinePage searchMine(String email, String group, java.time.LocalDate from, java.time.LocalDate to, String query, int page, int size) {
+        Long userId = userRepository.findByEmail(email).orElseThrow(() -> new ResourceNotFoundException("User", email)).getId();
+        java.util.List<PaymentStatus> statuses = statusGroup(group);
+        String q = query == null || query.isBlank() ? null : "%" + query.trim().toLowerCase(java.util.Locale.ROOT) + "%";
+        int safeSize = Math.max(1, Math.min(size, 50));
+        var result = paymentRepository.searchMine(userId, statuses == null, statuses == null ? java.util.List.of(PaymentStatus.PAID) : statuses,
+                from == null ? null : from.atStartOfDay(), to == null ? null : to.plusDays(1).atStartOfDay(), q,
+                org.springframework.data.domain.PageRequest.of(Math.max(0, page), safeSize));
+        java.util.Map<String, Long> counts = new java.util.LinkedHashMap<>();
+        for (String k : new String[] {"ALL", "SUCCESS", "PENDING", "FAILED", "REFUNDED"}) {
+            counts.put(k, 0L);
+        }
+        for (Object[] row : paymentRepository.countMineByStatus(userId)) {
+            PaymentStatus st = (PaymentStatus) row[0];
+            long n = ((Number) row[1]).longValue();
+            counts.merge("ALL", n, Long::sum);
+            String key = switch (st) {
+                case PAID -> "SUCCESS";
+                case PENDING -> "PENDING";
+                case FAILED, EXPIRED -> "FAILED";
+                case REFUNDED -> "REFUNDED";
+            };
+            counts.merge(key, n, Long::sum);
+        }
+        return new PaymentDto.MinePage(result.getContent().stream().map(PaymentService::toRes).toList(), result.getTotalElements(), result.getNumber(), safeSize, counts);
+    }
+
+    private static PaymentDto.Res toRes(Payment p) {
+        return new PaymentDto.Res(
+                p.getTxnRef(),
+                p.getAmount(),
+                p.getPaymentMethod(),
+                p.getStatus(),
+                p.getPaidAt(),
+                p.getCourse().getTitle(),
+                p.getGatewayTxnNo(),
+                p.getBillingName(),
+                p.getBillingPhone(),
+                p.getOriginalAmount(),
+                p.getDiscountAmount(),
+                p.getCoupon() != null ? p.getCoupon().getCode() : null,
+                p.getOrderGroupRef());
+    }
+
+    /**
+     * Tra cứu giao dịch cho admin theo từ khóa/trạng thái, LUÔN phân trang (tối đa 50/trang). Không có điều kiện tìm nào thì trả trang rỗng —
+     * màn admin chỉ hiện dữ liệu sau khi người dùng nhập điều kiện (nguyên tắc tìm-kiếm-trước, 20/11/2026).
+     */
+    @Transactional(readOnly = true)
+    public PaymentDto.AdminPage searchPayments(String query, PaymentStatus status, int page, int size) {
+        int safeSize = Math.max(1, Math.min(size, 50));
+        String q = query == null || query.isBlank() ? null : "%" + query.trim().toLowerCase(java.util.Locale.ROOT) + "%";
+        if (q == null && status == null) {
+            return new PaymentDto.AdminPage(java.util.List.of(), 0, 0, safeSize);
+        }
+        long qId = -1;
+        if (query != null && query.trim().matches("\\d{1,18}")) {
+            qId = Long.parseLong(query.trim());
+        }
+        var result = paymentRepository.searchForAdmin(q, qId, status, org.springframework.data.domain.PageRequest.of(Math.max(0, page), safeSize));
+        return new PaymentDto.AdminPage(result.getContent().stream().map(PaymentService::toAdminRes).toList(), result.getTotalElements(),
+                result.getNumber(), safeSize);
+    }
+
+    private static PaymentDto.AdminRes toAdminRes(Payment p) {
+        return new PaymentDto.AdminRes(
+                p.getTxnRef(),
+                p.getAmount(),
+                p.getPlatformFee(),
+                p.getInstructorEarning(),
+                p.getPaymentMethod(),
+                p.getStatus(),
+                p.getPaidAt(),
+                p.getCourse().getTitle(),
+                p.getGatewayTxnNo(),
+                p.getUser().getEmail(),
+                p.getBillingName(),
+                p.getBillingPhone(),
+                p.getOriginalAmount(),
+                p.getDiscountAmount(),
+                p.getCoupon() != null ? p.getCoupon().getCode() : null,
+                p.getRevenueSource(),
+                p.getPlatformRate());
     }
 }

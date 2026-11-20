@@ -166,6 +166,15 @@ public class InvoiceIssueService {
         return Optional.of(persist(InvoiceType.STATEMENT, instructor, key, null, null, net, BigDecimal.ZERO, net, LocalDateTime.now(), snap, drafts));
     }
 
+    private static final java.security.SecureRandom RANDOM = new java.security.SecureRandom();
+
+    /** Mã truy cập 256 bit ngẫu nhiên, base64url không đệm (43 ký tự) — không thể đoán. */
+    public static String newAccessToken() {
+        byte[] bytes = new byte[32];
+        RANDOM.nextBytes(bytes);
+        return java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
+
     static String receiptKey(Payment p) {
         return p.getOrderGroupRef() != null ? p.getOrderGroupRef() : p.getTxnRef();
     }
@@ -184,6 +193,7 @@ public class InvoiceIssueService {
         inv.setTotal(total);
         inv.setIssuedAt(issuedAt);
         inv.setTemplateVersion(TEMPLATE_VERSION);
+        inv.setAccessToken(newAccessToken());
         inv.setSnapshotJson(toJson(snapshot));
         Invoice saved = invoiceRepository.save(inv);
         int no = 1;

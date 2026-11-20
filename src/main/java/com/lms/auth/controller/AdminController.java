@@ -72,17 +72,56 @@ public class AdminController {
         return ResponseEntity.ok(authService.generateAdminResetLink(user.getEmail()));
     }
 
+    /**
+     * Tiêu thụ AI theo người dùng (20/11/2026): khoảng ngày (mặc định 30 ngày gần nhất), tìm theo email/tên/ID, lọc đang bị khóa AI, lọc theo tính năng; phân trang
+     * (tối đa 50/trang), sắp xếp theo chi phí giảm dần. Thay cho bản trả toàn bộ người dùng.
+     */
     @GetMapping("/ai-usage")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<List<Map<String, Object>>> getAiUsageSummary() {
-        return ResponseEntity.ok(aiUsageLogRepository.getUsageSummaryByUser());
+    public ResponseEntity<Map<String, Object>> getAiUsageSummary(
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate from,
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate to,
+            @RequestParam(required = false) String q,
+            @RequestParam(defaultValue = "false") boolean lockedOnly,
+            @RequestParam(required = false) String feature,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        java.time.LocalDate end = to == null ? java.time.LocalDate.now() : to;
+        java.time.LocalDate start = from == null ? end.minusDays(29) : from;
+        if (end.isBefore(start) || java.time.temporal.ChronoUnit.DAYS.between(start, end) > 366) {
+            throw new com.lms.common.exception.InvalidRequestException("Khoảng ngày không hợp lệ: ngày kết thúc phải sau ngày bắt đầu, tối đa 366 ngày");
+        }
+        String kw = q == null || q.isBlank() ? null : "%" + q.trim().toLowerCase(java.util.Locale.ROOT) + "%";
+        long qId = q != null && q.trim().matches("\\d{1,18}") ? Long.parseLong(q.trim()) : -1L;
+        String feat = feature == null || feature.isBlank() ? null : feature.trim();
+        int safeSize = Math.max(1, Math.min(size, 50));
+        var result = aiUsageLogRepository.searchUsage(start.atStartOfDay(), end.plusDays(1).atStartOfDay(), kw, qId, lockedOnly, feat,
+                org.springframework.data.domain.PageRequest.of(Math.max(0, page), safeSize));
+        return ResponseEntity.ok(Map.of("items", result.getContent(), "total", result.getTotalElements(), "page", result.getNumber(), "size", safeSize,
+                "from", start.toString(), "to", end.toString()));
+    }
+
+    /** Các tính năng AI có dữ liệu — cho bộ lọc "Tính năng". */
+    @GetMapping("/ai-usage/features")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<List<String>> getAiUsageFeatures() {
+        return ResponseEntity.ok(aiUsageLogRepository.distinctFeatures());
     }
 
     /** Task 11A — tổng token/chi phí AI theo ngày (30 ngày gần nhất), phục vụ biểu đồ Admin Dashboard. */
     @GetMapping("/ai-usage/daily")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<List<Map<String, Object>>> getAiUsageDaily() {
-        return ResponseEntity.ok(aiUsageLogRepository.getDailyUsage(java.time.LocalDateTime.now().minusDays(30)));
+    public ResponseEntity<List<Map<String, Object>>> getAiUsageDaily(
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate from,
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate to,
+            @RequestParam(required = false) String feature) {
+        java.time.LocalDate end = to == null ? java.time.LocalDate.now() : to;
+        java.time.LocalDate start = from == null ? end.minusDays(29) : from;
+        if (end.isBefore(start) || java.time.temporal.ChronoUnit.DAYS.between(start, end) > 366) {
+            throw new com.lms.common.exception.InvalidRequestException("Khoảng ngày không hợp lệ: ngày kết thúc phải sau ngày bắt đầu, tối đa 366 ngày");
+        }
+        return ResponseEntity.ok(aiUsageLogRepository.getDailyUsageBetween(start.atStartOfDay(), end.plusDays(1).atStartOfDay(),
+                feature == null || feature.isBlank() ? null : feature.trim()));
     }
 
     @PutMapping("/users/{userId}/toggle-ai-lock")

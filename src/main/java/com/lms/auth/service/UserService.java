@@ -78,7 +78,8 @@ public class UserService {
         var pageable = org.springframework.data.domain.PageRequest.of(Math.max(0, page - 1),
                 Math.min(Math.max(1, size), ADMIN_MAX_PAGE_SIZE),
                 org.springframework.data.domain.Sort.by(dir, field).and(org.springframework.data.domain.Sort.by("id")));
-        return userRepository.searchForAdmin(q, role, "LOCKED".equals(f), "SPAM".equals(f), pageable).map(this::mapToRes);
+        long qId = query != null && query.trim().matches("\\d{1,18}") ? Long.parseLong(query.trim()) : -1L;
+        return userRepository.searchForAdmin(q, qId, role, "LOCKED".equals(f), "SPAM".equals(f), pageable).map(this::mapToRes);
     }
 
     /** Số người dùng cho các tab lọc của trang Quản lý người dùng — 3 truy vấn đếm, không tải danh sách. */
@@ -96,13 +97,6 @@ public class UserService {
         counts.put("LOCKED", userRepository.countByIsActiveFalse());
         counts.put("SPAM", userRepository.countByIsSpamFlaggedTrue());
         return counts;
-    }
-
-    @Transactional(readOnly = true)
-    public List<UserRes> getAllUsers() {
-        return userRepository.findAll().stream()
-                .map(this::mapToRes)
-                .collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)

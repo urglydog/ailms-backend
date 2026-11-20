@@ -20,13 +20,21 @@
 | 7 | Nhập `REFUND_HOLIDAYS` (ngày lễ gia hạn hạn hoàn tiền) | Admin → Cài đặt. |
 | 8 | **Đĩa server 38 GB chỉ còn ~3,7 GB (90%)**: dọn bản VS Code Server cũ (~3,3 GB), `/var/lms/fe_node_modules_old` + `fe_next_old` (~1,4 GB, tên "old"), volume Docker không dùng (3,4 GB — kiểm tên trước khi xoá) | Đĩa đầy đã làm hỏng build/backend một lần. |
 | 9 | Hạ tầng: `maxmemory` Redis, bỏ `--reload` ở ai-api, giới hạn bộ nhớ container, giới hạn log `lms_backend`/`lms_caddy` | Từ đợt rà 11/11. |
+| 11 | **Hiệu chỉnh đơn giá AI sau vài ngày chạy** (Admin → Cài đặt → Chi phí AI): đối chiếu tổng tiền trên trang AI Analytics với hóa đơn Google AI Studio/Groq của cùng kỳ rồi chỉnh đơn giá cho sát. Mặc định (0.30 / 2.50 / 0.15 USD mỗi triệu token, 0.04 USD/giờ âm thanh Groq, 25.500đ/USD) CHƯA đối chiếu với bảng giá thật của `gemini-3.5-flash` | Số liệu hiển thị là ước tính theo token. |
+| 12 | **Xoay khóa Gemini** (log cũ của ai-worker từng in 8 ký tự đầu của khóa; nay chỉ còn 4 ký tự cuối) | Đã nằm ở mục 4, nhắc lại vì log cũ còn lưu. |
 | 10 | Email giả của tài khoản demo (`@lms.local`) không nhận được thư xác nhận (BE gửi qua Gmail SMTP) | Muốn test rút tiền/liên kết tài khoản: đổi sang email thật hoặc xác nhận bằng SQL. |
 
 ---
 
 ## 2. TASK MỚI / ĐANG LÀM
 
-### A. Hóa đơn / chứng từ & Thống kê – báo cáo tự động — ✅ H1–H4 ĐÃ CODE & DEPLOY 20/11, CHỜ NGHIỆM THU
+### A. Hóa đơn / chứng từ & Thống kê – báo cáo tự động — ✅ H1–H4 + 3 ĐỢT CHỈNH ĐÃ DEPLOY (BE V172), CHỜ NGHIỆM THU CUỐI
+**Đợt chỉnh sau nghiệm thu 3 (21/11/2026):** BE V172 + FE + ai-worker đã deploy. (1) Trang Người dùng chỉ còn 2 nút lọc **Bị khóa / Bị gắn cờ spam** (bỏ Tất cả/Học viên/Giảng viên/Quản trị; xem người khác bằng ô tìm kiếm). (2) **Thông báo hệ thống:** bản đã thu hồi có **Khôi phục** (hiện lại cho người dùng) và **Xóa hẳn** (chỉ khi đã thu hồi). (3) **Hàng đợi AI:** làm rõ mục đích (việc lồng tiếng đang chờ/đang chạy/lỗi cần xử lý), mỗi dòng có khóa học, bài học, người yêu cầu, ngày tạo/hoàn tất; ẩn job lỗi đã có lần chạy thành công sau; **chặn "Thử lại" khi bài đó đã có bản thành công** (tránh tốn chi phí AI); bỏ dữ liệu thừa. (4) **AI Analytics làm lại theo chi phí thật:** mọi lệnh gọi Gemini/Groq (lồng tiếng dịch + nhận dạng, bóc băng, AI Tutor, tìm khóa học, trợ lý giảng viên, giám sát thi, nhúng dữ liệu) báo số token thật (cả token suy nghĩ) / giây âm thanh về BE (`POST /api/internal/ai-usage`, header `X-Internal-Token`), BE quy đổi bằng đơn giá cấu hình (nhóm **Chi phí AI** trong Cài đặt: 4 đơn giá + tỷ giá USD/VND) → thẻ chi phí quy ra đồng + so kỳ trước, biểu đồ cột xếp chồng theo ngày × tính năng, biểu đồ tròn theo tính năng, bảng người dùng có tìm kiếm/phân trang/khóa AI. **Dữ liệu cũ không khôi phục được:** trước 21/11/2026 chỉ ghi Flashcard/Mindmap/Quiz nên các kỳ cũ thấp hơn hóa đơn thật (trang có ghi chú khi khoảng chọn bắt đầu trước ngày này). Đây là **số ước tính theo token**, không khớp tuyệt đối hóa đơn nhà cung cấp. Đã kiểm: 1189 test BE đạt, V172 + `ddl-auto=validate` + các truy vấn mới chạy trên MySQL 8 tạm, 82 test worker đạt, một lệnh Gemini thật đã ghi đúng 1 dòng `ai_usage_logs` (token suy nghĩ + chi phí khớp công thức). DB đã sao lưu trước V172: `/home/dev-thien/backups/lms_db_pre_V172_20261120_1851.sql.gz`.
+**Đợt chỉnh sau nghiệm thu 2 (20/11/2026):** chi tiết ở `docs/UI_ROUND2_PLAN_20261120.md` — V171 (mã truy cập chứng từ, thu hồi thông báo, lưu trữ gói khóa). PDF chứng từ thiết kế lại (bảng căn chỉnh, mã kiểm SHA-256, QR mở thẳng bản gốc qua đường công khai `/api/v1/public/invoices/{mã}` có giới hạn tần suất và công tắc tắt khẩn cấp); thông báo hệ thống có Sửa/Thu hồi; gói khóa học Xóa/Lưu trữ; học viên có lọc/tìm/phân trang giao dịch; giảng viên có lọc/phân trang sao kê, lịch sử rút, giao tiếp; admin: AI Analytics có bộ lọc, AI Queue gọn lại, cấu hình hệ thống chỉ còn thông số sửa được với điều khiển đúng kiểu và ma trận kiểm thử toàn bộ khóa.
+
+**Đợt chỉnh sau nghiệm thu 1 (20/11/2026):** chi tiết ở `docs/UI_REDESIGN_PROPOSAL_20261120.md` — tra cứu-trước cho dữ liệu lớn, chứng từ gắn vào giao dịch/rút tiền/bảng kê, thống kê dạng biểu đồ, nút Chia sẻ thống nhất, cấu hình hệ thống theo nhóm, bỏ chữ "demo", phí PayOS là hằng số, bảng kê tháng bù các tháng đã qua.
+
+
 Mọi khoản tiền (thanh toán, hoàn, chi trả, nợ) cần chứng từ bất biến có PDF + minh bạch chi phí; admin cần thống kê toàn nền tảng và xuất báo cáo tự động. Phạm vi, thiết kế dữ liệu, 4 giai đoạn (H1 gộp chứng từ → H2 quản trị → H3 thống kê → H4 báo cáo tự động) và quyết định đã chốt: **`docs/INVOICE_AND_REPORTING_PLAN.md`**. Bắt đầu sau khi hai lệnh PayOS LLR5-1/LLP1-1 xong và bạn duyệt hướng triển khai (mục 1 #5).
 
 **Tiến độ H1 (20/11/2026):** BE lõi xong, `mvn clean verify` 766 test đạt, đã thử migration + truy vấn + backfill trên bản sao dữ liệu thật (9 chứng từ: 7 biên lai, 1 phiếu hoàn, 1 phiếu chi; bỏ `@example.com`/`DEMO-`; chạy lại không tạo trùng). Gồm V169 (`invoices`, `invoice_lines`, `invoice_sequences` + 3 khóa cấu hình `INVOICE_*`), gói `com.lms.invoice` (phát hành bằng job nền 2 phút, KHÔNG gắn vào luồng thanh toán/hoàn/rút/trả nợ), PDF OpenPDF, API `/api/v1/invoices`, `/api/v1/admin/invoices` (+ CSV). **Email (PR 2) đã code 20/11:** mỗi chứng từ MỚI (≤ 48 giờ) gửi kèm PDF; chứng từ phát bù cho giao dịch cũ không gửi mail. **Giao diện (PR 3) đã code, commit ở `fe` nhưng CHƯA push (chờ BE chạy V169):** `/invoices` (học viên), mục Chứng từ ở Thu nhập (giảng viên), `/admin/transactions/invoices` + menu (admin). **Còn lại:** test thật sau deploy (mua khóa → biên lai + email); phiếu xóa nợ, bảng kê tháng (STM/PLT) → H2/H3. **Trước khi deploy:** sao lưu DB (migration V169 chỉ thêm bảng/khóa cấu hình, không đụng dữ liệu cũ).
@@ -82,6 +90,14 @@ Mọi khoản tiền (thanh toán, hoàn, chi trả, nợ) cần chứng từ b�
 - `ai-worker/app/config.py:58` giá trị tạm 0.7; `MaterialGenerationService` có 2 `catch JsonProcessingException` im lặng; ai-worker `discovery.py` tự mở `httpx.AsyncClient` (nên dùng client chung).
 - Điểm các lượt thi thử 96–100 đều 0.00: chưa điều tra xem lỗi chấm điểm hay chỉ do chọn sai.
 - Exam: HTTP 500 khi nộp bài không tự kết thúc phiên (chỉ 404/410) — cố ý để tránh mất bài do lỗi tạm.
+
+- **Vấn đề mới phát hiện khi làm đợt chỉnh 3 (21/11/2026), chưa sửa:**
+  - Giới hạn tần suất của đường công khai/đăng nhập đọc IP từ phần tử ĐẦU của `X-Forwarded-For` — client tự gửi header này có thể giả IP để né giới hạn; cần chỉ tin IP do Caddy gắn (phần tử cuối hoặc `X-Real-IP` từ proxy tin cậy).
+  - Hỏi đáp (Q&A) của giảng viên: phân trang phía máy chủ nhưng ô tìm kiếm chỉ lọc trong trang đang xem — cần đưa tìm kiếm vào truy vấn BE.
+  - Thống kê học viên ở khu giảng viên đang tính phía trình duyệt từ danh sách đã tải — nên chuyển sang truy vấn tổng hợp BE.
+  - Danh sách thông báo của người dùng chưa giới hạn số lượng khi tải.
+  - Chi phí AI chưa chính xác tuyệt đối: nhúng dữ liệu ước lượng token bằng độ dài/4 (đánh dấu `estimated`); Edge-TTS miễn phí nên không tính; Groq tính theo giờ âm thanh (làm tròn tối thiểu theo chính sách nhà cung cấp không áp dụng); lệnh gọi Gemini thất bại giữa chừng không có `usageMetadata` nên không ghi.
+  - Các đơn giá AI sửa được trong Cài đặt (khác nguyên tắc "giá trị do bên thứ ba quy định không cho sửa") — giữ vì đây là hiệu chỉnh ước tính; nếu muốn cố định thì chuyển thành hằng số trong mã.
 
 ### Web — việc nhỏ cần quyết định / không gấp
 - Khuyến mãi công khai: coupon có mã chưa có cờ `is_public` → danh sách ở trang thanh toán chỉ hiện coupon tự động. Hướng đề xuất: thêm cột `is_public` + Flyway.

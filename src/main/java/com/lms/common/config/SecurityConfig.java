@@ -112,6 +112,9 @@ public class SecurityConfig {
             // để tránh 2 route đó "cắn" nhau). Tab "Khóa học của tôi" (endpoint /enrolled) CỐ TÌNH
             // không liệt kê ở đây — bắt buộc JWT, rơi vào anyRequest().authenticated() mặc định.
             "/api/v1/live-sessions/public",
+            // Mở thẳng PDF chứng từ từ mã QR/liên kết in trên file (20/11/2026): chỉ GET, mã truy cập 256 bit không đoán được, có giới hạn tần suất theo IP và công tắc tắt
+            // khẩn cấp — xem PublicInvoiceService. CHỈ khớp đúng 1 đoạn sau /public/invoices.
+            "/api/v1/public/invoices/*",
             // /api/v1/discovery/** đã chuyển sang PUBLIC_ENDPOINTS vì discovery/chat là POST, không phải GET
             // BR-CERT-06 — trang xác thực chứng chỉ công khai, nhà tuyển dụng không có tài khoản
             // cũng xem được. KHÔNG khớp "/api/v1/certificates/{code}"/"/{code}/pdf" (đoạn "verify"

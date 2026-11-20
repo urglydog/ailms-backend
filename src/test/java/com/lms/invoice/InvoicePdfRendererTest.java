@@ -65,4 +65,17 @@ class InvoicePdfRendererTest {
         assertThat(InvoicePdfRenderer.money(new BigDecimal("1234567.00"))).isEqualTo("1.234.567 VND");
         assertThat(InvoicePdfRenderer.money(BigDecimal.ZERO)).isEqualTo("0 VND");
     }
+
+    @Test
+    void render_withQrCodeAndChecksumProducesALargerPdfThanWithout() throws Exception {
+        String snap = "{\"issuerName\":\"LinguaLearn\",\"issuerNote\":\"Graduation project\",\"partyName\":\"Nguyễn Văn A\",\"partyEmail\":\"a@b.com\","
+                + "\"billingName\":\"Công ty TNHH Đào tạo\",\"billingPhone\":\"****4567\",\"paymentMethod\":\"PAYOS\",\"gatewayTxnNo\":\"GW1\",\"orders\":[\"T1\"]}";
+        var json = new ObjectMapper().readTree(snap);
+        byte[] plain = InvoicePdfRenderer.render(invoice(InvoiceType.RECEIPT, "0"), List.of(line("Khóa học Tiếng Nhật N3")), json, null, "9F3A-12BC-77D0-E4A1");
+        byte[] withQr = InvoicePdfRenderer.render(invoice(InvoiceType.RECEIPT, "0"), List.of(line("Khóa học Tiếng Nhật N3")), json,
+                "https://example.test/api/v1/public/invoices/" + "A".repeat(43), "9F3A-12BC-77D0-E4A1");
+
+        assertThat(new String(withQr, 0, 5, StandardCharsets.ISO_8859_1)).isEqualTo("%PDF-");
+        assertThat(withQr.length).isGreaterThan(plain.length);
+    }
 }

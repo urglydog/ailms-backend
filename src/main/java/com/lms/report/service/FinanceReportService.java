@@ -57,8 +57,12 @@ public class FinanceReportService {
         LocalDateTime a = from.atStartOfDay();
         LocalDateTime b = to.plusDays(1).atStartOfDay();
         Granularity g = granularity == null ? Granularity.DAY : granularity;
-        return new FinanceReport(from, to, g, queries.summary(a, b), queries.buckets(a, b, g), queries.courses(a, b, TOP_ROWS),
-                queries.instructors(a, b, TOP_ROWS), queries.reconciliation(a, b));
+        // Kỳ liền trước có cùng độ dài, để so sánh tăng/giảm.
+        long days = ChronoUnit.DAYS.between(from, to) + 1;
+        LocalDateTime pa = from.minusDays(days).atStartOfDay();
+        return new FinanceReport(from, to, g, queries.summary(a, b), queries.summary(pa, a), queries.buckets(a, b, g), queries.courses(a, b, TOP_ROWS),
+                queries.instructors(a, b, TOP_ROWS), queries.reconciliation(a, b), queries.refundReasons(a, b), queries.sources(a, b),
+                queries.payoutPipeline(), queries.mismatches(a, b));
     }
 
     public record Generated(ReportSnapshot snapshot, FinanceReport report, int emailsSent) {}
@@ -91,7 +95,7 @@ public class FinanceReportService {
             files.put(base + ".pdf", ReportExporter.pdf(report));
             String subject = "Báo cáo tài chính " + label(type) + " " + from + (from.equals(to) ? "" : " - " + to) + " - LinguaLearn";
             String intro = "Báo cáo tài chính " + label(type) + " của LinguaLearn cho kỳ " + from + (from.equals(to) ? "" : " đến " + to)
-                    + " đã sẵn sàng. Số liệu loại trừ tài khoản demo.";
+                    + " đã sẵn sàng.";
             for (String r : recipients) {
                 if (emailService.sendReportEmail(r, subject, "Báo cáo tài chính " + label(type), intro, ReportExporter.summaryRows(report), files)) {
                     sent++;
@@ -111,14 +115,14 @@ public class FinanceReportService {
         if (raw != null && !raw.isBlank()) {
             for (String part : raw.split(",")) {
                 String e = part.trim();
-                if (e.contains("@") && !list.contains(e)) {
+                if (deliverable(e) && !list.contains(e)) {
                     list.add(e);
                 }
             }
             return list;
         }
         for (User admin : userRepository.findByRole(Role.ADMIN)) {
-            if (!Boolean.FALSE.equals(admin.getIsActive()) && admin.getEmail() != null && !list.contains(admin.getEmail())) {
+            if (!Boolean.FALSE.equals(admin.getIsActive()) && admin.getEmail() != null && deliverable(admin.getEmail()) && !list.contains(admin.getEmail())) {
                 list.add(admin.getEmail());
             }
         }
@@ -149,6 +153,12 @@ public class FinanceReportService {
             made += count(generate("MONTHLY", first, first.with(TemporalAdjusters.lastDayOfMonth()), "SCHEDULED", null, "MONTHLY:" + first, to));
         }
         return made;
+    }
+
+    /** Địa chỉ gửi được thật: có {@code @} và không thuộc miền nội bộ {@code .local} (không có người nhận, thư sẽ bị trả lại). */
+    static boolean deliverable(String email) {
+        String e = email.trim().toLowerCase(java.util.Locale.ROOT);
+        return e.contains("@") && !e.endsWith(".local");
     }
 
     public List<ReportSnapshot> recent(int limit) {

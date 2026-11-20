@@ -188,11 +188,10 @@ public class SupportTicketService {
     }
 
     @Transactional(readOnly = true)
-    public List<SupportDto.AdminRes> listForAdmin(SupportTicketStatus status) {
-        List<SupportTicket> tickets = status == null
-                ? ticketRepository.findAllByOrderByCreatedAtDesc()
-                : ticketRepository.findByStatusOrderByCreatedAtDesc(status);
-        return tickets.stream().map(this::toAdminRes).toList();
+    public List<SupportDto.AdminRes> listForAdmin(SupportTicketStatus status, String query, int page, int size) {
+        String q = query == null || query.isBlank() ? null : "%" + query.trim().toLowerCase(java.util.Locale.ROOT) + "%";
+        var pageable = org.springframework.data.domain.PageRequest.of(Math.max(0, page), Math.max(1, Math.min(size, 100)));
+        return ticketRepository.searchForAdmin(status, q, pageable).stream().map(this::toAdminRes).toList();
     }
 
     @Transactional(readOnly = true)

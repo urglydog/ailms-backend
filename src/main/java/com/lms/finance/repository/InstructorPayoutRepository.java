@@ -23,6 +23,15 @@ public interface InstructorPayoutRepository extends JpaRepository<InstructorPayo
     @EntityGraph(attributePaths = {"instructor"})
     List<InstructorPayout> findAllByOrderByCreatedAtDesc();
 
+    /** Danh sách yêu cầu rút cho admin (20/11/2026): lọc trạng thái + tìm theo mã yêu cầu/email/tên giảng viên, luôn phân trang. */
+    @org.springframework.data.jpa.repository.Query("SELECT o FROM InstructorPayout o JOIN o.instructor u WHERE (:status IS NULL OR o.status = :status) "
+            + "AND (:q IS NULL OR LOWER(o.code) LIKE :q OR LOWER(u.email) LIKE :q OR LOWER(u.fullName) LIKE :q OR o.id = :qId) "
+            + "ORDER BY o.createdAt DESC")
+    List<InstructorPayout> searchForAdmin(@org.springframework.data.repository.query.Param("status") PayoutStatus status,
+                                          @org.springframework.data.repository.query.Param("q") String q,
+                                          @org.springframework.data.repository.query.Param("qId") long qId,
+                                          org.springframework.data.domain.Pageable pageable);
+
     @EntityGraph(attributePaths = {"instructor"})
     List<InstructorPayout> findByStatusOrderByCreatedAtDesc(PayoutStatus status);
 

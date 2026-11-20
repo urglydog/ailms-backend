@@ -114,9 +114,31 @@ public class PaymentController {
         return ResponseEntity.ok(paymentService.getMyPayments(principal.getName()));
     }
 
-    @GetMapping("/admin/all")
+    /**
+     * Lịch sử giao dịch của chính mình (20/11/2026): lọc nhóm trạng thái (SUCCESS/PENDING/FAILED/REFUNDED), khoảng ngày, từ khóa; phân trang; kèm số lượng từng nhóm.
+     * {@code /mine} (không phân trang) vẫn giữ cho các nơi cần toàn bộ danh sách nhỏ của chính người dùng.
+     */
+    @GetMapping("/mine/search")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
+    public ResponseEntity<PaymentDto.MinePage> searchMyPayments(
+            Principal principal,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate from,
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate to,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return ResponseEntity.ok(paymentService.searchMine(principal.getName(), status, from, to, q, page, size));
+    }
+
+    /** Tra cứu giao dịch (admin): theo từ khóa và/hoặc trạng thái, phân trang. Thay cho {@code /admin/all} (đã bỏ vì tải toàn bộ giao dịch). */
+    @GetMapping("/admin/search")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<java.util.List<PaymentDto.AdminRes>> getAllPayments() {
-        return ResponseEntity.ok(paymentService.getAllPayments());
+    public ResponseEntity<PaymentDto.AdminPage> searchPayments(
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) com.lms.common.enums.PaymentStatus status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(paymentService.searchPayments(q, status, page, size));
     }
 }

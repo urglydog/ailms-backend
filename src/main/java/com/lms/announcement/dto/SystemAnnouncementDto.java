@@ -22,6 +22,13 @@ public class SystemAnnouncementDto {
             LocalDateTime expiresAt
     ) {}
 
+    /** Sửa nội dung thông báo (cả bản đã gửi tới người dùng). Phạm vi người nhận và mức độ không đổi được sau khi tạo. */
+    public record UpdateReq(
+            @NotBlank(message = "Tiêu đề không được để trống") @jakarta.validation.constraints.Size(max = 255, message = "Tiêu đề tối đa 255 ký tự") String title,
+            @NotBlank(message = "Nội dung không được để trống") @jakarta.validation.constraints.Size(max = 5000, message = "Nội dung tối đa 5000 ký tự") String content,
+            LocalDateTime expiresAt
+    ) {}
+
     /** Lịch sử thông báo đã gửi, cho Admin xem lại tiến độ phát tán. */
     public record Res(
             Long id,
@@ -35,7 +42,8 @@ public class SystemAnnouncementDto {
             Integer totalRecipients,
             Integer sentCount,
             String createdByAdminName,
-            LocalDateTime createdAt
+            LocalDateTime createdAt,
+            LocalDateTime revokedAt
     ) {}
 
     /** Banner cố định đầu trang — public, không cần đăng nhập, KHÔNG có field nào khác ngoài nội

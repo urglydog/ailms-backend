@@ -45,6 +45,16 @@ public interface InstructorLedgerEntryRepository extends JpaRepository<Instructo
     java.math.BigDecimal sumFrozen(@org.springframework.data.repository.query.Param("instructorId") Long instructorId,
                                    @org.springframework.data.repository.query.Param("now") java.time.LocalDateTime now);
 
+    /** Sao kê có lọc nhóm loại khoản + khoảng ngày (20/11/2026), mới nhất trước, luôn phân trang. */
+    @org.springframework.data.jpa.repository.Query("SELECT e FROM InstructorLedgerEntry e WHERE e.instructor.id = :id AND (:allTypes = true OR e.entryType IN :types) "
+            + "AND (:from IS NULL OR e.createdAt >= :from) AND (:to IS NULL OR e.createdAt < :to) ORDER BY e.createdAt DESC, e.id DESC")
+    org.springframework.data.domain.Page<InstructorLedgerEntry> search(@org.springframework.data.repository.query.Param("id") Long instructorId,
+            @org.springframework.data.repository.query.Param("allTypes") boolean allTypes,
+            @org.springframework.data.repository.query.Param("types") java.util.Collection<com.lms.common.enums.LedgerEntryType> types,
+            @org.springframework.data.repository.query.Param("from") java.time.LocalDateTime from,
+            @org.springframework.data.repository.query.Param("to") java.time.LocalDateTime to,
+            org.springframework.data.domain.Pageable pageable);
+
     org.springframework.data.domain.Page<InstructorLedgerEntry> findByInstructor_IdOrderByCreatedAtDescIdDesc(
             Long instructorId, org.springframework.data.domain.Pageable pageable);
 }

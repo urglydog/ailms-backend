@@ -29,6 +29,26 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
                                       @org.springframework.data.repository.query.Param("minRefunded") int minRefunded);
     Optional<Payment> findByTxnRef(String txnRef);
 
+    /**
+     * Lịch sử giao dịch của chính người dùng (20/11/2026): lọc nhóm trạng thái, khoảng ngày tạo, tìm theo mã đơn/mã cổng/tên khóa; luôn phân trang.
+     * {@code allStatuses = true} thì bỏ qua {@code statuses}.
+     */
+    @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"course", "coupon"})
+    @Query("SELECT p FROM Payment p JOIN p.course c WHERE p.user.id = :userId AND (:allStatuses = true OR p.status IN :statuses) "
+            + "AND (:from IS NULL OR p.createdAt >= :from) AND (:to IS NULL OR p.createdAt < :to) "
+            + "AND (:q IS NULL OR LOWER(p.txnRef) LIKE :q OR LOWER(p.gatewayTxnNo) LIKE :q OR LOWER(c.title) LIKE :q) ORDER BY p.createdAt DESC")
+    org.springframework.data.domain.Page<Payment> searchMine(@Param("userId") Long userId, @Param("allStatuses") boolean allStatuses,
+                                                              @Param("statuses") java.util.Collection<PaymentStatus> statuses,
+                                                              @Param("from") LocalDateTime from, @Param("to") LocalDateTime to,
+                                                              @Param("q") String q, org.springframework.data.domain.Pageable pageable);
+
+    /** Số giao dịch của một người theo từng trạng thái (cho các tab lọc) — mỗi dòng là [PaymentStatus, Long]. */
+    @Query("SELECT p.status, COUNT(p) FROM Payment p WHERE p.user.id = :userId GROUP BY p.status")
+    List<Object[]> countMineByStatus(@Param("userId") Long userId);
+
+    /** Gói khóa học này đã từng có đơn mua chưa (quyết định xóa hẳn hay chỉ lưu trữ). */
+    boolean existsByBundle_Id(Long bundleId);
+
     /** Khóa dòng khi hoàn tiền (11/11/2026) — chặn 2 admin cùng duyệt hoàn 1 giao dịch. */
     @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
     @org.springframework.data.jpa.repository.Query("SELECT p FROM Payment p WHERE p.id = :id")
@@ -44,6 +64,19 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
 
     @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"user", "course"})
     List<Payment> findAllByOrderByCreatedAtDesc();
+
+    /**
+     * Tra cứu giao dịch cho admin (20/11/2026): theo mã đơn/mã nhóm đơn/mã cổng, email/tên/ID người mua, tên/SĐT thanh toán, tên khóa học. Luôn phân trang;
+     * {@code q} là mẫu LIKE chữ thường (hoặc null), {@code qId} là số nếu q là số (không thì -1).
+     */
+    @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"user", "course", "coupon"})
+    @Query("SELECT p FROM Payment p JOIN p.user u JOIN p.course c WHERE (:status IS NULL OR p.status = :status) AND (:q IS NULL "
+            + "OR LOWER(p.txnRef) LIKE :q OR LOWER(p.gatewayTxnNo) LIKE :q OR LOWER(p.orderGroupRef) LIKE :q OR LOWER(u.email) LIKE :q "
+            + "OR LOWER(u.fullName) LIKE :q OR LOWER(p.billingName) LIKE :q OR p.billingPhone LIKE :q OR LOWER(c.title) LIKE :q "
+            + "OR u.id = :qId OR p.id = :qId) ORDER BY p.createdAt DESC")
+    org.springframework.data.domain.Page<Payment> searchForAdmin(@Param("q") String q, @Param("qId") long qId,
+                                                                  @Param("status") PaymentStatus status,
+                                                                  org.springframework.data.domain.Pageable pageable);
 
     /** Hạn mức coupon (15/09/2026, mở rộng) — chỉ đếm giao dịch đã THÀNH CÔNG, tránh giỏ hàng
      * bỏ dở/thất bại chiếm suất dùng của người khác. */

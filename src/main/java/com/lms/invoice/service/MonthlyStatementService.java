@@ -57,7 +57,13 @@ public class MonthlyStatementService {
         try {
             LocalDateTime now = LocalDateTime.now();
             if (now.getHour() >= 6) {
-                int n = issueForMonth(YearMonth.from(now.toLocalDate()).minusMonths(1));
+                YearMonth last = YearMonth.from(now.toLocalDate()).minusMonths(1);
+                // Bù các tháng đã qua kể từ tháng đầu tiên có phát sinh (tối đa 24 tháng gần nhất); chỉ tháng vừa xong mới gửi email cho giảng viên.
+                YearMonth first = firstActivityMonth(last);
+                int n = 0;
+                for (YearMonth m = first; !m.isAfter(last); m = m.plusMonths(1)) {
+                    n += issueForMonth(m, m.equals(last));
+                }
                 if (n > 0) {
                     log.info("Đã phát hành {} bảng kê thu nhập tháng", n);
                 }
@@ -67,12 +73,28 @@ public class MonthlyStatementService {
         }
     }
 
+    /** Tháng đầu tiên có phát sinh sổ cái (không sớm hơn 24 tháng trước {@code last}); chưa có phát sinh nào thì trả {@code last}. */
+    private YearMonth firstActivityMonth(YearMonth last) {
+        Object min = em.createNativeQuery("SELECT MIN(created_at) FROM instructor_ledger_entries").getSingleResult();
+        YearMonth earliest = last.minusMonths(23);
+        if (min instanceof Timestamp t) {
+            YearMonth first = YearMonth.from(t.toLocalDateTime());
+            return first.isBefore(earliest) ? earliest : first;
+        }
+        return last;
+    }
+
     public int issueForMonth(YearMonth ym) {
+        return issueForMonth(ym, true);
+    }
+
+    /** {@code allowEmail}: có gửi email cho giảng viên (khi bật cấu hình) — tắt với các tháng bù để không gửi hàng loạt thư cũ. */
+    public int issueForMonth(YearMonth ym, boolean allowEmail) {
         Timestamp from = Timestamp.valueOf(ym.atDay(1).atStartOfDay());
         Timestamp to = Timestamp.valueOf(ym.plusMonths(1).atDay(1).atStartOfDay());
         String suffix = config.getString("INVOICE_EXCLUDED_EMAIL_SUFFIX", "@example.com");
         String excluded = suffix == null || suffix.isBlank() ? MATCH_NOTHING : "%" + suffix.trim().toLowerCase(Locale.ROOT);
-        boolean email = config.getInt("STATEMENT_EMAIL_INSTRUCTORS", 0) == 1;
+        boolean email = allowEmail && config.getInt("STATEMENT_EMAIL_INSTRUCTORS", 0) == 1;
         Query ids = em.createNativeQuery("SELECT DISTINCT x.instructor_id FROM ("
                 + "SELECT e.instructor_id FROM instructor_ledger_entries e WHERE e.created_at >= :from AND e.created_at < :to "
                 + "AND e.entry_type IN ('EARNING','REFUND_REVERSAL','ADJUSTMENT','DEBT_REPAYMENT') "

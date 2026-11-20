@@ -49,8 +49,20 @@ public class DisputeController {
 
     @GetMapping("/admin")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<List<DisputeDto.AdminRes>> getAllForAdmin(@RequestParam(required = false) DisputeStatus status) {
-        return ResponseEntity.ok(disputeService.getAllForAdmin(status));
+    public ResponseEntity<List<DisputeDto.AdminRes>> getAllForAdmin(
+            @RequestParam(required = false) DisputeStatus status,
+            @RequestParam(required = false) String q,
+            @RequestParam(defaultValue = "false") boolean needsAction,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "30") int size) {
+        return ResponseEntity.ok(disputeService.getAllForAdmin(status, q, needsAction, page, size));
+    }
+
+    /** Số khiếu nại cần admin xử lý — cho huy hiệu menu (thay cho việc tải toàn bộ danh sách rồi đếm ở trình duyệt). */
+    @GetMapping("/admin/open-count")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<java.util.Map<String, Long>> openCount() {
+        return ResponseEntity.ok(java.util.Map.of("open", disputeService.countNeedingAdminAction()));
     }
 
     @PostMapping("/admin/{id}/resolve")

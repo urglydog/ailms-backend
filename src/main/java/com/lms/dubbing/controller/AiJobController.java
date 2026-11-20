@@ -28,8 +28,11 @@ public class AiJobController {
     public ResponseEntity<Page<Res>> getList(
             @RequestParam(required = false) JobStatus status,
             @RequestParam(required = false) String search,
-            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
-        return ResponseEntity.ok(aiJobAdminService.getList(status, search, pageable));
+            @RequestParam(required = false) String view,
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate from,
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate to,
+            @PageableDefault(size = 10, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+        return ResponseEntity.ok(aiJobAdminService.getList(status, search, view, from, to, pageable));
     }
 
     @PostMapping("/{id}/retry")

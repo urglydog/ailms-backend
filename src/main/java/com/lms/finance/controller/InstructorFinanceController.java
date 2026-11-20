@@ -47,17 +47,21 @@ public class InstructorFinanceController {
 
     /** Sao kê sổ cái (mới nhất trước), tối đa 100 dòng/trang. */
     @GetMapping("/finance/ledger")
-    public ResponseEntity<List<PayoutDto.LedgerEntryRes>> ledger(
+    public ResponseEntity<PayoutDto.LedgerPage> ledger(
             Principal principal,
+            @RequestParam(required = false) String group,
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate from,
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate to,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "30") int size) {
+            @RequestParam(defaultValue = "10") int size) {
         Long userId = userRepository.findByEmail(principal.getName()).orElseThrow().getId();
         LocalDateTime now = LocalDateTime.now();
-        List<PayoutDto.LedgerEntryRes> rows = ledgerService.getStatement(userId, page, size).getContent().stream()
+        var result = ledgerService.searchStatement(userId, group, from, to, page, size);
+        List<PayoutDto.LedgerEntryRes> rows = result.getContent().stream()
                 .map((InstructorLedgerEntry e) -> new PayoutDto.LedgerEntryRes(e.getId(), e.getEntryType(), e.getAmount(),
                         e.getAvailableAt(), !e.getAvailableAt().isAfter(now), e.getNote(), e.getCreatedAt()))
                 .toList();
-        return ResponseEntity.ok(rows);
+        return ResponseEntity.ok(new PayoutDto.LedgerPage(rows, result.getTotalElements(), result.getNumber(), result.getSize()));
     }
 
     @GetMapping("/payout-banks")

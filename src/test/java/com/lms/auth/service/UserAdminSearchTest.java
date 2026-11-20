@@ -26,6 +26,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
@@ -62,13 +63,13 @@ class UserAdminSearchTest {
 
     @Test
     void searchUsers_mapsQueryFilterSortAndPage() {
-        when(userRepository.searchForAdmin(any(), any(), anyBoolean(), anyBoolean(), any(Pageable.class)))
+        when(userRepository.searchForAdmin(any(), anyLong(), any(), anyBoolean(), anyBoolean(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(user(1L, "An"))));
 
         var page = userService.searchUsers("  An  ", "INSTRUCTOR", "fullName", "asc", 2, 20);
 
         ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
-        verify(userRepository).searchForAdmin(eq("%an%"), eq(Role.INSTRUCTOR), eq(false), eq(false), pageable.capture());
+        verify(userRepository).searchForAdmin(eq("%an%"), eq(-1L), eq(Role.INSTRUCTOR), eq(false), eq(false), pageable.capture());
         assertThat(pageable.getValue().getPageNumber()).isEqualTo(1); // giao diện đếm từ 1
         assertThat(pageable.getValue().getPageSize()).isEqualTo(20);
         assertThat(pageable.getValue().getSort().getOrderFor("fullName").getDirection()).isEqualTo(Sort.Direction.ASC);
@@ -78,15 +79,15 @@ class UserAdminSearchTest {
 
     @Test
     void searchUsers_lockedAndSpamFilters_andUnknownSortFallsBackToNewest() {
-        when(userRepository.searchForAdmin(any(), any(), anyBoolean(), anyBoolean(), any(Pageable.class)))
+        when(userRepository.searchForAdmin(any(), anyLong(), any(), anyBoolean(), anyBoolean(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of()));
 
         userService.searchUsers(null, "LOCKED", "password", "desc", 1, 20);
         userService.searchUsers("", "SPAM", null, null, 1, 20);
 
         ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
-        verify(userRepository).searchForAdmin(isNull(), isNull(), eq(true), eq(false), pageable.capture());
-        verify(userRepository).searchForAdmin(isNull(), isNull(), eq(false), eq(true), any(Pageable.class));
+        verify(userRepository).searchForAdmin(isNull(), eq(-1L), isNull(), eq(true), eq(false), pageable.capture());
+        verify(userRepository).searchForAdmin(isNull(), eq(-1L), isNull(), eq(false), eq(true), any(Pageable.class));
         // Cột sắp xếp lạ (vd "password") bị bỏ qua — chỉ nhận danh sách cho phép.
         assertThat(pageable.getValue().getSort().getOrderFor("password")).isNull();
         assertThat(pageable.getValue().getSort().getOrderFor("createdAt").getDirection()).isEqualTo(Sort.Direction.DESC);
@@ -94,13 +95,13 @@ class UserAdminSearchTest {
 
     @Test
     void searchUsers_capsPageSize() {
-        when(userRepository.searchForAdmin(any(), any(), anyBoolean(), anyBoolean(), any(Pageable.class)))
+        when(userRepository.searchForAdmin(any(), anyLong(), any(), anyBoolean(), anyBoolean(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of()));
 
         userService.searchUsers(null, "ALL", "id", "asc", 1, 10_000);
 
         ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
-        verify(userRepository).searchForAdmin(any(), any(), anyBoolean(), anyBoolean(), pageable.capture());
+        verify(userRepository).searchForAdmin(any(), anyLong(), any(), anyBoolean(), anyBoolean(), pageable.capture());
         assertThat(pageable.getValue().getPageSize()).isEqualTo(100);
     }
 

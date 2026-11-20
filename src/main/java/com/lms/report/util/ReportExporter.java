@@ -68,6 +68,29 @@ public final class ReportExporter {
         return rows;
     }
 
+    private static List<String[]> reasonRows(FinanceReport r) {
+        List<String[]> rows = new ArrayList<>();
+        rows.add(new String[] {"Lý do hoàn tiền", "Số khoản", "Tiền hoàn (đ)"});
+        r.refundReasons().forEach(x -> rows.add(new String[] {x.reason(), String.valueOf(x.count()), String.valueOf(x.amount())}));
+        return rows;
+    }
+
+    private static List<String[]> sourceRows(FinanceReport r) {
+        List<String[]> rows = new ArrayList<>();
+        rows.add(new String[] {"Nguồn doanh thu", "Số đơn", "Doanh thu gộp (đ)"});
+        r.sources().forEach(x -> rows.add(new String[] {x.source().equals("INSTRUCTOR_REFERRAL") ? "Qua liên kết giới thiệu của giảng viên" : "Học viên tự tìm thấy",
+                String.valueOf(x.orders()), String.valueOf(x.grossRevenue())}));
+        return rows;
+    }
+
+    private static List<String[]> mismatchRows(FinanceReport r) {
+        List<String[]> rows = new ArrayList<>();
+        rows.add(new String[] {"Loại khoản", "Mã", "Số tiền (đ)", "Thời điểm", "Nội dung"});
+        r.mismatches().forEach(x -> rows.add(new String[] {x.kind().equals("DISPUTE_REFUND") ? "Hoàn tiền" : "Chi trả giảng viên", x.reference(),
+                String.valueOf(x.amount()), x.at() == null ? "" : x.at().toString(), x.detail()}));
+        return rows;
+    }
+
     private static List<String[]> courseRows(FinanceReport r) {
         List<String[]> rows = new ArrayList<>();
         rows.add(new String[] {"Khóa học", "Giảng viên", "Số đơn", "Doanh thu gộp (đ)", "Phần nền tảng (đ)", "Phần giảng viên (đ)", "Đơn đã hoàn"});
@@ -91,6 +114,9 @@ public final class ReportExporter {
         appendCsv(sb, "THEO KỲ", bucketRows(r));
         appendCsv(sb, "THEO KHÓA HỌC", courseRows(r));
         appendCsv(sb, "THEO GIẢNG VIÊN", instructorRows(r));
+        appendCsv(sb, "THEO LÝ DO HOÀN TIỀN", reasonRows(r));
+        appendCsv(sb, "THEO NGUỒN DOANH THU", sourceRows(r));
+        appendCsv(sb, "KHOẢN CHI PAYOS KHÔNG KHỚP SỔ SÁCH", mismatchRows(r));
         return sb.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
     }
 
@@ -121,6 +147,9 @@ public final class ReportExporter {
                 w.sheet("Theo kỳ", numeric(bucketRows(r), 1, false));
                 w.sheet("Theo khóa học", numeric(courseRows(r), 2, false));
                 w.sheet("Theo giảng viên", numeric(instructorRows(r), 2, false));
+                w.sheet("Lý do hoàn tiền", numeric(reasonRows(r), 1, false));
+                w.sheet("Nguồn doanh thu", numeric(sourceRows(r), 1, false));
+                w.sheet("Chi PayOS không khớp", numeric(mismatchRows(r), 2, false));
             }
             return out.toByteArray();
         } catch (IOException e) {
@@ -181,10 +210,17 @@ public final class ReportExporter {
             addTable(doc, "Theo kỳ", bucketRows(r), new float[] {1.3f, 1f, 1.6f, 1.4f, 1.6f, 1.6f, 1.4f}, heading, body, strong, 1);
             addTable(doc, "Theo khóa học (nhiều doanh thu nhất)", courseRows(r), new float[] {4f, 2.4f, 0.9f, 1.6f, 1.5f, 1.6f, 1f}, heading, body, strong, 2);
             addTable(doc, "Theo giảng viên (nhiều doanh thu nhất)", instructorRows(r), new float[] {2.4f, 3f, 0.9f, 1.6f, 1.6f, 1.5f}, heading, body, strong, 2);
-            Paragraph note = new Paragraph("Số liệu loại trừ tài khoản demo. PDF chỉ hiển thị tối đa " + PDF_MAX_ROWS
-                    + " dòng mỗi bảng; dùng CSV/XLSX để xem đầy đủ.", small);
-            note.setSpacingBefore(10);
-            doc.add(note);
+            addTable(doc, "Theo lý do hoàn tiền", reasonRows(r), new float[] {3f, 1f, 1.6f}, heading, body, strong, 1);
+            addTable(doc, "Theo nguồn doanh thu", sourceRows(r), new float[] {3f, 1f, 1.6f}, heading, body, strong, 1);
+            if (r.mismatches().size() > 0) {
+                addTable(doc, "Khoản chi PayOS không khớp sổ sách", mismatchRows(r), new float[] {1.5f, 1.5f, 1.2f, 1.8f, 4f}, heading, body, strong, 2);
+            }
+            boolean cut = r.buckets().size() > PDF_MAX_ROWS || r.courses().size() > PDF_MAX_ROWS || r.instructors().size() > PDF_MAX_ROWS;
+            if (cut) {
+                Paragraph note = new Paragraph("Mỗi bảng hiển thị " + PDF_MAX_ROWS + " dòng đầu. Xem đầy đủ trong file Excel hoặc CSV của cùng báo cáo.", small);
+                note.setSpacingBefore(10);
+                doc.add(note);
+            }
             doc.close();
             return out.toByteArray();
         } catch (DocumentException | IOException e) {

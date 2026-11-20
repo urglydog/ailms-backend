@@ -139,8 +139,8 @@ class SystemAnnouncementServiceTest {
 
         service.dispatch(1L);
 
-        verify(notificationService).notify(eq(10L), eq("SYSTEM_MEDIUM"), eq("Cập nhật chính sách"), eq("Nội dung"), isNull());
-        verify(notificationService).notify(eq(11L), eq("SYSTEM_MEDIUM"), eq("Cập nhật chính sách"), eq("Nội dung"), isNull());
+        verify(notificationService).notify(eq(10L), eq("SYSTEM_MEDIUM"), eq("Cập nhật chính sách"), eq("Nội dung"), isNull(), anyString());
+        verify(notificationService).notify(eq(11L), eq("SYSTEM_MEDIUM"), eq("Cập nhật chính sách"), eq("Nội dung"), isNull(), anyString());
         assertThat(announcement.getDispatchStatus()).isEqualTo(AnnouncementDispatchStatus.DONE);
         assertThat(announcement.getSentCount()).isEqualTo(2);
         assertThat(announcement.getTotalRecipients()).isEqualTo(2);
@@ -164,7 +164,7 @@ class SystemAnnouncementServiceTest {
 
         service.dispatch(3L);
 
-        verify(notificationService, times(3)).notify(any(), eq("SYSTEM_HIGH"), anyString(), anyString(), isNull());
+        verify(notificationService, times(3)).notify(any(), eq("SYSTEM_HIGH"), anyString(), anyString(), isNull(), anyString());
         verify(userRepository, never()).findAll();
         assertThat(announcement.getTotalRecipients()).isEqualTo(3);
         assertThat(announcement.getSentCount()).isEqualTo(3);
@@ -187,7 +187,7 @@ class SystemAnnouncementServiceTest {
 
         service.dispatch(2L);
 
-        verify(notificationService, times(1)).notify(eq(7L), anyString(), anyString(), anyString(), any());
+        verify(notificationService, times(1)).notify(eq(7L), anyString(), anyString(), anyString(), any(), anyString());
         assertThat(announcement.getSentCount()).isEqualTo(1);
     }
 
@@ -197,7 +197,7 @@ class SystemAnnouncementServiceTest {
 
         service.dispatch(999L);
 
-        verify(notificationService, never()).notify(any(), anyString(), anyString(), anyString(), any());
+        verify(notificationService, never()).notify(any(), anyString(), anyString(), anyString(), any(), any());
     }
 
     @Test

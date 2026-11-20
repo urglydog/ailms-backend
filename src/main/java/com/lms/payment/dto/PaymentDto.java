@@ -97,6 +97,12 @@ public class PaymentDto {
             String orderGroupRef
     ) {}
 
+    /** Một trang lịch sử giao dịch của chính người dùng, kèm số lượng theo nhóm (tất cả/thành công/chờ/thất bại/hoàn tiền) cho các tab. */
+    public record MinePage(java.util.List<Res> items, long total, int page, int size, java.util.Map<String, Long> counts) {}
+
+    /** Một trang kết quả tra cứu giao dịch của admin. */
+    public record AdminPage(java.util.List<AdminRes> items, long total, int page, int size) {}
+
     public record AdminRes(
             String txnRef,
             BigDecimal amount,

@@ -162,6 +162,11 @@ public class DubbingRequestService {
         Long lessonId = job.getLesson().getId();
         String targetLanguage = job.getTargetLanguage();
 
+        // Chặn thử lại thừa (tốn chi phí AI): bài học + ngôn ngữ này đã có bản lồng tiếng thành công rồi.
+        if (aiJobRepository.existsByLesson_IdAndTargetLanguageAndStatus(lessonId, targetLanguage, JobStatus.COMPLETED)) {
+            throw new BusinessRuleViolationException("Bài học này đã có bản lồng tiếng thành công bằng ngôn ngữ này, không cần thử lại.");
+        }
+
         Optional<AiJob> activeJob = aiJobRepository.findByLesson_IdAndTargetLanguageAndActiveFlag(lessonId, targetLanguage, 1);
         if (activeJob.isPresent() && !activeJob.get().getId().equals(jobId)) {
             throw new ConflictException("Đã có yêu cầu lồng tiếng khác đang xử lý cho bài học và ngôn ngữ này");

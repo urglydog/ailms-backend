@@ -30,10 +30,44 @@ public class SystemAnnouncementController {
         return ResponseEntity.ok(announcementService.create(principal.getName(), req));
     }
 
+    /** Lịch sử thông báo cho admin: tìm theo tiêu đề/nội dung, phân trang (30 dòng/trang mặc định). */
     @GetMapping("/api/v1/admin/announcements")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<List<Res>> listAll() {
-        return ResponseEntity.ok(announcementService.listAll());
+    public ResponseEntity<List<Res>> listAll(
+            @org.springframework.web.bind.annotation.RequestParam(required = false) String q,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "0") int page,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "30") int size) {
+        return ResponseEntity.ok(announcementService.search(q, page, size));
+    }
+
+    /** Sửa nội dung thông báo (cả bản đã gửi tới người dùng). */
+    @org.springframework.web.bind.annotation.PutMapping("/api/v1/admin/announcements/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Res> update(@org.springframework.web.bind.annotation.PathVariable Long id,
+                                      @Valid @RequestBody com.lms.announcement.dto.SystemAnnouncementDto.UpdateReq req) {
+        return ResponseEntity.ok(announcementService.update(id, req));
+    }
+
+    /** Khôi phục thông báo đã thu hồi để dùng lại. */
+    @PostMapping("/api/v1/admin/announcements/{id}/restore")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Res> restore(@org.springframework.web.bind.annotation.PathVariable Long id) {
+        return ResponseEntity.ok(announcementService.restore(id));
+    }
+
+    /** Xóa hẳn một thông báo đã thu hồi (dọn dữ liệu không còn dùng). */
+    @org.springframework.web.bind.annotation.DeleteMapping("/api/v1/admin/announcements/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Void> delete(@org.springframework.web.bind.annotation.PathVariable Long id) {
+        announcementService.deleteRevoked(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    /** Thu hồi thông báo: ẩn khỏi người dùng, giữ bản ghi. */
+    @PostMapping("/api/v1/admin/announcements/{id}/revoke")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Res> revoke(@org.springframework.web.bind.annotation.PathVariable Long id) {
+        return ResponseEntity.ok(announcementService.revoke(id));
     }
 
     /** Banner cố định đầu trang — PUBLIC, không cần đăng nhập (đăng ký ở

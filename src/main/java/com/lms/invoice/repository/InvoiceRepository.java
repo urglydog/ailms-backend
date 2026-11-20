@@ -22,6 +22,12 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
 
     boolean existsByTypeAndSourceId(InvoiceType type, Long sourceId);
 
+    /** Tra chứng từ theo mã truy cập (chỉ dùng cho liên kết/QR công khai). Cột có chỉ mục duy nhất. */
+    Optional<Invoice> findByAccessToken(String accessToken);
+
+    /** Chứng từ chưa có mã truy cập (cũ) — job bù cấp mã theo lô nhỏ. */
+    List<Invoice> findByAccessTokenIsNull(Pageable pageable);
+
     @EntityGraph(attributePaths = {"party", "relatedInvoice"})
     List<Invoice> findByParty_IdOrderByIssuedAtDescIdDesc(Long partyId, Pageable pageable);
 
@@ -29,8 +35,9 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
     @EntityGraph(attributePaths = {"party", "relatedInvoice"})
     @Query("SELECT i FROM Invoice i JOIN i.party u WHERE (:type IS NULL OR i.type = :type) "
             + "AND (:from IS NULL OR i.issuedAt >= :from) AND (:to IS NULL OR i.issuedAt < :to) "
-            + "AND (:q IS NULL OR LOWER(i.number) LIKE :q OR LOWER(u.email) LIKE :q OR LOWER(u.fullName) LIKE :q) "
+            + "AND (:q IS NULL OR LOWER(i.number) LIKE :q OR LOWER(i.sourceKey) LIKE :q OR LOWER(i.snapshotJson) LIKE :q OR LOWER(u.email) LIKE :q OR LOWER(u.fullName) LIKE :q "
+            + "OR u.id = :qId OR EXISTS (SELECT 1 FROM InvoiceLine l WHERE l.invoice = i AND LOWER(l.description) LIKE :q)) "
             + "ORDER BY i.issuedAt DESC, i.id DESC")
     Page<Invoice> search(@Param("type") InvoiceType type, @Param("from") LocalDateTime from, @Param("to") LocalDateTime to,
-                         @Param("q") String q, Pageable pageable);
+                         @Param("q") String q, @Param("qId") long qId, Pageable pageable);
 }

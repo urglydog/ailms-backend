@@ -219,11 +219,16 @@ public class DisputeService {
     }
 
     @Transactional(readOnly = true)
-    public List<DisputeDto.AdminRes> getAllForAdmin(DisputeStatus status) {
-        List<PaymentDispute> disputes = status == null
-                ? disputeRepository.findAllByOrderByCreatedAtDesc()
-                : disputeRepository.findByStatusOrderByCreatedAtDesc(status);
-        return disputes.stream().map(this::toAdminRes).toList();
+    public List<DisputeDto.AdminRes> getAllForAdmin(DisputeStatus status, String query, boolean needsAction, int page, int size) {
+        String q = query == null || query.isBlank() ? null : "%" + query.trim().toLowerCase(java.util.Locale.ROOT) + "%";
+        long qId = query != null && query.trim().matches("\\d{1,18}") ? Long.parseLong(query.trim()) : -1L;
+        var pageable = org.springframework.data.domain.PageRequest.of(Math.max(0, page), Math.max(1, Math.min(size, 100)));
+        return disputeRepository.searchForAdmin(status, q, qId, needsAction, pageable).stream().map(this::toAdminRes).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public long countNeedingAdminAction() {
+        return disputeRepository.countNeedingAdminAction();
     }
 
     @Transactional
