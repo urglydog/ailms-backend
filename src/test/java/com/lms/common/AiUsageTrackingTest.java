@@ -42,10 +42,23 @@ class AiUsageTrackingTest {
 
     @Test
     void textCost_billsThinkingTokensAtTheOutputPrice() {
-        // 1M đầu vào × 0.30 + (1M đầu ra + 1M suy nghĩ) × 2.50 = 5.30
-        assertThat(pricing.textCost(1_000_000, 1_000_000, 1_000_000)).isEqualByComparingTo("5.30");
+        // Model không có trong bảng giá → đơn giá dự phòng 0.75 / 3.75: 1M đầu vào × 0.75 + (1M đầu ra + 1M suy nghĩ) × 3.75 = 8.25
+        assertThat(pricing.textCost(1_000_000, 1_000_000, 1_000_000)).isEqualByComparingTo("8.25");
         assertThat(pricing.textCost(0, 0, 0)).isEqualByComparingTo("0");
         assertThat(pricing.textCost(-5, -5, -5)).isEqualByComparingTo("0");
+    }
+
+    @Test
+    void textCost_usesTheModelPriceTableAndTheIntroPriceEndsAtTheEndOf2026() {
+        var d = java.time.LocalDate.of(2026, 11, 12);
+        // 3.6 Flash giá khuyến mãi 0.75 / 3.75
+        assertThat(pricing.textCost("gemini-3.6-flash", d, 1_000_000, 1_000_000, 0)).isEqualByComparingTo("4.50");
+        // sau 31/12/2026 giá tiêu chuẩn 1.50 / 7.50
+        assertThat(pricing.textCost("gemini-3.6-flash", java.time.LocalDate.of(2027, 1, 1), 1_000_000, 1_000_000, 0)).isEqualByComparingTo("9.00");
+        // 3.5 Flash 1.50 / 9.00 (suy nghĩ tính như đầu ra)
+        assertThat(pricing.textCost("gemini-3.5-flash", d, 1_000_000, 0, 1_000_000)).isEqualByComparingTo("10.50");
+        // flash-lite 0.30 / 2.50 — phải được nhận ra trước tên "3.5-flash" chung
+        assertThat(pricing.textCost("gemini-3.5-flash-lite", d, 1_000_000, 1_000_000, 0)).isEqualByComparingTo("2.80");
     }
 
     @Test
@@ -70,7 +83,7 @@ class AiUsageTrackingTest {
         assertThat(log.getUserId()).isEqualTo(9L);
         assertThat(log.getTotalTokens()).isEqualTo(3500);
         assertThat(log.getThinkingTokens()).isEqualTo(2000);
-        assertThat(log.getCostUsd()).isEqualByComparingTo("0.006550");
+        assertThat(log.getCostUsd()).isEqualByComparingTo("0.010125");
         assertThat(log.getCourseId()).isEqualTo(3L);
     }
 

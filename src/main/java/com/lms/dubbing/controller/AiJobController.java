@@ -35,6 +35,11 @@ public class AiJobController {
         return ResponseEntity.ok(aiJobAdminService.getList(status, search, view, from, to, pageable));
     }
 
+    @GetMapping("/summary")
+    public ResponseEntity<AiJobAdminService.Summary> summary() {
+        return ResponseEntity.ok(aiJobAdminService.getSummary());
+    }
+
     @PostMapping("/{id}/retry")
     public ResponseEntity<DubbingDto.Res> retry(@PathVariable Long id) {
         return ResponseEntity.ok(dubbingRequestService.retryJob(id));

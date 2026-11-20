@@ -41,10 +41,6 @@ public class PublicInvoiceController {
     }
 
     private static String clientIp(HttpServletRequest http) {
-        String forwarded = http.getHeader("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isBlank()) {
-            return forwarded.split(",")[0].trim();
-        }
-        return http.getRemoteAddr();
+        return com.lms.common.ratelimit.RateLimitFilter.clientIp(http);
     }
 }

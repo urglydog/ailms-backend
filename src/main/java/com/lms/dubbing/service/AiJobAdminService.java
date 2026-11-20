@@ -30,6 +30,15 @@ public class AiJobAdminService {
                 to == null ? null : to.plusDays(1).atStartOfDay(), kw, kwId, pageable).map(this::mapToRes);
     }
 
+    /** Số liệu tổng quan lấy từ chính danh sách job trong cơ sở dữ liệu (cùng nguồn với bảng bên dưới, không phụ thuộc bộ nhớ tạm của AI Worker). */
+    public record Summary(long pending, long processing, long completed, long needsAttention) {}
+
+    @Transactional(readOnly = true)
+    public Summary getSummary() {
+        return new Summary(aiJobRepository.countByStatus(JobStatus.PENDING), aiJobRepository.countByStatus(JobStatus.PROCESSING),
+                aiJobRepository.countByStatus(JobStatus.COMPLETED), aiJobRepository.countNeedingAttention());
+    }
+
     private Res mapToRes(AiJob job) {
         boolean superseded = job.getStatus() == JobStatus.FAILED
                 && aiJobRepository.existsByLesson_IdAndTargetLanguageAndStatus(job.getLesson().getId(), job.getTargetLanguage(), JobStatus.COMPLETED);

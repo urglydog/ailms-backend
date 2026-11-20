@@ -159,6 +159,38 @@ class DashboardServiceTest {
     }
 
     @Test
+    void searchStudents_buildsLikePatternAndAtRiskThresholdInQuery() {
+        Enrollment e1 = enrollmentOf(courseA);
+        when(enrollmentRepository.searchForInstructor(eq(EMAIL), eq(10L), eq(DashboardService.AT_RISK_BELOW_PCT), eq("%an%"), ArgumentMatchers.any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(e1)));
+
+        var page = dashboardService.searchStudents(EMAIL, 10L, true, " An ", org.springframework.data.domain.PageRequest.of(0, 15));
+
+        assertThat(page.getContent()).hasSize(1);
+        assertThat(page.getContent().get(0).get("courseTitle")).isEqualTo("Khóa A");
+    }
+
+    @Test
+    void searchStudents_allView_hasNoThresholdAndNoSearch() {
+        when(enrollmentRepository.searchForInstructor(eq(EMAIL), eq(null), eq(null), eq(null), ArgumentMatchers.any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        assertThat(dashboardService.searchStudents(EMAIL, null, false, "  ", org.springframework.data.domain.PageRequest.of(0, 15)).getContent()).isEmpty();
+    }
+
+    @Test
+    void getStudentSummary_readsTotalsFromTheDatabaseAggregate() {
+        when(enrollmentRepository.summarizeForInstructor(EMAIL, null, DashboardService.AT_RISK_BELOW_PCT))
+                .thenReturn(List.<Object[]>of(new Object[] {40L, 55.5d, 12L}));
+
+        Map<String, Object> summary = dashboardService.getStudentSummary(EMAIL, null);
+
+        assertThat(summary.get("total")).isEqualTo(40L);
+        assertThat(summary.get("avgProgress")).isEqualTo(55.5d);
+        assertThat(summary.get("atRiskCount")).isEqualTo(12L);
+    }
+
+    @Test
     void getReviews_withCourseFilter_onlyMatchingCourse() {
         CourseReview r1 = reviewOf(courseA);
         CourseReview r2 = reviewOf(courseB);

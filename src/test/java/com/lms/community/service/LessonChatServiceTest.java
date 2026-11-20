@@ -78,22 +78,27 @@ class LessonChatServiceTest {
     }
 
     @Test
-    void listQuestionsForInstructor_onlyUnanswered_filtersOutQuestionsWithReplies() {
-        LessonChat answered = questionOf("q1");
+    void listQuestionsForInstructor_passesFiltersAndSearchPatternToTheQuery() {
         LessonChat unanswered = questionOf("q2");
         PageRequest pageable = PageRequest.of(0, 20);
-        when(chatRepository.findByParentIsNullAndLesson_Chapter_Course_Instructor_EmailOrderByCreatedAtDesc(
-                eq(INSTRUCTOR_EMAIL), eq(pageable)))
-                .thenReturn(new PageImpl<>(List.of(answered, unanswered)));
-        when(chatRepository.countByParent_Id("q1")).thenReturn(1L);
+        when(chatRepository.searchQuestionsForInstructor(eq(INSTRUCTOR_EMAIL), eq(10L), eq(true), eq("%an%"), eq(pageable)))
+                .thenReturn(new PageImpl<>(List.of(unanswered)));
         when(chatRepository.countByParent_Id("q2")).thenReturn(0L);
-        lenient().when(chatRepository.findByParent_IdOrderByCreatedAtAsc("q1")).thenReturn(List.of());
 
         org.springframework.data.domain.Page<QuestionRes> result =
-                lessonChatService.listQuestionsForInstructor(INSTRUCTOR_EMAIL, null, true, pageable);
+                lessonChatService.listQuestionsForInstructor(INSTRUCTOR_EMAIL, 10L, true, "  An ", pageable);
 
         assertThat(result.getContent()).hasSize(1);
         assertThat(result.getContent().get(0).id()).isEqualTo("q2");
+    }
+
+    @Test
+    void listQuestionsForInstructor_blankSearchMeansNoSearchFilter() {
+        PageRequest pageable = PageRequest.of(0, 20);
+        when(chatRepository.searchQuestionsForInstructor(eq(INSTRUCTOR_EMAIL), eq(null), eq(false), eq(null), eq(pageable)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        assertThat(lessonChatService.listQuestionsForInstructor(INSTRUCTOR_EMAIL, null, false, "   ", pageable).getContent()).isEmpty();
     }
 
     @Test

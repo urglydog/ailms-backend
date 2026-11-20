@@ -118,6 +118,47 @@ public class DashboardService {
                 .toList();
     }
 
+    /** Ngưỡng "cần chú ý": tiến độ dưới mức này (%). */
+    public static final java.math.BigDecimal AT_RISK_BELOW_PCT = new java.math.BigDecimal("20");
+
+    /** Học viên của giảng viên, phân trang + tìm kiếm + lọc "cần chú ý" phía máy chủ. */
+    @Transactional(readOnly = true)
+    public org.springframework.data.domain.Page<Map<String, Object>> searchStudents(
+            String email, Long courseId, boolean atRiskOnly, String search, org.springframework.data.domain.Pageable pageable) {
+        String kw = (search == null || search.isBlank()) ? null : "%" + search.trim().toLowerCase(java.util.Locale.ROOT) + "%";
+        org.springframework.data.domain.Pageable sorted = org.springframework.data.domain.PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(),
+                atRiskOnly ? org.springframework.data.domain.Sort.by("progressPct").ascending().and(org.springframework.data.domain.Sort.by("enrolledAt").descending())
+                        : org.springframework.data.domain.Sort.by("enrolledAt").descending());
+        return enrollmentRepository.searchForInstructor(email, courseId, atRiskOnly ? AT_RISK_BELOW_PCT : null, kw, sorted).map(this::toStudentRow);
+    }
+
+    /** Số liệu tổng quan học viên của giảng viên (tổng, tiến độ trung bình, số học viên cần chú ý). */
+    @Transactional(readOnly = true)
+    public Map<String, Object> getStudentSummary(String email, Long courseId) {
+        Object[] r = enrollmentRepository.summarizeForInstructor(email, courseId, AT_RISK_BELOW_PCT).get(0);
+        long total = ((Number) r[0]).longValue();
+        double avg = ((Number) r[1]).doubleValue();
+        long atRisk = ((Number) r[2]).longValue();
+        Map<String, Object> out = new java.util.LinkedHashMap<>();
+        out.put("total", total);
+        out.put("avgProgress", avg);
+        out.put("atRiskCount", atRisk);
+        out.put("atRiskBelowPct", AT_RISK_BELOW_PCT.intValue());
+        return out;
+    }
+
+    private Map<String, Object> toStudentRow(Enrollment e) {
+        Map<String, Object> row = new java.util.HashMap<>();
+        row.put("studentId", e.getUser().getId());
+        row.put("studentName", e.getUser().getFullName());
+        row.put("studentEmail", e.getUser().getEmail());
+        row.put("courseId", e.getCourse().getId());
+        row.put("courseTitle", e.getCourse().getTitle());
+        row.put("enrolledAt", e.getEnrolledAt());
+        row.put("progressPct", e.getProgressPct());
+        return row;
+    }
+
     @Transactional(readOnly = true)
     public List<Map<String, Object>> getReviews(String email, Long courseId) {
         List<CourseReview> reviews = courseReviewRepository.findByCourse_Instructor_EmailAndIsHiddenFalseOrderByCreatedAtDesc(email);

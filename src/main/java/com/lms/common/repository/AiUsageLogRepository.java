@@ -98,4 +98,9 @@ public interface AiUsageLogRepository extends JpaRepository<AiUsageLog, Long> {
      * vẫn bị bắt, khác tín hiệu 2 chỉ đếm SỐ LƯỢNG request). */
     @Query("SELECT COALESCE(SUM(l.totalTokens), 0) FROM AiUsageLog l WHERE l.userId = :userId AND l.createdAt >= :since")
     long getTotalTokensForUserSince(Long userId, java.time.LocalDateTime since);
+
+    /** Tổng chi phí ước tính (USD) của Gemini trong khoảng [from, to) — đối soát với hóa đơn Google AI Studio (Groq thanh toán riêng nên không gộp vào). */
+    @Query("SELECT COALESCE(SUM(l.costUsd), 0) FROM AiUsageLog l WHERE l.provider = 'GEMINI' AND l.createdAt >= :from AND l.createdAt < :to")
+    java.math.BigDecimal sumCost(@org.springframework.data.repository.query.Param("from") java.time.LocalDateTime from,
+                                 @org.springframework.data.repository.query.Param("to") java.time.LocalDateTime to);
 }

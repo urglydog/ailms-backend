@@ -16,6 +16,32 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface EnrollmentRepository extends JpaRepository<Enrollment, Long> {
 
+    /**
+     * Danh sách học viên của giảng viên có lọc/tìm/phân trang ngay trong truy vấn (21/11/2026) — trước đây trình duyệt tải TOÀN BỘ ghi danh rồi tự lọc và cộng tổng.
+     * {@code atRiskBelow} khác null nghĩa là chỉ lấy học viên có tiến độ thấp hơn ngưỡng đó. {@code search} là mẫu LIKE chữ thường hoặc null.
+     */
+    @EntityGraph(attributePaths = {"user", "course"})
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT e FROM Enrollment e JOIN e.user u JOIN e.course c WHERE c.instructor.email = :email "
+            + "AND (:courseId IS NULL OR c.id = :courseId) "
+            + "AND (:atRiskBelow IS NULL OR e.progressPct < :atRiskBelow) "
+            + "AND (:search IS NULL OR LOWER(u.fullName) LIKE :search OR LOWER(u.email) LIKE :search OR LOWER(c.title) LIKE :search)")
+    org.springframework.data.domain.Page<Enrollment> searchForInstructor(
+            @org.springframework.data.repository.query.Param("email") String email,
+            @org.springframework.data.repository.query.Param("courseId") Long courseId,
+            @org.springframework.data.repository.query.Param("atRiskBelow") java.math.BigDecimal atRiskBelow,
+            @org.springframework.data.repository.query.Param("search") String search,
+            org.springframework.data.domain.Pageable pageable);
+
+    /** Tổng hợp học viên của giảng viên: số ghi danh, tiến độ trung bình, số học viên dưới ngưỡng (tính ở cơ sở dữ liệu). */
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT COUNT(e), COALESCE(AVG(e.progressPct), 0), COALESCE(SUM(CASE WHEN e.progressPct < :atRiskBelow THEN 1 ELSE 0 END), 0) "
+            + "FROM Enrollment e WHERE e.course.instructor.email = :email AND (:courseId IS NULL OR e.course.id = :courseId)")
+    List<Object[]> summarizeForInstructor(
+            @org.springframework.data.repository.query.Param("email") String email,
+            @org.springframework.data.repository.query.Param("courseId") Long courseId,
+            @org.springframework.data.repository.query.Param("atRiskBelow") java.math.BigDecimal atRiskBelow);
+
     /** Dùng bởi CourseService (F2.1) để quyết định xoá cứng hay xoá mềm (BR-COURSE-03). */
     boolean existsByCourseId(Long courseId);
 

@@ -63,7 +63,7 @@ class NotificationServiceTest {
         n2.setIsRead(false);
         n2.setCreatedAt(now);
 
-        when(notificationRepository.findByUser_IdAndHiddenAtIsNullOrderByCreatedAtDesc(userId))
+        when(notificationRepository.findTop200ByUser_IdAndHiddenAtIsNullOrderByCreatedAtDesc(userId))
                 .thenReturn(Arrays.asList(n2, n1));
 
         List<NotificationRes> result = notificationService.getNotifications(userId);
@@ -76,7 +76,7 @@ class NotificationServiceTest {
     @Test
     void testGetNotifications_ShouldReturnEmptyListIfNoNotifications() {
         Long userId = 2L;
-        when(notificationRepository.findByUser_IdAndHiddenAtIsNullOrderByCreatedAtDesc(userId))
+        when(notificationRepository.findTop200ByUser_IdAndHiddenAtIsNullOrderByCreatedAtDesc(userId))
                 .thenReturn(Collections.emptyList());
 
         List<NotificationRes> result = notificationService.getNotifications(userId);
@@ -97,7 +97,7 @@ class NotificationServiceTest {
         notification.setIsRead(true);
         notification.setCreatedAt(LocalDateTime.now());
 
-        when(notificationRepository.findByUser_IdAndHiddenAtIsNullOrderByCreatedAtDesc(userId))
+        when(notificationRepository.findTop200ByUser_IdAndHiddenAtIsNullOrderByCreatedAtDesc(userId))
                 .thenReturn(Arrays.asList(notification));
 
         List<NotificationRes> result = notificationService.getNotifications(userId);
