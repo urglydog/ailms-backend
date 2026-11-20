@@ -17,13 +17,23 @@ public class AiJobAdminService {
 
     private final AiJobRepository aiJobRepository;
 
+    /**
+     * Danh sách job cho admin. {@code view}: {@code ATTENTION} = chỉ job lỗi chưa có bản thay thế thành công; {@code null} = theo {@code status}. Mặc định giao diện mở ở
+     * "Cần xử lý" nên job lỗi cũ đã được bản sau thay thế không làm rối màn hình.
+     */
     @Transactional(readOnly = true)
-    public Page<Res> getList(JobStatus status, String search, Pageable pageable) {
-        String normalizedSearch = (search == null || search.isBlank()) ? null : search.trim();
-        return aiJobRepository.search(status, normalizedSearch, pageable).map(this::mapToRes);
+    public Page<Res> getList(JobStatus status, String search, String view, java.time.LocalDate from, java.time.LocalDate to, Pageable pageable) {
+        String kw = (search == null || search.isBlank()) ? null : "%" + search.trim().toLowerCase(java.util.Locale.ROOT) + "%";
+        long kwId = search != null && search.trim().matches("\\d{1,18}") ? Long.parseLong(search.trim()) : -1L;
+        boolean attention = "ATTENTION".equalsIgnoreCase(view);
+        return aiJobRepository.searchAdmin(attention ? null : status, attention, from == null ? null : from.atStartOfDay(),
+                to == null ? null : to.plusDays(1).atStartOfDay(), kw, kwId, pageable).map(this::mapToRes);
     }
 
     private Res mapToRes(AiJob job) {
+        boolean superseded = job.getStatus() == JobStatus.FAILED
+                && aiJobRepository.existsByLesson_IdAndTargetLanguageAndStatus(job.getLesson().getId(), job.getTargetLanguage(), JobStatus.COMPLETED);
+        var requester = job.getRequestedBy();
         return new Res(
                 job.getId(),
                 job.getLesson().getId(),
@@ -35,7 +45,13 @@ public class AiJobAdminService {
                 job.progressPercent(),
                 job.getRetryCount(),
                 job.getErrorMessage(),
-                job.getCreatedAt()
+                job.getCreatedAt(),
+                job.getLesson().getChapter().getCourse().getTitle(),
+                requester == null ? null : requester.getFullName(),
+                requester == null ? null : requester.getEmail(),
+                job.getFinishedAt(),
+                superseded,
+                job.getStatus() == JobStatus.FAILED && job.canRetry() && !superseded
         );
     }
 }

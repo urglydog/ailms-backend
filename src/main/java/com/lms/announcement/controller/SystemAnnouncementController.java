@@ -48,6 +48,21 @@ public class SystemAnnouncementController {
         return ResponseEntity.ok(announcementService.update(id, req));
     }
 
+    /** Khôi phục thông báo đã thu hồi để dùng lại. */
+    @PostMapping("/api/v1/admin/announcements/{id}/restore")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Res> restore(@org.springframework.web.bind.annotation.PathVariable Long id) {
+        return ResponseEntity.ok(announcementService.restore(id));
+    }
+
+    /** Xóa hẳn một thông báo đã thu hồi (dọn dữ liệu không còn dùng). */
+    @org.springframework.web.bind.annotation.DeleteMapping("/api/v1/admin/announcements/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Void> delete(@org.springframework.web.bind.annotation.PathVariable Long id) {
+        announcementService.deleteRevoked(id);
+        return ResponseEntity.noContent().build();
+    }
+
     /** Thu hồi thông báo: ẩn khỏi người dùng, giữ bản ghi. */
     @PostMapping("/api/v1/admin/announcements/{id}/revoke")
     @PreAuthorize("hasRole('ADMIN')")

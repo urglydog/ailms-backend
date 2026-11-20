@@ -54,6 +54,7 @@ public class InternalMaterialService {
     private final QuizQuestionRepository quizQuestionRepository;
     private final QuizOptionRepository quizOptionRepository;
     private final com.lms.common.repository.AiUsageLogRepository aiUsageLogRepository;
+    private final com.lms.common.service.AiPricing aiPricing;
 
     @Transactional(readOnly = true)
     public GenerationContextRes getContext(Long generationId) {
@@ -232,9 +233,8 @@ public class InternalMaterialService {
             usageLog.setCompletionTokens(completionTokens);
             usageLog.setTotalTokens(promptTokens + completionTokens);
 
-            // Tạm tính cost: $1.5 / 1M prompt tokens, $2.0 / 1M completion tokens (Gemini Flash)
-            double cost = (promptTokens / 1000000.0 * 1.5) + (completionTokens / 1000000.0 * 2.0);
-            usageLog.setCostUsd(java.math.BigDecimal.valueOf(cost));
+            // Cùng đơn giá cấu hình với mọi tính năng AI khác (xem AiPricing) để số liệu chi phí nhất quán.
+            usageLog.setCostUsd(aiPricing.textCost(promptTokens, completionTokens, 0));
 
             aiUsageLogRepository.save(usageLog);
         }

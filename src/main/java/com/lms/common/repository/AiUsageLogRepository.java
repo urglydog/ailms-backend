@@ -35,6 +35,27 @@ public interface AiUsageLogRepository extends JpaRepository<AiUsageLog, Long> {
                                                                           @org.springframework.data.repository.query.Param("feature") String feature,
                                                                           org.springframework.data.domain.Pageable pageable);
 
+    /** Tổng chi phí/token/số lệnh gọi/giây âm thanh trong [from, to), tùy chọn lọc theo tính năng. Một dòng: [cost, tokens, requests, audioSeconds]. */
+    @Query("SELECT COALESCE(SUM(l.costUsd), 0), COALESCE(SUM(l.totalTokens), 0), COUNT(l), COALESCE(SUM(l.audioSeconds), 0) FROM AiUsageLog l "
+            + "WHERE l.createdAt >= :from AND l.createdAt < :to AND (:feature IS NULL OR l.featureType = :feature)")
+    List<Object[]> totals(@org.springframework.data.repository.query.Param("from") java.time.LocalDateTime from,
+                          @org.springframework.data.repository.query.Param("to") java.time.LocalDateTime to,
+                          @org.springframework.data.repository.query.Param("feature") String feature);
+
+    /** Chi phí theo tính năng, nhiều nhất trước: [feature, cost, tokens, requests]. */
+    @Query("SELECT l.featureType, SUM(l.costUsd), SUM(l.totalTokens), COUNT(l) FROM AiUsageLog l WHERE l.createdAt >= :from AND l.createdAt < :to "
+            + "AND (:feature IS NULL OR l.featureType = :feature) GROUP BY l.featureType ORDER BY SUM(l.costUsd) DESC")
+    List<Object[]> byFeature(@org.springframework.data.repository.query.Param("from") java.time.LocalDateTime from,
+                             @org.springframework.data.repository.query.Param("to") java.time.LocalDateTime to,
+                             @org.springframework.data.repository.query.Param("feature") String feature);
+
+    /** Chi phí theo ngày và tính năng: [day, feature, cost]. */
+    @Query("SELECT FUNCTION('DATE', l.createdAt), l.featureType, SUM(l.costUsd) FROM AiUsageLog l WHERE l.createdAt >= :from AND l.createdAt < :to "
+            + "AND (:feature IS NULL OR l.featureType = :feature) GROUP BY FUNCTION('DATE', l.createdAt), l.featureType ORDER BY 1")
+    List<Object[]> dailyByFeature(@org.springframework.data.repository.query.Param("from") java.time.LocalDateTime from,
+                                  @org.springframework.data.repository.query.Param("to") java.time.LocalDateTime to,
+                                  @org.springframework.data.repository.query.Param("feature") String feature);
+
     /** Các tính năng AI đã từng có log (cho bộ lọc). */
     @Query("SELECT DISTINCT l.featureType FROM AiUsageLog l ORDER BY l.featureType")
     List<String> distinctFeatures();

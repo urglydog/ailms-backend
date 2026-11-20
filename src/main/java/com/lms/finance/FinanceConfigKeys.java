@@ -96,6 +96,14 @@ public final class FinanceConfigKeys {
             requireIntRange(key, v, 1, 20);
         } else if (key.equals("INVOICE_ISSUER_NOTE") && v.length() > 200) {
             throw invalid(key, "tối đa 200 ký tự");
+        } else if (key.equals("AI_PRICE_INPUT_USD_PER_M") || key.equals("AI_PRICE_OUTPUT_USD_PER_M") || key.equals("AI_PRICE_EMBED_USD_PER_M")
+                || key.equals("AI_PRICE_AUDIO_USD_PER_HOUR")) {
+            // Đơn giá USD: số không âm, tối đa 4 chữ số sau dấu chấm, tối đa 1000 USD cho mỗi đơn vị tính giá.
+            if (!v.matches("\\d{1,4}(\\.\\d{1,4})?") || new BigDecimal(v).compareTo(new BigDecimal("1000")) > 0) {
+                throw invalid(key, "phải là số không âm không quá 1000, tối đa 4 chữ số sau dấu chấm (vd 0.30)");
+            }
+        } else if (key.equals("USD_VND_RATE")) {
+            requireIntRange(key, v, 1_000, 100_000);
         } else if (key.equals("PUBLIC_INVOICE_LINK_ENABLED")) {
             requireIntRange(key, v, 0, 1);
         } else if (key.equals("REPORT_RECIPIENTS")) {

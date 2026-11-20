@@ -134,6 +134,31 @@ public class SystemAnnouncementService {
         return toRes(a);
     }
 
+    /** Khôi phục thông báo đã thu hồi: hiện lại cho người dùng (banner còn hạn cũng hiện lại). Thông báo chưa bị thu hồi thì không làm gì (idempotent). */
+    @Transactional
+    public Res restore(Long id) {
+        SystemAnnouncement a = announcementRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("SystemAnnouncement", id));
+        if (a.getRevokedAt() != null) {
+            a.setRevokedAt(null);
+            announcementRepository.save(a);
+            int shown = notificationService.unhideBySource(sourceRef(id));
+            log.info("Da khoi phuc thong bao he thong {} ({} thong bao nguoi dung hien lai)", id, shown);
+        }
+        return toRes(a);
+    }
+
+    /** Xóa hẳn một thông báo ĐÃ THU HỒI (bản ghi và các thông báo đã gửi). Thông báo còn hiệu lực phải thu hồi trước — tránh xóa nhầm. */
+    @Transactional
+    public void deleteRevoked(Long id) {
+        SystemAnnouncement a = announcementRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("SystemAnnouncement", id));
+        if (a.getRevokedAt() == null) {
+            throw new InvalidRequestException("Chỉ xóa được thông báo đã thu hồi. Hãy thu hồi thông báo trước.");
+        }
+        int removed = notificationService.deleteBySource(sourceRef(id));
+        announcementRepository.delete(a);
+        log.info("Da xoa thong bao he thong {} ({} thong bao nguoi dung bi xoa)", id, removed);
+    }
+
     static String sourceRef(Long announcementId) {
         return "ANN:" + announcementId;
     }

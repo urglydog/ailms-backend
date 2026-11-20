@@ -26,7 +26,8 @@ import java.math.BigDecimal;
 @Setter
 public class AiUsageLog extends BaseEntity {
 
-    @Column(name = "user_id", nullable = false)
+    /** NULL với lệnh gọi AI không gắn với một người dùng cụ thể (nhúng dữ liệu, tìm kiếm của khách). */
+    @Column(name = "user_id")
     private Long userId;
 
     /** QUIZ, FLASHCARD, MINDMAP, TUTOR, DISCOVERY, DUBBING */
@@ -45,4 +46,29 @@ public class AiUsageLog extends BaseEntity {
     /** Chi phí ước lượng (USD) dựa trên số token tiêu thụ. */
     @Column(name = "cost_usd", nullable = false, precision = 10, scale = 6)
     private BigDecimal costUsd = BigDecimal.ZERO;
+
+    /** GEMINI hoặc GROQ. */
+    @Column(name = "provider", nullable = false, length = 20)
+    private String provider = "GEMINI";
+
+    @Column(name = "model", length = 80)
+    private String model;
+
+    /** Token "suy nghĩ" ẩn của Gemini — không nằm trong token đầu ra nhưng vẫn tính tiền như token đầu ra. */
+    @Column(name = "thinking_tokens", nullable = false)
+    private Integer thinkingTokens = 0;
+
+    /** Thời lượng âm thanh (giây) với nhận dạng giọng nói tính theo giờ âm thanh. */
+    @Column(name = "audio_seconds", nullable = false)
+    private Integer audioSeconds = 0;
+
+    @Column(name = "course_id")
+    private Long courseId;
+
+    @Column(name = "lesson_id")
+    private Long lessonId;
+
+    /** Số token là ước lượng (không do nhà cung cấp báo). */
+    @Column(name = "estimated", nullable = false)
+    private Boolean estimated = false;
 }

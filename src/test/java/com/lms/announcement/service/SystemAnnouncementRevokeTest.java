@@ -96,4 +96,27 @@ class SystemAnnouncementRevokeTest {
         assertThat(SystemAnnouncementService.sourceRef(7L)).isEqualTo("ANN:7");
         org.mockito.Mockito.verify(announcementRepository, never()).delete(any(SystemAnnouncement.class));
     }
+
+    @Test
+    void restore_showsTheNotificationsAgainAndIsIdempotent() {
+        announcement.setRevokedAt(LocalDateTime.now());
+
+        service.restore(12L);
+        service.restore(12L);
+
+        assertThat(announcement.getRevokedAt()).isNull();
+        verify(notificationService, org.mockito.Mockito.times(1)).unhideBySource("ANN:12");
+    }
+
+    @Test
+    void deleteRevoked_removesRecordAndDeliveredCopies_butOnlyAfterRevoking() {
+        assertThatThrownBy(() -> service.deleteRevoked(12L)).isInstanceOf(InvalidRequestException.class);
+        verify(announcementRepository, never()).delete(any(SystemAnnouncement.class));
+
+        announcement.setRevokedAt(LocalDateTime.now());
+        service.deleteRevoked(12L);
+
+        verify(notificationService).deleteBySource("ANN:12");
+        verify(announcementRepository).delete(announcement);
+    }
 }

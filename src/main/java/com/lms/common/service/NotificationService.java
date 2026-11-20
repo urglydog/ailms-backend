@@ -77,6 +77,18 @@ public class NotificationService {
         return notificationRepository.hideBySource(sourceRef, java.time.LocalDateTime.now());
     }
 
+    /** Khôi phục: hiện lại các thông báo đã thu hồi của một nguồn. Trả số thông báo được hiện lại. */
+    @Transactional
+    public int unhideBySource(String sourceRef) {
+        return notificationRepository.unhideBySource(sourceRef);
+    }
+
+    /** Xóa hẳn các thông báo của một nguồn. Trả số thông báo đã xóa. */
+    @Transactional
+    public int deleteBySource(String sourceRef) {
+        return notificationRepository.deleteBySource(sourceRef);
+    }
+
     private NotificationRes convertToDto(Notification n) {
         return new NotificationRes(
                 n.getId(),

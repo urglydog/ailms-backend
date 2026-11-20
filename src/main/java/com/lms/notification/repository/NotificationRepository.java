@@ -24,6 +24,16 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     @Query("UPDATE Notification n SET n.title = :title, n.content = :content WHERE n.sourceRef = :ref")
     int updateBySource(@Param("ref") String ref, @Param("title") String title, @Param("content") String content);
 
+    /** Khôi phục: hiện lại các thông báo của một nguồn đã bị thu hồi. */
+    @Modifying
+    @Query("UPDATE Notification n SET n.hiddenAt = NULL WHERE n.sourceRef = :ref AND n.hiddenAt IS NOT NULL")
+    int unhideBySource(@Param("ref") String ref);
+
+    /** Xóa hẳn các thông báo của một nguồn (chỉ dùng khi xóa thông báo hệ thống đã thu hồi). */
+    @Modifying
+    @Query("DELETE FROM Notification n WHERE n.sourceRef = :ref")
+    int deleteBySource(@Param("ref") String ref);
+
     /** Thu hồi: ẩn mọi thông báo của một nguồn khỏi người dùng (không xóa). */
     @Modifying
     @Query("UPDATE Notification n SET n.hiddenAt = :now WHERE n.sourceRef = :ref AND n.hiddenAt IS NULL")

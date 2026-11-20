@@ -318,6 +318,18 @@ class DubbingRequestServiceTest {
     }
 
     @Test
+    void retryJob_isBlockedWhenTheLessonAlreadyHasASuccessfulDubInThatLanguage() {
+        AiJob job = failedJob(403L, 0);
+        when(aiJobRepository.findById(403L)).thenReturn(Optional.of(job));
+        when(aiJobRepository.existsByLesson_IdAndTargetLanguageAndStatus(any(), eq("en-US"), eq(JobStatus.COMPLETED))).thenReturn(true);
+
+        assertThatThrownBy(() -> dubbingRequestService.retryJob(403L))
+                .isInstanceOf(BusinessRuleViolationException.class)
+                .hasMessageContaining("đã có bản lồng tiếng thành công");
+        verify(dubbingLockService, never()).tryLock(any(), any());
+    }
+
+    @Test
     void retryJob_throwsWhenRetryCountExhausted() {
         AiJob job = failedJob(402L, 3);
         when(aiJobRepository.findById(402L)).thenReturn(Optional.of(job));
