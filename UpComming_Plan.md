@@ -11,14 +11,14 @@
 | # | Việc | Ghi chú |
 |---|---|---|
 | 1 | ✅ **Sao lưu DB** — đã sao lưu trước mỗi đợt migration lớn (mới nhất `lms_db_pre_V174_20261121_*.sql.gz` trong `/home/dev-thien/backups`) | Giữ thói quen sao lưu trước migration. |
-| 2 | **Gửi lại 2 lệnh PayOS thất bại để kiểm đường THÀNH CÔNG** (`LLR5-1` hoàn 10.000đ, `LLP1-1` rút 20.000đ bị ngân hàng báo gián đoạn 16/11). **BE đã deploy 16/11 (V168 áp dụng, khởi động sạch).** Để tách nguyên nhân: học viên đổi tài khoản nhận hoàn tiền sang ngân hàng khác (nút "Đổi tài khoản nhận hoàn tiền" ở Khiếu nại của tôi, cần FE bản 4870dd1 trên Vercel) rồi admin bấm Chi lại; với `LLP1-1` thì từ chối yêu cầu để hoàn số dư và giảng viên tạo yêu cầu mới với tài khoản khác. Hỏi PayOS vì sao lệnh treo ~15 giờ | Báo cáo: `docs/PAYOS_PAYOUT_VERIFICATION_20261116.md`. Hóa đơn bắt đầu sau khi đường thành công chạy thật. |
+| 2 | ✅ **Đường chi PayOS THÀNH CÔNG đã kiểm** — DB có 2 lệnh `SUCCEEDED` (các lệnh gửi lại `LLR5-2`, `LLP1-2`) và 2 lệnh `FAILED` cũ (`LLR5-1`, `LLP1-1`, ngân hàng báo gián đoạn 16/11); báo cáo `docs/PAYOS_PAYOUT_VERIFICATION_20261116.md` | Xong. |
 | 2b | ✅ **Phí kênh CHI PayOS đã chốt 17/11:** 2.950đ cố định/lệnh thành công, **nền tảng chịu hết** (không trừ giảng viên, không tính học viên). Đã thêm câu giải thích vào chính sách chia sẻ doanh thu, chính sách hoàn tiền và thẻ yêu cầu rút. **Còn chờ PayOS:** phí trừ vào ví chi hay quỹ phí riêng (ô "Còn lại" 97.050đ, "Cần thêm 902.950đ"), hết quỹ thì lệnh bị từ chối hay vẫn chi; sau khi biết thì sửa BE kiểm số dư cho đúng | Ảnh hưởng chứng từ/thống kê: thêm dòng "phí chi hộ PayOS" vào bảng kê nền tảng. |
-| 3 | **Hỏi PayOS** (đang có email hỗ trợ): số dư tối thiểu 1.000.000đ là nạp một lần hay phải duy trì; số dư tài khoản chi có rút ngược được không; IP/hạn mức; lệnh chi có cần duyệt trên dashboard | Tài liệu API không nêu các điểm này. |
+| 3 | ✅ **Hỏi PayOS** (số dư tối thiểu, rút ngược số dư, IP/hạn mức, duyệt lệnh chi) — chủ dự án xác nhận đã xử lý 21/11/2026 (Claude chưa kiểm được nội dung trả lời) | Nếu có kết quả cần ghi lại: cập nhật mục 2b/B. |
 | 4 | **Trả cấu hình test về mặc định** sau khi thử xong: `PAYOUT_MIN_AMOUNT` (đang hạ xuống 20.000) → `100000`; `PAYOS_PAYOUT_MAX_AMOUNT`; `PAYOS_PAYOUT_ENABLED` (để 0 nếu chưa dùng thật) | Admin → Cài đặt. |
 | 5 | ✅ **Duyệt hướng triển khai Hóa đơn & Thống kê** — đã duyệt, triển khai và nghiệm thu (xem mục 2.A) | |
-| 6 | **Quyết định chính sách**: (a) chặn gửi khiếu nại loại "đổi ý" khi ngoài chính sách (quá 7 ngày / đã học > 20%) hay chỉ cảnh báo; (b) bậc nợ 90 ngày có ẩn khóa khỏi tìm kiếm không (hiện chỉ chặn mua + gỡ khỏi kệ đề xuất) | Cả hai đang ở trạng thái "chỉ gắn nhãn/chặn một phần". |
+| 6 | ✅ **Quyết định chính sách** (khiếu nại "đổi ý" ngoài chính sách; bậc nợ 90 ngày) — chủ dự án xác nhận đã làm 21/11/2026 (Claude chưa kiểm được lựa chọn cụ thể) | Ghi lựa chọn vào `docs/` hoặc mục C khi tiện. |
 | 7 | Nhập `REFUND_HOLIDAYS` (ngày lễ gia hạn hạn hoàn tiền) | Admin → Cài đặt. |
-| 8 | **Đĩa server 38 GB chỉ còn ~3,7 GB (90%)**: dọn bản VS Code Server cũ (~3,3 GB), `/var/lms/fe_node_modules_old` + `fe_next_old` (~1,4 GB, tên "old"), volume Docker không dùng (3,4 GB — kiểm tên trước khi xoá) | Đĩa đầy đã làm hỏng build/backend một lần. |
+| 8 | **Đĩa server:** đã dọn 21/11 (volume Docker rác, `fe_node_modules_old`/`fe_next_old` không còn) → đĩa ~81% (còn ~7,1 GB). **Còn lại:** `/home/dev-thien/.vscode-server` ~5,2 GB (bản VS Code Server cũ, chủ dự án tự dọn) | Đĩa đầy từng làm hỏng build/backend. |
 | 9 | Hạ tầng: `maxmemory` Redis, bỏ `--reload` ở ai-api, giới hạn bộ nhớ container, giới hạn log `lms_backend`/`lms_caddy` | Từ đợt rà 11/11. |
 | 13 | ✅ **Xóa khóa Gemini cũ trên AI Studio** — đã xóa 21/11/2026 | Xong. |
 | 14 | **Modal tách nhạc nền — việc của BẠN CỦA CHỦ DỰ ÁN (chủ dự án chỉ đăng ký tài khoản + lấy token, đã xong và đã nạp vào `.env`).** Code (`background_music.py`, `modal_apps/demucs_separator.py`) chưa push lên GitHub, thư viện `modal` chưa có trong image | Khi bạn push: build lại image (`docker compose up -d --build ai-worker`), deploy hàm `lms-demucs`, kiểm lệnh `modal.Function.from_name`, ghi chính sách quyền riêng tư (âm thanh gửi sang bên thứ ba). |
@@ -26,7 +26,7 @@
 | 16 | ✅ **Đóng:** hết 12/2026 chủ dự án ngừng dùng khóa Gemini; nếu còn dùng sẽ cân nhắc lại model (giá 3.6 Flash gấp đôi từ 1/1/2027, thử Flash-Lite, xác nhận giá 3.5 Flash) | Không còn việc chờ. |
 | 11 | **Hiệu chỉnh đơn giá AI sau vài ngày chạy** (Admin → Cài đặt → Chi phí AI): đối chiếu tổng tiền trên trang AI Analytics với hóa đơn Google AI Studio/Groq của cùng kỳ rồi chỉnh đơn giá cho sát. Mặc định (0.30 / 2.50 / 0.15 USD mỗi triệu token, 0.04 USD/giờ âm thanh Groq, 25.500đ/USD) CHƯA đối chiếu với bảng giá thật của `gemini-3.5-flash` | Số liệu hiển thị là ước tính theo token. |
 | 12 | ✅ **Xoay khóa Gemini** — đã tạo khóa mới, sửa code để khóa không còn nằm trong URL/log, tạo lại container, test ổn, **đã xóa khóa cũ trên AI Studio (21/11/2026)** | Xong. |
-| 10 | Email giả của tài khoản demo (`@lms.local`) không nhận được thư xác nhận (BE gửi qua Gmail SMTP) | Muốn test rút tiền/liên kết tài khoản: đổi sang email thật hoặc xác nhận bằng SQL. |
+| 10 | ✅ Email demo `@lms.local` — chủ dự án xác nhận đã xử lý 21/11/2026 | |
 
 ---
 
