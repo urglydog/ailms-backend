@@ -64,6 +64,14 @@ public class MaterialGeneration extends BaseEntity {
     @Column(name = "difficulty_level", length = 20)
     private DifficultyLevel difficultyLevel;
 
+    /**
+     * Loại quiz giảng viên chọn khi tạo bằng AI: OFFICIAL_EXAM (thi chính thức) hay LECTURE_QUIZ (Quick Check). NULL = LECTURE_QUIZ như trước.
+     * Chỉ được đặt OFFICIAL_EXAM khi người tạo là giảng viên của chính khóa học (xem MaterialGenerationService.create).
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "quiz_type", length = 20)
+    private com.lms.common.enums.QuizType quizType;
+
     /** Tang dan, khong ghi de bo cu (BR-MAT-07). */
     @Column(name = "version_no", nullable = false)
     private Integer versionNo = 1;

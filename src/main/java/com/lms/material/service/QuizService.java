@@ -64,6 +64,11 @@ public class QuizService {
             throw new AccessDeniedDomainException("Chi giang vien cua khoa hoc moi duoc sua cau hinh bai thi");
         }
         
+        // Đổi loại Quick Check <-> Thi chính thức khi đã có học viên làm bài sẽ làm sai nghĩa kết quả cũ (giờ, số lượt, giám sát) nên chặn.
+        if (req.quizType() != null && req.quizType() != quiz.getQuizType() && quizAttemptRepository.countByQuiz_Id(quizId) > 0) {
+            throw new com.lms.common.exception.BusinessRuleViolationException(
+                    "Bài này đã có học viên làm nên không thể đổi giữa Quick Check và Thi chính thức. Hãy tạo bài mới nếu bạn cần loại khác.");
+        }
         quiz.setRandomPickCount(req.randomPickCount());
         if (req.allowReview() != null) quiz.setAllowReview(req.allowReview());
         quiz.setStartTime(req.startTime());
@@ -72,6 +77,7 @@ public class QuizService {
         quiz.setMaxAttempts(req.maxAttempts());
         if (req.isProctored() != null) quiz.setIsProctored(req.isProctored());
         if (req.maxViolations() != null) quiz.setMaxViolations(req.maxViolations());
+        if (req.quizType() != null) quiz.setQuizType(req.quizType());
         quizRepository.save(quiz);
     }
 

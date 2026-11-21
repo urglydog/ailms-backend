@@ -12,7 +12,9 @@ public class QuizDto {
             Integer durationMinutes,
             Integer maxAttempts,
             Boolean isProctored,
-            Integer maxViolations
+            Integer maxViolations,
+            /** Giảng viên đổi loại bài: LECTURE_QUIZ (Quick Check) hoặc OFFICIAL_EXAM (thi chính thức); null = giữ nguyên. */
+            com.lms.common.enums.QuizType quizType
     ) {}
 
     public record OptionReq(
