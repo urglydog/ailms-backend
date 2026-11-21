@@ -18,6 +18,8 @@ public record MaterialGenerationReq(
         Long scopeRefId,
         java.util.List<Long> customLessonIds,
         QuantityLevel quantityLevel,
-        DifficultyLevel difficultyLevel
+        DifficultyLevel difficultyLevel,
+        /** Chỉ dùng khi materialType = QUIZ; OFFICIAL_EXAM chỉ được chấp nhận từ giảng viên của khóa học, còn lại bị bỏ qua (Quick Check). Trống = Quick Check. */
+        com.lms.common.enums.QuizType quizType
 ) {
 }

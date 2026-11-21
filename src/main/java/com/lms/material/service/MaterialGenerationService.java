@@ -169,6 +169,10 @@ public class MaterialGenerationService {
         }
         generation.setQuantityLevel(req.quantityLevel());
         generation.setDifficultyLevel(req.difficultyLevel());
+        // Thi chính thức chỉ do giảng viên của khóa học tạo; học viên (hoặc người khác) gửi OFFICIAL_EXAM thì bị hạ về Quick Check.
+        if (req.materialType() == com.lms.common.enums.MaterialType.QUIZ && isInstructor && req.quizType() == com.lms.common.enums.QuizType.OFFICIAL_EXAM) {
+            generation.setQuizType(com.lms.common.enums.QuizType.OFFICIAL_EXAM);
+        }
         generation.setVersionNo(nextVersion);
 
         java.util.List<com.lms.catalog.entity.Lesson> missingLessons = getMissingLessonsInScope(course.getId(), generation);

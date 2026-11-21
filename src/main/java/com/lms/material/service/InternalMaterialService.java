@@ -195,7 +195,11 @@ public class InternalMaterialService {
                 // Toàn bộ nhánh `finish()` này chỉ phục vụ sinh học liệu CÁ NHÂN (tự học/ôn tập)
                 // — không có `scopeType` nào ở đây là "thi chính thức" cả, nên luôn là LECTURE_QUIZ
                 // bất kể scope.
-                quiz.setQuizType(com.lms.common.enums.QuizType.LECTURE_QUIZ);
+                // NGOẠI LỆ (21/11/2026): giảng viên của khóa chọn "Thi chính thức" ở form tạo bằng AI thì `generation.quizType` = OFFICIAL_EXAM
+                // (MaterialGenerationService.create chỉ nhận giá trị này từ giảng viên của khóa); trước đây lựa chọn bị bỏ rơi nên đề thi có giám sát mở như Quick Check.
+                quiz.setQuizType(generation.getQuizType() == com.lms.common.enums.QuizType.OFFICIAL_EXAM
+                        ? com.lms.common.enums.QuizType.OFFICIAL_EXAM
+                        : com.lms.common.enums.QuizType.LECTURE_QUIZ);
                 quiz = quizRepository.save(quiz);
 
                 int order = 1;
