@@ -1,5 +1,6 @@
 package com.lms.payment.service;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
 import com.lms.catalog.entity.Course;
@@ -570,6 +571,7 @@ public class PaymentService {
     }
 
     @Scheduled(fixedDelay = 60000) // Chạy mỗi phút
+    @SchedulerLock(name = "PaymentService.cancelExpired", lockAtMostFor = "PT5M", lockAtLeastFor = "PT5S")
     @Transactional
     public void cancelExpiredPayments() {
         LocalDateTime expiryTime = LocalDateTime.now().minusMinutes(15);

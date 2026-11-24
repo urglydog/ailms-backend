@@ -17,6 +17,7 @@
 | 3 | Job nền và danh sách admin | Nạp **toàn bộ bảng** vào RAM | Đếm/lọc trong DB, xử lý theo lô 500, phân trang phía server | Bộ nhớ không còn tăng theo tổng dữ liệu |
 | 4 | Ổn định production | Log DEBUG ở mọi môi trường, không giới hạn request, pool chờ 30 s | Rate limit bằng Redis, log INFO, chỉnh Hikari | Vượt ngưỡng nhận 429 ngay; hết kết nối báo lỗi sau 5 s |
 | 5 | Chat realtime | Polling 5 s và 15 s; topic WebSocket không kiểm quyền | Đẩy qua STOMP/WebSocket + `ChannelInterceptor` kiểm quyền | ~16 → ~2 request/phút mỗi người; vá lỗ hổng nghe lén |
+| 6 | Ổn định nhiều người dùng/nhiều backend | 19 job chung 1 luồng; chạy 2 backend thì job chạy trùng; deploy cắt ngang request; JSON không nén | Pool scheduler 6 luồng, ShedLock + Redis, graceful shutdown, gzip | Chi tiết: [DOT6_OnDinh_NhieuNguoiDung.md](DOT6_OnDinh_NhieuNguoiDung.md) |
 
 Tổng số test sau cùng: **491 test backend** và **564 test frontend**, tất cả đều qua.
 

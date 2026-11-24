@@ -1,5 +1,6 @@
 package com.lms.live.service;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import com.lms.live.entity.LiveSession;
 import com.lms.live.enums.LiveSessionStatus;
 import com.lms.live.event.LiveSessionEndedEvent;
@@ -34,6 +35,7 @@ public class LiveSessionCronJob {
     private final RoomServiceClient roomServiceClient;
 
     @Scheduled(fixedRate = 15000)
+    @SchedulerLock(name = "LiveSessionCronJob.endDisconnected", lockAtMostFor = "PT1M", lockAtLeastFor = "PT5S")
     @Transactional
     public void endSessionsWithDisconnectedInstructor() {
         LocalDateTime threshold = LocalDateTime.now().minusSeconds(GRACE_SECONDS);

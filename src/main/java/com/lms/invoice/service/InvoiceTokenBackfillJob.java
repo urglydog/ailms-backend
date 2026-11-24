@@ -1,5 +1,6 @@
 package com.lms.invoice.service;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import com.lms.invoice.entity.Invoice;
 import com.lms.invoice.repository.InvoiceRepository;
 import java.util.List;
@@ -22,6 +23,7 @@ public class InvoiceTokenBackfillJob {
     private final TransactionTemplate transactionTemplate;
 
     @Scheduled(fixedDelay = 600_000, initialDelay = 90_000)
+    @SchedulerLock(name = "InvoiceTokenBackfillJob.run", lockAtMostFor = "PT10M", lockAtLeastFor = "PT10S")
     public void run() {
         try {
             int n = backfill();

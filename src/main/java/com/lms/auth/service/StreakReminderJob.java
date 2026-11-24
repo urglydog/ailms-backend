@@ -1,5 +1,6 @@
 package com.lms.auth.service;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.data.domain.Slice;
 import org.springframework.data.domain.PageRequest;
 import com.lms.auth.entity.UserStreak;
@@ -39,6 +40,7 @@ public class StreakReminderJob {
     private final NotificationService notificationService;
 
     @Scheduled(cron = "0 0 * * * ?")
+    @SchedulerLock(name = "StreakReminderJob.sendReminders", lockAtMostFor = "PT30M", lockAtLeastFor = "PT1M")
     @Transactional
     public void sendReminders() {
         // Hiệu năng đợt 3: chỉ đọc streak còn chuỗi và học trong 2 ngày gần đây (mọi múi giờ đều nằm trong
