@@ -37,8 +37,8 @@ sao, nhưng khi tăng lên 2 backend để chịu tải thì mọi job tài chí
   được khóa thì chạy, các instance khác bỏ qua lượt đó.
 - `lockAtMostFor`: thời gian giữ khóa tối đa, phòng khi instance giữ khóa bị sập (khóa tự hết hạn).
   Job 5–10 phút: `PT10M`; job hằng ngày/hằng giờ: `PT30M`; job 15–60 s: `PT1M`/`PT5M`.
-- `lockAtLeastFor`: giữ khóa thêm ít nhất một khoảng (`PT1M` cho job cron, `PT5–10S` cho job lặp), để
-  instance có đồng hồ lệch vài giây không chạy lại cùng một lượt.
+- `lockAtLeastFor`: job cron `PT1M`; job lặp theo chu kỳ ≈ 90–95% chu kỳ (xem mục "Thử thật với 2 backend"), để
+  instance khác (đồng hồ lệch, hoặc tự đếm chu kỳ riêng) không chạy lại cùng một lượt.
 - Dùng Redis vì hạ tầng đã có sẵn (cache, rate limit), không cần thêm bảng DB.
 
 **Job được khóa (16):** `StreakReminderJob`, `DebtService` (2 job), `PayosPayoutService`,
