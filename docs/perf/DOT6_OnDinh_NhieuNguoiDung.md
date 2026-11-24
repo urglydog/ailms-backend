@@ -84,3 +84,11 @@ DB 20 kết nối sẽ trở thành giới hạn chính.
 - Kiểm nén: `curl -s -H "Accept-Encoding: gzip" -D - -o /dev/null http://localhost:8080/api/v1/courses`
   phải thấy `Content-Encoding: gzip`.
 - Kiểm khóa job: khi backend chạy, `redis-cli KEYS 'job-lock:lms:*'` thấy khóa xuất hiện lúc job chạy.
+
+## Kết quả chạy thử (24/11/2026, máy local, Docker)
+
+- Backend khởi động bình thường, health `UP`.
+- **Gzip:** `GET /api/v1/courses?size=24` trả `Content-Encoding: gzip`, **9.895 → 2.407 byte (−76%)**.
+- **ShedLock:** quét Redis trong 20 s thấy các khóa `job-lock:lms:LiveSessionCronJob.endDisconnected`,
+  `job-lock:lms:PaymentCronJob.expirePending`, `job-lock:lms:PaymentService.cancelExpired`,
+  `job-lock:lms:DisputeDeadlineJob.markExpired` xuất hiện rồi tự hết hạn đúng như cấu hình.

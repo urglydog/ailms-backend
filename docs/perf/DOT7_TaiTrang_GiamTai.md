@@ -72,3 +72,19 @@ hay giới hạn IP nội bộ). Nếu đặt sau reverse proxy, giới hạn IP
 - be: `mvn test` toàn bộ test qua.
 - Kiểm tay (sau khi chạy thử): mở trang tài liệu có sơ đồ, tab Network thấy chunk mermaid chỉ tải khi sơ đồ
   hiện; gọi API banner 2 lần liên tiếp, lần 2 không có câu SQL (log Hibernate ở profile dev).
+
+## Kết quả chạy thử (24/11/2026, máy local)
+
+**fe — `next build` production, cột First Load JS (JavaScript phải tải khi mở trang lần đầu):**
+
+| Trang | Trước | Sau | Giảm |
+| --- | --- | --- | --- |
+| `/instructor/courses/[id]/edit/materials` (quản lý tài liệu) | 462 kB | **233 kB** | −50% |
+| `/materials/[id]` (học viên xem tài liệu) | 387 kB | **239 kB** | −38% |
+| `/admin/transactions/invoices` | 292 kB | **179 kB** | −39% |
+| `/instructor/earnings` | 259 kB | **146 kB** | −44% |
+
+Phần bị tách ra chỉ tải khi người dùng thật sự mở sơ đồ, mindmap hoặc chi tiết hóa đơn.
+
+**be — cache banner:** xóa cache rồi gọi API banner 5 lần liên tiếp → chỉ **1** câu SQL; key
+`systemBanner::active` có TTL 30 s trên Redis; thời gian phản hồi 9–26 ms.
