@@ -28,7 +28,7 @@ public class InvoiceIssueJob {
     private final InvoiceMailer mailer;
 
     @Scheduled(fixedDelay = 120_000, initialDelay = 180_000)
-    @SchedulerLock(name = "InvoiceIssueJob.run", lockAtMostFor = "PT10M", lockAtLeastFor = "PT10S")
+    @SchedulerLock(name = "InvoiceIssueJob.run", lockAtMostFor = "PT5M", lockAtLeastFor = "PT1M50S")
     public void run() {
         try {
             runOnce();

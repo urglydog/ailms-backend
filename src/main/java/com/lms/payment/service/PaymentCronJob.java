@@ -25,7 +25,7 @@ public class PaymentCronJob {
      * và chuyển sang trạng thái FAILED/EXPIRED.
      */
     @Scheduled(fixedRate = 60000)
-    @SchedulerLock(name = "PaymentCronJob.expirePending", lockAtMostFor = "PT5M", lockAtLeastFor = "PT5S")
+    @SchedulerLock(name = "PaymentCronJob.expirePending", lockAtMostFor = "PT5M", lockAtLeastFor = "PT55S")
     @Transactional
     public void expirePendingPayments() {
         LocalDateTime expiryTime = LocalDateTime.now().minusMinutes(15);

@@ -34,7 +34,7 @@ public class FinanceMaintenanceJob {
     private final UserRepository userRepository;
     private final NotificationService notificationService;
 
-    @SchedulerLock(name = "FinanceMaintenanceJob.maintenance", lockAtMostFor = "PT10M", lockAtLeastFor = "PT10S")
+    @SchedulerLock(name = "FinanceMaintenanceJob.maintenance", lockAtMostFor = "PT10M", lockAtLeastFor = "PT4M30S")
     @Scheduled(fixedDelay = 300_000, initialDelay = 120_000)
     public void expireUnconfirmedPayouts() {
         try {

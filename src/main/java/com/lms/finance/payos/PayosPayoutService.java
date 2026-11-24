@@ -572,7 +572,7 @@ public class PayosPayoutService {
 
     /** Hỏi PayOS kết quả các lệnh đã gửi nhưng chưa chốt (PayOS xử lý bất đồng bộ). */
     @Scheduled(fixedDelay = 120_000, initialDelay = 90_000)
-    @SchedulerLock(name = "PayosPayoutService.reconcile", lockAtMostFor = "PT10M", lockAtLeastFor = "PT10S")
+    @SchedulerLock(name = "PayosPayoutService.reconcile", lockAtMostFor = "PT5M", lockAtLeastFor = "PT1M50S")
     public void reconcileOpenOrders() {
         List<PayosPayoutOrder> open;
         try {

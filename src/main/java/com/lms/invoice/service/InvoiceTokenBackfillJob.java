@@ -23,7 +23,7 @@ public class InvoiceTokenBackfillJob {
     private final TransactionTemplate transactionTemplate;
 
     @Scheduled(fixedDelay = 600_000, initialDelay = 90_000)
-    @SchedulerLock(name = "InvoiceTokenBackfillJob.run", lockAtMostFor = "PT10M", lockAtLeastFor = "PT10S")
+    @SchedulerLock(name = "InvoiceTokenBackfillJob.run", lockAtMostFor = "PT15M", lockAtLeastFor = "PT9M30S")
     public void run() {
         try {
             int n = backfill();

@@ -54,7 +54,7 @@ public class MonthlyStatementService {
 
     /** Mỗi giờ: phát bảng kê cho tháng vừa xong (sau 6 giờ sáng) với các giảng viên chưa có. Idempotent nên bù được sau khi server tắt. */
     @Scheduled(fixedDelay = 3_600_000, initialDelay = 420_000)
-    @SchedulerLock(name = "MonthlyStatementService.generate", lockAtMostFor = "PT30M", lockAtLeastFor = "PT1M")
+    @SchedulerLock(name = "MonthlyStatementService.generate", lockAtMostFor = "PT1H", lockAtLeastFor = "PT55M")
     public void run() {
         try {
             LocalDateTime now = LocalDateTime.now();

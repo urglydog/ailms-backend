@@ -88,3 +88,13 @@ Phần bị tách ra chỉ tải khi người dùng thật sự mở sơ đồ, 
 
 **be — cache banner:** xóa cache rồi gọi API banner 5 lần liên tiếp → chỉ **1** câu SQL; key
 `systemBanner::active` có TTL 30 s trên Redis; thời gian phản hồi 9–26 ms.
+
+## Thử trên trình duyệt (24/11/2026, tài khoản giảng viên, dữ liệu thử đã xóa sau khi đo)
+
+| Chỗ | Cách thử | Kết quả |
+| --- | --- | --- |
+| Sơ đồ mermaid (`/materials/[id]`) | Tạo 1 mindmap thử, mở trang | Trang tải xong mới tải chunk mermaid (~1,1 MB) lúc 2,2 s; sơ đồ vẽ đúng tiếng Việt |
+| Trình sửa mindmap (quản lý tài liệu) | Mở mindmap, bấm "Chỉnh sửa" | Chunk mermaid tải khi mở; chunk trình sửa 751 KB chỉ tải khi bấm "Chỉnh sửa"; React Flow vẽ đủ 5 nút |
+| Chi tiết bảng kê (`/instructor/earnings`) | Tạo 1 bảng kê tháng thử | Chunk `InvoiceDetailBody` (1,3 MB, có recharts) chỉ tải khi có bảng kê để hiện; giảng viên chưa có bảng kê thì không tải; biểu đồ vẽ đủ 2 cột |
+
+Trang hóa đơn admin dùng cùng component và cùng cách tải, chưa thử bằng tài khoản admin.

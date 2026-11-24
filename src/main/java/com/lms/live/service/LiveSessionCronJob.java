@@ -35,7 +35,7 @@ public class LiveSessionCronJob {
     private final RoomServiceClient roomServiceClient;
 
     @Scheduled(fixedRate = 15000)
-    @SchedulerLock(name = "LiveSessionCronJob.endDisconnected", lockAtMostFor = "PT1M", lockAtLeastFor = "PT5S")
+    @SchedulerLock(name = "LiveSessionCronJob.endDisconnected", lockAtMostFor = "PT1M", lockAtLeastFor = "PT14S")
     @Transactional
     public void endSessionsWithDisconnectedInstructor() {
         LocalDateTime threshold = LocalDateTime.now().minusSeconds(GRACE_SECONDS);

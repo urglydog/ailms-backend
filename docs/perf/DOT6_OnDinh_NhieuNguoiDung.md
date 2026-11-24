@@ -92,3 +92,33 @@ DB 20 kết nối sẽ trở thành giới hạn chính.
 - **ShedLock:** quét Redis trong 20 s thấy các khóa `job-lock:lms:LiveSessionCronJob.endDisconnected`,
   `job-lock:lms:PaymentCronJob.expirePending`, `job-lock:lms:PaymentService.cancelExpired`,
   `job-lock:lms:DisputeDeadlineJob.markExpired` xuất hiện rồi tự hết hạn đúng như cấu hình.
+
+## Thử thật với 2 backend chạy song song (24/11/2026)
+
+Chạy thêm instance thứ hai (jar của nhánh `perf`, cùng MySQL và Redis) bên cạnh backend Docker, rồi đọc giá
+trị khóa `job-lock:lms:*` trên Redis (dạng `ADDED:<thời điểm>@<hostname>`) để biết instance nào chạy job.
+
+**Phát hiện:** cấu hình ban đầu đặt `lockAtLeastFor` ngắn (5–10 s) cho job chạy theo chu kỳ (`fixedDelay`,
+`fixedRate`). Mỗi instance tự đếm giờ riêng, nên khóa chỉ ngăn **chạy cùng lúc**, không ngăn **mỗi instance chạy
+một lần mỗi chu kỳ**. Đo được `DebtService.reconcilePending` (5 phút/lần) chạy ở **cả 2** instance trong 2 phút.
+Job cron (chạy theo giờ cố định) không bị vì 2 instance cùng tới giờ một lúc.
+
+**Sửa:** với job chạy theo chu kỳ, `lockAtLeastFor` ≈ 90–95% chu kỳ (vd. job 5 phút: `PT4M30S`; job 60 s:
+`PT55S`; job 15 s: `PT14S`). Instance chạy trước giữ khóa gần hết chu kỳ, instance kia bỏ lượt.
+`SchedulerLockCoverageTest` thêm luật: job chu kỳ phải có `0,8 × chu kỳ ≤ lockAtLeastFor < chu kỳ` và
+`lockAtMostFor ≥ lockAtLeastFor`.
+
+**Đo lại sau khi sửa (5 phút, 2 instance):**
+
+| Job | Chu kỳ | Số lần chạy cả cụm | Kỳ vọng |
+| --- | --- | --- | --- |
+| `LiveSessionCronJob.endDisconnected` | 15 s | 20 | 20 |
+| `PaymentCronJob.expirePending` | 60 s | 6 | 5–6 |
+| `PaymentService.cancelExpired` | 60 s | 6 | 5–6 |
+| `PayosPayoutService.reconcile` | 2 phút | 3 | 2–3 |
+| `DebtService.reconcilePending` | 5 phút | 2 | 1–2 |
+
+Mỗi job chạy khoảng **một lần mỗi chu kỳ cho cả cụm**, không còn nhân đôi theo số instance.
+
+**Tắt server an toàn:** khi `docker stop`/`restart`, log có `Commencing graceful shutdown. Waiting for active
+requests to complete` rồi `Graceful shutdown complete` ở cả 2 instance.

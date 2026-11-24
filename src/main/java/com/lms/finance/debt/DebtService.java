@@ -241,7 +241,7 @@ public class DebtService {
     }
 
     /** Đối soát các link trả nợ còn chờ (phòng webhook không tới): hỏi PayOS trạng thái từng link. */
-    @SchedulerLock(name = "DebtService.reconcilePending", lockAtMostFor = "PT10M", lockAtLeastFor = "PT10S")
+    @SchedulerLock(name = "DebtService.reconcilePending", lockAtMostFor = "PT10M", lockAtLeastFor = "PT4M30S")
     @Scheduled(fixedDelay = 300_000, initialDelay = 150_000)
     public void reconcilePending() {
         List<InstructorDebtPayment> open;
