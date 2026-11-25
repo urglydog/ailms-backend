@@ -19,6 +19,8 @@ services:
   mysql:
     image: mysql:8.0
     container_name: lms_mysql
+    # Trần RAM (26/11/2026) — chỉ là giới hạn trên, không chiếm sẵn; xem docs/perf/GIOI_HAN_RAM.md
+    mem_limit: 768m
     restart: unless-stopped
     # utf8mb4 là BẮT BUỘC: transcript tiếng Việt/Nhật/Hàn sẽ lỗi với charset mặc định
     command: >
@@ -44,6 +46,8 @@ services:
   redis:
     image: redis:7-alpine
     container_name: lms_redis
+    # Trần RAM (26/11/2026) — chỉ là giới hạn trên, không chiếm sẵn; xem docs/perf/GIOI_HAN_RAM.md
+    mem_limit: 320m
     restart: unless-stopped
     command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:?Thieu_Mat_Khau_Redis_trong_env}
     volumes:
@@ -59,6 +63,8 @@ services:
   adminer:
     image: adminer:latest
     container_name: lms_adminer
+    # Trần RAM (26/11/2026) — chỉ là giới hạn trên, không chiếm sẵn; xem docs/perf/GIOI_HAN_RAM.md
+    mem_limit: 64m
     restart: unless-stopped
     ports:
       - "127.0.0.1:${ADMINER_PORT:-8083}:8080"
@@ -73,6 +79,8 @@ services:
   mailpit:
     image: axllent/mailpit:latest
     container_name: lms_mailpit
+    # Trần RAM (26/11/2026) — chỉ là giới hạn trên, không chiếm sẵn; xem docs/perf/GIOI_HAN_RAM.md
+    mem_limit: 96m
     restart: unless-stopped
     ports:
       - "127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025"
@@ -90,6 +98,8 @@ services:
     image: lms-backend:prod
     pull_policy: never
     container_name: lms_backend
+    # Trần RAM (26/11/2026) — chỉ là giới hạn trên, không chiếm sẵn; xem docs/perf/GIOI_HAN_RAM.md
+    mem_limit: 1536m
     restart: unless-stopped
     # Giới hạn dung lượng log (25/11/2026): log backend ở chế độ dev đã lên tới 302 MB và tăng mãi
     # vì Docker mặc định không xoay vòng. Tối đa 3 file x 20 MB.
@@ -211,6 +221,8 @@ services:
       context: ../ai-worker
       dockerfile: Dockerfile
     container_name: lms_ai_api
+    # Trần RAM (26/11/2026) — chỉ là giới hạn trên, không chiếm sẵn; xem docs/perf/GIOI_HAN_RAM.md
+    mem_limit: 384m
     restart: unless-stopped
     # --reload-dir: chỉ theo dõi thư mục code `app/` (không theo dõi NCKH/, tests/ ...) để file thí nghiệm
     # không làm API tự khởi động lại (NCKH N4, 13/11/2026).
@@ -253,6 +265,9 @@ services:
       context: ../ai-worker
       dockerfile: Dockerfile
     container_name: lms_ai_worker
+    # Trần RAM (26/11/2026) — chỉ là giới hạn trên, không chiếm sẵn; xem docs/perf/GIOI_HAN_RAM.md
+    mem_limit: 1280m
+    oom_score_adj: 500   # khi máy cạn RAM, hệ điều hành dừng container này trước MySQL/backend/Redis
     restart: unless-stopped
     command: celery -A app.celery_app worker --loglevel=info --concurrency=8
     logging: *ai_logging
@@ -274,6 +289,8 @@ services:
       context: ../ai-worker
       dockerfile: Dockerfile
     container_name: lms_ai_beat
+    # Trần RAM (26/11/2026) — chỉ là giới hạn trên, không chiếm sẵn; xem docs/perf/GIOI_HAN_RAM.md
+    mem_limit: 192m
     restart: unless-stopped
     command: celery -A app.celery_app beat --loglevel=info
     logging: *ai_logging
@@ -330,6 +347,8 @@ services:
   caddy:
     image: caddy:2-alpine
     container_name: lms_caddy
+    # Trần RAM (26/11/2026) — chỉ là giới hạn trên, không chiếm sẵn; xem docs/perf/GIOI_HAN_RAM.md
+    mem_limit: 128m
     restart: unless-stopped
     ports:
       - "80:80"
