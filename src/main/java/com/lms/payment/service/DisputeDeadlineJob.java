@@ -1,5 +1,6 @@
 package com.lms.payment.service;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import com.lms.auth.repository.UserRepository;
 import com.lms.common.enums.DisputeStatus;
 import com.lms.common.enums.InstructorDecision;
@@ -31,6 +32,7 @@ public class DisputeDeadlineJob {
     private final NotificationService notificationService;
 
     @Scheduled(cron = "0 5 * * * *")
+    @SchedulerLock(name = "DisputeDeadlineJob.markExpired", lockAtMostFor = "PT30M", lockAtLeastFor = "PT1M")
     @Transactional
     public void markExpiredInstructorResponses() {
         markExpired(LocalDateTime.now());

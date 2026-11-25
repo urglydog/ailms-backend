@@ -1,5 +1,6 @@
 package com.lms.finance.debt;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
 import com.lms.common.enums.DebtPaymentStatus;
@@ -240,6 +241,7 @@ public class DebtService {
     }
 
     /** Đối soát các link trả nợ còn chờ (phòng webhook không tới): hỏi PayOS trạng thái từng link. */
+    @SchedulerLock(name = "DebtService.reconcilePending", lockAtMostFor = "PT10M", lockAtLeastFor = "PT4M30S")
     @Scheduled(fixedDelay = 300_000, initialDelay = 150_000)
     public void reconcilePending() {
         List<InstructorDebtPayment> open;
@@ -282,6 +284,7 @@ public class DebtService {
 
     /** Mỗi đêm: dựng/xóa trạng thái nợ theo sổ cái thật và báo giảng viên khi lên bậc. */
     @Scheduled(cron = "0 20 3 * * *")
+    @SchedulerLock(name = "DebtService.refreshAllStates", lockAtMostFor = "PT30M", lockAtLeastFor = "PT1M")
     @Transactional
     public void refreshAllStates() {
         LocalDateTime now = LocalDateTime.now();

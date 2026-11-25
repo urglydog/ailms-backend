@@ -20,6 +20,7 @@
     <properties>
         <!-- Java 17 theo đặc tả dự án: record DTO, pattern matching -->
         <java.version>17</java.version>
+        <shedlock.version>6.3.1</shedlock.version>
     </properties>
 
     <dependencies>
@@ -89,6 +90,17 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+        <!-- Hiệu năng đợt 6 (A2): khóa phân tán cho @Scheduled — chạy nhiều backend không bị chạy trùng job -->
+        <dependency>
+            <groupId>net.javacrumbs.shedlock</groupId>
+            <artifactId>shedlock-spring</artifactId>
+            <version>${shedlock.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>net.javacrumbs.shedlock</groupId>
+            <artifactId>shedlock-provider-redis-spring</artifactId>
+            <version>${shedlock.version}</version>
         </dependency>
 
         <!-- ── WebSocket/STOMP: đẩy tiến độ job + thông báo (BR-NOTIFY-01) ── -->

@@ -1,5 +1,6 @@
 package com.lms.finance.service;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import com.lms.auth.repository.UserRepository;
 import com.lms.common.enums.Role;
 import com.lms.common.service.NotificationService;
@@ -33,6 +34,7 @@ public class FinanceMaintenanceJob {
     private final UserRepository userRepository;
     private final NotificationService notificationService;
 
+    @SchedulerLock(name = "FinanceMaintenanceJob.maintenance", lockAtMostFor = "PT10M", lockAtLeastFor = "PT4M30S")
     @Scheduled(fixedDelay = 300_000, initialDelay = 120_000)
     public void expireUnconfirmedPayouts() {
         try {
@@ -46,6 +48,7 @@ public class FinanceMaintenanceJob {
     }
 
     @Scheduled(cron = "0 10 3 * * *")
+    @SchedulerLock(name = "FinanceMaintenanceJob.reconcileLedger", lockAtMostFor = "PT30M", lockAtLeastFor = "PT1M")
     public void reconcileLedger() {
         try {
             int healed = reconcileMissingEarnings();

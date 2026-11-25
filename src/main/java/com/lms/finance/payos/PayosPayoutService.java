@@ -1,5 +1,6 @@
 package com.lms.finance.payos;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
 import com.lms.common.enums.PayosFailureCategory;
@@ -571,6 +572,7 @@ public class PayosPayoutService {
 
     /** Hỏi PayOS kết quả các lệnh đã gửi nhưng chưa chốt (PayOS xử lý bất đồng bộ). */
     @Scheduled(fixedDelay = 120_000, initialDelay = 90_000)
+    @SchedulerLock(name = "PayosPayoutService.reconcile", lockAtMostFor = "PT5M", lockAtLeastFor = "PT1M50S")
     public void reconcileOpenOrders() {
         List<PayosPayoutOrder> open;
         try {
