@@ -1,5 +1,6 @@
 package com.lms.payment.service;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import com.lms.payment.entity.Payment;
 import com.lms.payment.repository.PaymentRepository;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +25,7 @@ public class PaymentCronJob {
      * và chuyển sang trạng thái FAILED/EXPIRED.
      */
     @Scheduled(fixedRate = 60000)
+    @SchedulerLock(name = "PaymentCronJob.expirePending", lockAtMostFor = "PT5M", lockAtLeastFor = "PT55S")
     @Transactional
     public void expirePendingPayments() {
         LocalDateTime expiryTime = LocalDateTime.now().minusMinutes(15);

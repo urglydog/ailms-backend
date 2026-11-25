@@ -56,6 +56,8 @@ public class CacheConfig implements CachingConfigurer {
         // evict thủ công ở từng service ghi (Enrollment/Wishlist/Certificate), chấp nhận trễ vài
         // phút để tránh nhiều điểm phải nhớ evict đồng thời, dễ sót gây cache "ngầm" (29/09/2026).
         cacheConfigurations.put("publicProfile", defaultCacheConfig.entryTtl(Duration.ofMinutes(10)));
+        // Hiệu năng đợt 7 (C9): banner thông báo hệ thống, TTL ngắn để tự bật/tắt đúng giờ.
+        cacheConfigurations.put("systemBanner", defaultCacheConfig.entryTtl(Duration.ofSeconds(30)));
 
         return RedisCacheManager.builder(redisConnectionFactory)
                 .cacheDefaults(defaultCacheConfig)

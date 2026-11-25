@@ -1,5 +1,6 @@
 package com.lms.report.service;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,6 +19,7 @@ public class FinanceReportJob {
     private final FinanceReportService reportService;
 
     @Scheduled(fixedDelay = 3_600_000, initialDelay = 300_000)
+    @SchedulerLock(name = "FinanceReportJob.run", lockAtMostFor = "PT1H", lockAtLeastFor = "PT55M")
     public void run() {
         try {
             int n = reportService.runScheduled(LocalDateTime.now());

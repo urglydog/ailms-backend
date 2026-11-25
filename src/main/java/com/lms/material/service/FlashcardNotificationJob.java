@@ -1,5 +1,6 @@
 package com.lms.material.service;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import com.lms.material.repository.projection.FlashcardDueCount;
 import com.lms.material.repository.FlashcardReviewRepository;
 import lombok.RequiredArgsConstructor;
@@ -30,6 +31,7 @@ public class FlashcardNotificationJob {
      * Thuật toán: Quét các thẻ có nextReviewAt <= ngày hiện tại.
      */
     @Scheduled(cron = "0 0 8 * * ?")
+    @SchedulerLock(name = "FlashcardNotificationJob.notify", lockAtMostFor = "PT30M", lockAtLeastFor = "PT1M")
     public void notifySpacedRepetition() {
         log.info("Starting SRS Notification Job...");
         LocalDateTime now = LocalDateTime.now();

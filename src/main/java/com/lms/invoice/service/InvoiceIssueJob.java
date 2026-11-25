@@ -1,5 +1,6 @@
 package com.lms.invoice.service;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import com.lms.invoice.entity.Invoice;
 import java.util.List;
 import java.util.Optional;
@@ -27,6 +28,7 @@ public class InvoiceIssueJob {
     private final InvoiceMailer mailer;
 
     @Scheduled(fixedDelay = 120_000, initialDelay = 180_000)
+    @SchedulerLock(name = "InvoiceIssueJob.run", lockAtMostFor = "PT5M", lockAtLeastFor = "PT1M50S")
     public void run() {
         try {
             runOnce();

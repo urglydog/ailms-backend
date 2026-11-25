@@ -1,5 +1,6 @@
 package com.lms.payment.service;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import com.lms.auth.repository.UserRepository;
 import com.lms.catalog.repository.CourseRepository;
 import com.lms.common.enums.Role;
@@ -35,6 +36,7 @@ public class RefundRateFlagJob {
     private final SystemConfigService config;
 
     @Scheduled(cron = "0 40 3 * * *")
+    @SchedulerLock(name = "RefundRateFlagJob.run", lockAtMostFor = "PT30M", lockAtLeastFor = "PT1M")
     public void run() {
         try {
             int flagged = scan(LocalDateTime.now());

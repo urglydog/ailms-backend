@@ -1,5 +1,7 @@
 package com.lms.announcement.service;
 
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Slice;
 import org.springframework.data.domain.PageRequest;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -53,8 +55,11 @@ public class SystemAnnouncementService {
     @Value("${lms.redis-keys.admin-broadcast-queue:lms:admin-broadcast:jobs}")
     private String queueKey;
 
+    public static final String BANNER_CACHE = "systemBanner";
+
     public record BroadcastJob(Long announcementId) {}
 
+    @CacheEvict(value = BANNER_CACHE, allEntries = true)
     @Transactional
     public Res create(String adminEmail, CreateReq req) {
         User admin = userRepository.findByEmail(adminEmail)
@@ -107,6 +112,7 @@ public class SystemAnnouncementService {
     }
 
     /** Sửa tiêu đề/nội dung/hạn banner; cập nhật luôn các thông báo đã gửi tới người dùng. Thông báo đã thu hồi thì không sửa được. */
+    @CacheEvict(value = BANNER_CACHE, allEntries = true)
     @Transactional
     public Res update(Long id, com.lms.announcement.dto.SystemAnnouncementDto.UpdateReq req) {
         SystemAnnouncement a = announcementRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("SystemAnnouncement", id));
@@ -122,6 +128,7 @@ public class SystemAnnouncementService {
     }
 
     /** Thu hồi: ẩn khỏi mọi người dùng (kể cả banner), giữ bản ghi ở admin. Gọi lại khi đã thu hồi thì không làm gì (idempotent). */
+    @CacheEvict(value = BANNER_CACHE, allEntries = true)
     @Transactional
     public Res revoke(Long id) {
         SystemAnnouncement a = announcementRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("SystemAnnouncement", id));
@@ -135,6 +142,7 @@ public class SystemAnnouncementService {
     }
 
     /** Khôi phục thông báo đã thu hồi: hiện lại cho người dùng (banner còn hạn cũng hiện lại). Thông báo chưa bị thu hồi thì không làm gì (idempotent). */
+    @CacheEvict(value = BANNER_CACHE, allEntries = true)
     @Transactional
     public Res restore(Long id) {
         SystemAnnouncement a = announcementRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("SystemAnnouncement", id));
@@ -148,6 +156,7 @@ public class SystemAnnouncementService {
     }
 
     /** Xóa hẳn một thông báo ĐÃ THU HỒI (bản ghi và các thông báo đã gửi). Thông báo còn hiệu lực phải thu hồi trước — tránh xóa nhầm. */
+    @CacheEvict(value = BANNER_CACHE, allEntries = true)
     @Transactional
     public void deleteRevoked(Long id) {
         SystemAnnouncement a = announcementRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("SystemAnnouncement", id));
@@ -163,6 +172,12 @@ public class SystemAnnouncementService {
         return "ANN:" + announcementId;
     }
 
+    /**
+     * Hiệu năng đợt 7 (C9): mọi người dùng đang mở web gọi API banner mỗi 5 phút — trước đây mỗi lần là 1 câu
+     * SQL. Cache Redis 30 s (kể cả kết quả "không có banner"); admin tạo/sửa/thu hồi/khôi phục/xóa thì xóa
+     * cache ngay. TTL ngắn để banner tự hiện/ẩn đúng giờ bắt đầu/kết thúc mà không cần job riêng.
+     */
+    @Cacheable(value = BANNER_CACHE, key = "'active'")
     @Transactional(readOnly = true)
     public BannerRes getActiveBanner() {
         return announcementRepository.findLatestActiveHighSeverity(LocalDateTime.now())

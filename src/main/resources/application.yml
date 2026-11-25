@@ -6,6 +6,21 @@ spring:
   application:
     name: ai-powered-lms
 
+  # Hiệu năng đợt 6 (A3): khi tắt server, chờ tối đa 30s cho request/job đang chạy xong thay vì cắt ngang.
+  lifecycle:
+    timeout-per-shutdown-phase: ${SHUTDOWN_TIMEOUT:30s}
+
+  # Hiệu năng đợt 6 (A1): mặc định Spring chạy MỌI @Scheduled trên 1 luồng duy nhất — 19 job chờ nhau,
+  # job phát thông báo dài làm trễ job quét thanh toán. Pool nhiều luồng để các job độc lập không chặn nhau.
+  task:
+    scheduling:
+      pool:
+        size: ${SCHEDULER_POOL_SIZE:6}
+      thread-name-prefix: lms-sched-
+      shutdown:
+        await-termination: true
+        await-termination-period: 30s
+
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/lms_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Ho_Chi_Minh&useUnicode=true&characterEncoding=UTF-8}
     username: ${SPRING_DATASOURCE_USERNAME:lms_user}
@@ -80,6 +95,13 @@ spring:
 
 server:
   port: 8080
+  # Hiệu năng đợt 6 (A3): không nhận request mới khi đang tắt, xử lý xong request cũ (xem spring.lifecycle).
+  shutdown: graceful
+  # Hiệu năng đợt 6 (A4): nén gzip JSON/text > 1 KB (danh sách khóa học, tìm kiếm nhẹ đi ~70-80%).
+  compression:
+    enabled: ${HTTP_COMPRESSION:true}
+    min-response-size: 1024
+    mime-types: application/json,application/problem+json,text/html,text/plain,text/css,application/javascript
   error:
     include-message: always
     include-binding-errors: always
