@@ -76,6 +76,20 @@ class StompAuthInterceptorTest {
     }
 
     @Test
+    void send_toAppDestination_requiresLogin() {
+        Map<String, Object> anonymous = new HashMap<>();
+        assertThatThrownBy(() -> interceptor.preSend(frame(StompCommand.SEND, anonymous, "/app/chat/5", null), null))
+                .isInstanceOf(MessageDeliveryException.class);
+    }
+
+    @Test
+    void send_toAppDestination_allowedWhenLoggedIn() {
+        Map<String, Object> session = connectedAs(7L, "a@lms.local");
+        assertThatCode(() -> interceptor.preSend(frame(StompCommand.SEND, session, "/app/chat/5", null), null))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
     void anonymous_canUsePublicTopics_butNotPrivate() {
         Map<String, Object> session = new HashMap<>();
         interceptor.preSend(frame(StompCommand.CONNECT, session, null, null), null);
