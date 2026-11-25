@@ -27,6 +27,9 @@ services:
       --character-set-server=utf8mb4
       --collation-server=utf8mb4_unicode_ci
       --default-authentication-plugin=caching_sha2_password
+      --slow_query_log=1
+      --long_query_time=1
+      --slow_query_log_file=/var/lib/mysql/slow.log
     environment:
       TZ: Asia/Ho_Chi_Minh
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
@@ -49,7 +52,9 @@ services:
     # Trần RAM (26/11/2026) — chỉ là giới hạn trên, không chiếm sẵn; xem docs/perf/GIOI_HAN_RAM.md
     mem_limit: 320m
     restart: unless-stopped
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:?Thieu_Mat_Khau_Redis_trong_env}
+    # maxmemory 192mb (< trần container 320m, chừa chỗ cho ghi lại file AOF). volatile-lru: khi đầy chỉ loại khoá CÓ hạn dùng
+    # (bộ đếm rate limit, cache); hàng đợi Celery và khoá không hạn không bị loại (26/11/2026).
+    command: redis-server --appendonly yes --maxmemory 192mb --maxmemory-policy volatile-lru --requirepass ${REDIS_PASSWORD:?Thieu_Mat_Khau_Redis_trong_env}
     volumes:
       - redis_data:/data
     # Healthcheck để backend/worker chờ đúng thời điểm Redis sẵn sàng
@@ -224,9 +229,15 @@ services:
     # Trần RAM (26/11/2026) — chỉ là giới hạn trên, không chiếm sẵn; xem docs/perf/GIOI_HAN_RAM.md
     mem_limit: 384m
     restart: unless-stopped
-    # --reload-dir: chỉ theo dõi thư mục code `app/` (không theo dõi NCKH/, tests/ ...) để file thí nghiệm
-    # không làm API tự khởi động lại (NCKH N4, 13/11/2026).
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/app --reload-exclude "NCKH/experiments/*"
+    # Chạy kiểu production (26/11/2026): bỏ --reload (tự nạp lại khi file đổi). Code AI vẫn mount từ ../ai-worker,
+    # nên sau khi sửa code phải khởi động lại: `docker compose up -d --no-build --force-recreate ai-api`.
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
     # Giới hạn dung lượng log để không phình đầy ổ đĩa (NCKH N4, 13/11/2026): tối đa 3 file x 10 MB / container.
     logging: &ai_logging
       driver: json-file
