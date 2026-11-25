@@ -1,0 +1,15 @@
+# Caddy — cổng HTTPS duy nhất của backend (26/11/2026).
+# Thay cho lệnh `caddy reverse-proxy --from 46.224.175.90.nip.io --to backend:8080`: cùng hành vi (HTTPS tự động Let's Encrypt,
+# tự chuyển 80 -> 443, WebSocket qua cùng đường proxy), thêm header bảo mật. Chứng chỉ vẫn nằm trong volume caddy_data.
+46.224.175.90.nip.io {
+	header {
+		# Buộc trình duyệt dùng HTTPS với tên miền này (180 ngày; chưa bật includeSubDomains/preload vì là tên miền nip.io).
+		Strict-Transport-Security "max-age=15552000"
+		# API chỉ trả JSON/file: không cho nhúng, không cho tải thêm tài nguyên từ phản hồi của API.
+		Content-Security-Policy "default-src 'none'; frame-ancestors 'none'"
+		Referrer-Policy "no-referrer"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+	}
+	reverse_proxy backend:8080
+}

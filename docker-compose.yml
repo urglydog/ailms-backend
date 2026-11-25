@@ -365,10 +365,25 @@ services:
       - "80:80"
       - "443:443"
       - "8443:443"
-    command: caddy reverse-proxy --from 46.224.175.90.nip.io --to backend:8080
+    # Cấu hình nằm ở ./Caddyfile (26/11/2026): cùng hành vi lệnh `caddy reverse-proxy` cũ + header bảo mật.
+    command: caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
     volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
+    # Kiểm tra Caddy đang nghe cổng 80/443 (admin API của Caddy không mở nên không dùng được).
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z -w 3 127.0.0.1 443 && nc -z -w 3 127.0.0.1 80"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    # Giới hạn log (Caddy không có xoay vòng mặc định): tối đa 3 file x 10 MB.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     depends_on:
       backend:
         condition: service_started
