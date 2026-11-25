@@ -32,6 +32,15 @@ public class LessonChatService {
     private final SimpMessagingTemplate messagingTemplate;
     private final NotificationService notificationService;
 
+    /** Tên hiển thị THẬT của người gửi (không tin tên client gửi lên); thiếu thì dùng {@code fallback}. */
+    @Transactional(readOnly = true)
+    public String displayNameOf(Long userId, String fallback) {
+        return userRepository.findById(userId)
+                .map(User::getFullName)
+                .filter(n -> n != null && !n.isBlank())
+                .orElse(fallback);
+    }
+
     @Transactional(readOnly = true)
     public List<ChatMessageDto> getChatHistory(Long lessonId) {
         Lesson lesson = lessonRepository.findById(lessonId)

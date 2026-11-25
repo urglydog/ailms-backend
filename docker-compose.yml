@@ -19,12 +19,17 @@ services:
   mysql:
     image: mysql:8.0
     container_name: lms_mysql
+    # Trần RAM (26/11/2026) — chỉ là giới hạn trên, không chiếm sẵn; xem docs/perf/GIOI_HAN_RAM.md
+    mem_limit: 768m
     restart: unless-stopped
     # utf8mb4 là BẮT BUỘC: transcript tiếng Việt/Nhật/Hàn sẽ lỗi với charset mặc định
     command: >
       --character-set-server=utf8mb4
       --collation-server=utf8mb4_unicode_ci
       --default-authentication-plugin=caching_sha2_password
+      --slow_query_log=1
+      --long_query_time=1
+      --slow_query_log_file=/var/lib/mysql/slow.log
     environment:
       TZ: Asia/Ho_Chi_Minh
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
@@ -44,8 +49,12 @@ services:
   redis:
     image: redis:7-alpine
     container_name: lms_redis
+    # Trần RAM (26/11/2026) — chỉ là giới hạn trên, không chiếm sẵn; xem docs/perf/GIOI_HAN_RAM.md
+    mem_limit: 320m
     restart: unless-stopped
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:?Thieu_Mat_Khau_Redis_trong_env}
+    # maxmemory 192mb (< trần container 320m, chừa chỗ cho ghi lại file AOF). volatile-lru: khi đầy chỉ loại khoá CÓ hạn dùng
+    # (bộ đếm rate limit, cache); hàng đợi Celery và khoá không hạn không bị loại (26/11/2026).
+    command: redis-server --appendonly yes --maxmemory 192mb --maxmemory-policy volatile-lru --requirepass ${REDIS_PASSWORD:?Thieu_Mat_Khau_Redis_trong_env}
     volumes:
       - redis_data:/data
     # Healthcheck để backend/worker chờ đúng thời điểm Redis sẵn sàng
@@ -59,6 +68,8 @@ services:
   adminer:
     image: adminer:latest
     container_name: lms_adminer
+    # Trần RAM (26/11/2026) — chỉ là giới hạn trên, không chiếm sẵn; xem docs/perf/GIOI_HAN_RAM.md
+    mem_limit: 64m
     restart: unless-stopped
     ports:
       - "127.0.0.1:${ADMINER_PORT:-8083}:8080"
@@ -73,6 +84,8 @@ services:
   mailpit:
     image: axllent/mailpit:latest
     container_name: lms_mailpit
+    # Trần RAM (26/11/2026) — chỉ là giới hạn trên, không chiếm sẵn; xem docs/perf/GIOI_HAN_RAM.md
+    mem_limit: 96m
     restart: unless-stopped
     ports:
       - "127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025"
@@ -84,10 +97,14 @@ services:
 
   # ── Service 1: Backend lõi (Spring Boot 3 + Maven) ────────────
   backend:
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
+    # Image production (25/11/2026): jar build sẵn, không hot-reload, không mount thư mục code.
+    # Build + phát hành: xem docs/perf/QUY_TRINH_PHAT_HANH_BACKEND.md. Chế độ phát triển cũ (mvn
+    # spring-boot:run, mount code) vẫn còn trong Dockerfile.dev nếu cần quay lại.
+    image: lms-backend:prod
+    pull_policy: never
     container_name: lms_backend
+    # Trần RAM (26/11/2026) — chỉ là giới hạn trên, không chiếm sẵn; xem docs/perf/GIOI_HAN_RAM.md
+    mem_limit: 1536m
     restart: unless-stopped
     # Giới hạn dung lượng log (25/11/2026): log backend ở chế độ dev đã lên tới 302 MB và tăng mãi
     # vì Docker mặc định không xoay vòng. Tối đa 3 file x 20 MB.
@@ -106,7 +123,9 @@ services:
       # dung thuc te de loi khai bao o tren tro thanh dung, sua tan goc thay vi sua tung cho.
       TZ: Asia/Ho_Chi_Minh
       LMS_CORS_ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
-      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
+      # Đặt cứng `prod` (không đọc từ .env vì .env đang là `dev`): image này là bản chạy thật.
+      SPRING_PROFILES_ACTIVE: prod
+      JAVA_OPTS: ${BACKEND_JAVA_OPTS:--Xms128m -Xmx896m -XX:MaxMetaspaceSize=256m -XX:+UseSerialGC}
       # Nap du lieu demo (khoa hoc YouTube + hoc vien/ghi danh/thanh toan gia lap) — chi them, khong xoa.
       # Bat bang APP_DEMO_SEED_ENABLED=true; mat khau chung dat trong .env (khong commit).
       APP_DEMO_SEED_ENABLED: ${APP_DEMO_SEED_ENABLED:-false}
@@ -187,9 +206,6 @@ services:
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
       LMS_PAYOUT_ENCRYPTION_KEY: ${LMS_PAYOUT_ENCRYPTION_KEY:-}
-    volumes:
-      - .:/app                              # hot-reload khi sửa code
-      - backend_maven_cache:/root/.m2       # cache dependency Maven giữa các lần chạy
     depends_on:
       mysql:
         condition: service_healthy
@@ -200,7 +216,7 @@ services:
       interval: 15s
       timeout: 5s
       retries: 10
-      start_period: 120s   # Maven tải dependency lần đầu rất lâu
+      start_period: 120s
 
   # ── Service 2a: AI API (FastAPI, HTTP đồng bộ) ────────────────
   # Phục vụ UC30 Socratic Tutor và UC49 Course Discovery — hai UC này
@@ -210,10 +226,18 @@ services:
       context: ../ai-worker
       dockerfile: Dockerfile
     container_name: lms_ai_api
+    # Trần RAM (26/11/2026) — chỉ là giới hạn trên, không chiếm sẵn; xem docs/perf/GIOI_HAN_RAM.md
+    mem_limit: 384m
     restart: unless-stopped
-    # --reload-dir: chỉ theo dõi thư mục code `app/` (không theo dõi NCKH/, tests/ ...) để file thí nghiệm
-    # không làm API tự khởi động lại (NCKH N4, 13/11/2026).
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/app --reload-exclude "NCKH/experiments/*"
+    # Chạy kiểu production (26/11/2026): bỏ --reload (tự nạp lại khi file đổi). Code AI vẫn mount từ ../ai-worker,
+    # nên sau khi sửa code phải khởi động lại: `docker compose up -d --no-build --force-recreate ai-api`.
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
     # Giới hạn dung lượng log để không phình đầy ổ đĩa (NCKH N4, 13/11/2026): tối đa 3 file x 10 MB / container.
     logging: &ai_logging
       driver: json-file
@@ -252,6 +276,9 @@ services:
       context: ../ai-worker
       dockerfile: Dockerfile
     container_name: lms_ai_worker
+    # Trần RAM (26/11/2026) — chỉ là giới hạn trên, không chiếm sẵn; xem docs/perf/GIOI_HAN_RAM.md
+    mem_limit: 1280m
+    oom_score_adj: 500   # khi máy cạn RAM, hệ điều hành dừng container này trước MySQL/backend/Redis
     restart: unless-stopped
     command: celery -A app.celery_app worker --loglevel=info --concurrency=8
     logging: *ai_logging
@@ -273,6 +300,8 @@ services:
       context: ../ai-worker
       dockerfile: Dockerfile
     container_name: lms_ai_beat
+    # Trần RAM (26/11/2026) — chỉ là giới hạn trên, không chiếm sẵn; xem docs/perf/GIOI_HAN_RAM.md
+    mem_limit: 192m
     restart: unless-stopped
     command: celery -A app.celery_app beat --loglevel=info
     logging: *ai_logging
@@ -287,6 +316,9 @@ services:
 
   # ── Service 3: Frontend (Next.js) ─────────────────────────────
   frontend:
+    # Chỉ bật khi gọi đúng profile: `docker compose --profile frontend up -d frontend` (26/11/2026).
+    # Không có dòng này thì `docker compose up -d` trơn sẽ tự build image Next.js (~2 GB đĩa, nhiều RAM) trên server.
+    profiles: ["frontend"]
     build:
       context: ../fe
       dockerfile: Dockerfile.dev
@@ -326,15 +358,32 @@ services:
   caddy:
     image: caddy:2-alpine
     container_name: lms_caddy
+    # Trần RAM (26/11/2026) — chỉ là giới hạn trên, không chiếm sẵn; xem docs/perf/GIOI_HAN_RAM.md
+    mem_limit: 128m
     restart: unless-stopped
     ports:
       - "80:80"
       - "443:443"
       - "8443:443"
-    command: caddy reverse-proxy --from 46.224.175.90.nip.io --to backend:8080
+    # Cấu hình nằm ở ./Caddyfile (26/11/2026): cùng hành vi lệnh `caddy reverse-proxy` cũ + header bảo mật.
+    command: caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
     volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
+    # Kiểm tra Caddy đang nghe cổng 80/443 (admin API của Caddy không mở nên không dùng được).
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z -w 3 127.0.0.1 443 && nc -z -w 3 127.0.0.1 80"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    # Giới hạn log (Caddy không có xoay vòng mặc định): tối đa 3 file x 10 MB.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     depends_on:
       backend:
         condition: service_started

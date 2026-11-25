@@ -1,0 +1,14 @@
+# =====================================================================
+# Profile `prod` — backend chạy bằng file jar (Dockerfile), không hot-reload.
+# application.yml đã có mức log INFO và không in SQL; file này chỉ giữ lại phần Flyway
+# mà DB đang chạy thật cần.
+# =====================================================================
+spring:
+  flyway:
+    # DB thật đã áp dụng V100 (seed_dev_reference) và V101 (seed_azure_voice_catalog) nằm ở db/dev.
+    # Nếu bỏ thư mục này, Flyway báo "migration đã áp dụng nhưng không tìm thấy" và backend
+    # không khởi động. Giữ nguyên danh sách locations như profile dev.
+    locations: classpath:db/migration,classpath:db/dev
+    # V100/V101 đánh số cao nên các migration schema thêm sau có thể có version thấp hơn
+    # version đã áp dụng gần nhất; out-of-order cho phép Flyway vẫn áp dụng chúng.
+    out-of-order: true

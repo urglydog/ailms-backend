@@ -1,5 +1,8 @@
-# Giảm build context — Docker chỉ cần pom.xml + src/
-target/
+# Giảm build context — Dockerfile.dev chỉ cần pom.xml + src/, Dockerfile (production) chỉ cần file jar.
+# Dùng `target/*` + `!target/*.jar` thay cho `target/` vì Docker không cho "bỏ loại trừ" file nằm
+# trong thư mục đã bị loại cả thư mục.
+target/*
+!target/*.jar
 .git
 .gitignore
 .env
