@@ -84,9 +84,11 @@ services:
 
   # ── Service 1: Backend lõi (Spring Boot 3 + Maven) ────────────
   backend:
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
+    # Image production (25/11/2026): jar build sẵn, không hot-reload, không mount thư mục code.
+    # Build + phát hành: xem docs/perf/QUY_TRINH_PHAT_HANH_BACKEND.md. Chế độ phát triển cũ (mvn
+    # spring-boot:run, mount code) vẫn còn trong Dockerfile.dev nếu cần quay lại.
+    image: lms-backend:prod
+    pull_policy: never
     container_name: lms_backend
     restart: unless-stopped
     # Giới hạn dung lượng log (25/11/2026): log backend ở chế độ dev đã lên tới 302 MB và tăng mãi
@@ -106,7 +108,9 @@ services:
       # dung thuc te de loi khai bao o tren tro thanh dung, sua tan goc thay vi sua tung cho.
       TZ: Asia/Ho_Chi_Minh
       LMS_CORS_ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
-      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
+      # Đặt cứng `prod` (không đọc từ .env vì .env đang là `dev`): image này là bản chạy thật.
+      SPRING_PROFILES_ACTIVE: prod
+      JAVA_OPTS: ${BACKEND_JAVA_OPTS:--Xms128m -Xmx896m -XX:MaxMetaspaceSize=256m -XX:+UseSerialGC}
       # Nap du lieu demo (khoa hoc YouTube + hoc vien/ghi danh/thanh toan gia lap) — chi them, khong xoa.
       # Bat bang APP_DEMO_SEED_ENABLED=true; mat khau chung dat trong .env (khong commit).
       APP_DEMO_SEED_ENABLED: ${APP_DEMO_SEED_ENABLED:-false}
@@ -187,9 +191,6 @@ services:
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
       LMS_PAYOUT_ENCRYPTION_KEY: ${LMS_PAYOUT_ENCRYPTION_KEY:-}
-    volumes:
-      - .:/app                              # hot-reload khi sửa code
-      - backend_maven_cache:/root/.m2       # cache dependency Maven giữa các lần chạy
     depends_on:
       mysql:
         condition: service_healthy
@@ -200,7 +201,7 @@ services:
       interval: 15s
       timeout: 5s
       retries: 10
-      start_period: 120s   # Maven tải dependency lần đầu rất lâu
+      start_period: 120s
 
   # ── Service 2a: AI API (FastAPI, HTTP đồng bộ) ────────────────
   # Phục vụ UC30 Socratic Tutor và UC49 Course Discovery — hai UC này
