@@ -288,6 +288,9 @@ services:
 
   # ── Service 3: Frontend (Next.js) ─────────────────────────────
   frontend:
+    # Chỉ bật khi gọi đúng profile: `docker compose --profile frontend up -d frontend` (26/11/2026).
+    # Không có dòng này thì `docker compose up -d` trơn sẽ tự build image Next.js (~2 GB đĩa, nhiều RAM) trên server.
+    profiles: ["frontend"]
     build:
       context: ../fe
       dockerfile: Dockerfile.dev
