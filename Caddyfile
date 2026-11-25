@@ -11,5 +11,15 @@
 		Permissions-Policy "camera=(), microphone=(), geolocation=()"
 		-Server
 	}
+	# Lớp bảo vệ thứ hai (26/11/2026): AI worker gọi backend qua mạng nội bộ Docker (http://backend:8080), không qua đây,
+	# nên không có lý do để /api/internal/* và các đường quản trị /actuator/* (trừ health) đi ra Internet.
+	@noi_bo path /api/internal/*
+	respond @noi_bo 404
+	@actuator {
+		path /actuator/*
+		not path /actuator/health /actuator/health/*
+	}
+	respond @actuator 404
+
 	reverse_proxy backend:8080
 }
