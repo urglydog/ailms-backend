@@ -89,6 +89,13 @@ services:
       dockerfile: Dockerfile.dev
     container_name: lms_backend
     restart: unless-stopped
+    # Giới hạn dung lượng log (25/11/2026): log backend ở chế độ dev đã lên tới 302 MB và tăng mãi
+    # vì Docker mặc định không xoay vòng. Tối đa 3 file x 20 MB.
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
     ports:
       - "127.0.0.1:${BACKEND_PORT:-8080}:8080"
     environment:
