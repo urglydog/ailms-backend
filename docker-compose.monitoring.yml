@@ -1,0 +1,75 @@
+# =====================================================================
+# Giám sát LinguaLearn — Prometheus + Grafana + node-exporter (đợt 8)
+#
+# Chạy KÈM file compose chính:
+#   docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
+# Tắt riêng phần giám sát (không đụng web):
+#   docker compose -f docker-compose.yml -f docker-compose.monitoring.yml stop prometheus grafana node-exporter
+#
+# KHÔNG mở cổng nào ra Internet: Grafana chỉ nghe 127.0.0.1:3001, xem qua SSH tunnel
+# (xem docs/perf/GIAM_SAT_PROMETHEUS_GRAFANA.md). Tổng trần RAM ~ 450 MB.
+# =====================================================================
+# Anchor YAML không dùng chéo giữa các file compose nên khai riêng mẫu log ở đây.
+x-mon-logging: &mon_logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    container_name: lms_prometheus
+    mem_limit: 256m
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      # Giữ số liệu tối đa 15 ngày HOẶC 2 GB, cái nào tới trước (chống đầy ổ đĩa).
+      - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-15d}
+      - --storage.tsdb.retention.size=${PROMETHEUS_RETENTION_SIZE:-2GB}
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    logging: *mon_logging
+    depends_on:
+      backend:
+        condition: service_started
+
+  grafana:
+    image: grafana/grafana-oss:12.1.1
+    container_name: lms_grafana
+    mem_limit: 192m
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3001}:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Thieu_GRAFANA_ADMIN_PASSWORD_trong_env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/lms-overview.json
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    logging: *mon_logging
+    depends_on:
+      - prometheus
+
+  node-exporter:
+    image: prom/node-exporter:v1.9.1
+    container_name: lms_node_exporter
+    mem_limit: 48m
+    restart: unless-stopped
+    command:
+      - --path.rootfs=/host
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
+    logging: *mon_logging
+
+volumes:
+  prometheus_data:
+  grafana_data:
