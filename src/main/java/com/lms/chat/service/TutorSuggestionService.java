@@ -26,7 +26,8 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>Thứ tự ưu tiên: (i) POPULAR — câu hỏi học viên KHÁC đã hỏi Gia sư cho chính bài này
  * (lấy từ lịch sử {@code chat_messages}); (iii) TEMPLATE — mẫu điền tên bài/chương. Mức (ii) "AI
- * sinh từ nội dung bài" CHƯA làm: cần endpoint mới bên AI Worker + bảng cache riêng.
+ * sinh từ nội dung bài" đọc từ cache {@link TutorAiSuggestionService} (sinh nền, không chặn
+ * request). Thứ tự cuối: POPULAR &gt; AI &gt; TEMPLATE.
  *
  * <p><b>Riêng tư:</b> 1 câu hỏi chỉ được coi là "phổ biến" khi ÍT NHẤT {@link #MIN_DISTINCT_USERS}
  * học viên khác nhau (không tính người đang xem) hỏi cùng 1 câu (sau chuẩn hoá) — câu hỏi riêng
@@ -46,6 +47,7 @@ public class TutorSuggestionService {
     private final UserRepository userRepository;
     private final ChatMessageRepository chatMessageRepository;
     private final EnrollmentSecurity enrollmentSecurity;
+    private final TutorAiSuggestionService aiSuggestionService;
 
     @Transactional(readOnly = true)
     public List<SuggestionRes> suggestions(String email, Long lessonId) {
@@ -59,6 +61,12 @@ public class TutorSuggestionService {
         Long courseId = lesson.getChapter().getCourse().getId();
 
         List<SuggestionRes> out = new ArrayList<>(popular(courseId, lessonId, user.getId()));
+        Set<String> seen = new HashSet<>();
+        out.forEach(p -> seen.add(normalize(p.text())));
+        for (String q : aiSuggestionService.cachedOrSchedule(lesson)) {
+            if (out.size() >= MAX_SUGGESTIONS) break;
+            if (seen.add(normalize(q))) out.add(new SuggestionRes(q, "AI", null, Map.of()));
+        }
         for (SuggestionRes t : templates(lesson, previousLesson(courseId, lessonId))) {
             if (out.size() >= MAX_SUGGESTIONS) break;
             out.add(t);

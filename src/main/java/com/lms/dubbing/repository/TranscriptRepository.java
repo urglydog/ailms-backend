@@ -14,6 +14,12 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface TranscriptRepository extends JpaRepository<Transcript, Long> {
 
+    /** Gợi ý AI của Gia sư (26/11/2026) — dấu vân tay rẻ của transcript gốc ("id:độ dài") để
+     * phát hiện transcript đổi mà không phải tải cả LONGTEXT. */
+    @Query(value = "SELECT CONCAT(id, ':', CHAR_LENGTH(full_text)) FROM transcripts "
+            + "WHERE lesson_id = :lessonId AND is_source = 1 LIMIT 1", nativeQuery = true)
+    Optional<String> findSourceFingerprint(@Param("lessonId") Long lessonId);
+
     /** BR-DUB-01 — bản gốc do STT sinh ra, chỉ tồn tại NHIỀU NHẤT 1 bản/bài học. */
     Optional<Transcript> findByLesson_IdAndIsSourceTrue(Long lessonId);
 

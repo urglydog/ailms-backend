@@ -36,6 +36,7 @@ class TutorSuggestionServiceTest {
     @Mock private UserRepository userRepository;
     @Mock private ChatMessageRepository chatMessageRepository;
     @Mock private EnrollmentSecurity enrollmentSecurity;
+    @Mock private TutorAiSuggestionService aiSuggestionService;
     @InjectMocks private TutorSuggestionService service;
 
     private Lesson prev;
@@ -98,6 +99,22 @@ class TutorSuggestionServiceTest {
         assertThat(res.get(0).text()).isEqualTo("Thì hiện tại dùng khi nào?");
         assertThat(res.subList(1, 4)).allMatch(s -> s.source().equals("TEMPLATE"));
         assertThat(res).noneMatch(s -> s.text().contains("riêng") || s.text().contains("chính tôi"));
+    }
+
+    @Test
+    void aiQuestions_comeAfterPopular_beforeTemplates_dedupedAgainstPopular() {
+        when(enrollmentSecurity.canAccessLesson(EMAIL, 10L, false)).thenReturn(true);
+        List<Object[]> rows = new ArrayList<>();
+        rows.add(row("Thì hiện tại dùng khi nào?", 2));
+        rows.add(row("Thì hiện tại dùng khi nào?", 3));
+        when(chatMessageRepository.findRecentQuestionsForLesson(eq(5L), eq(10L), anyInt())).thenReturn(rows);
+        when(aiSuggestionService.cachedOrSchedule(lesson)).thenReturn(
+                List.of("thi hien tai dung khi nao", "Dấu hiệu nhận biết thì hiện tại là gì?"));
+
+        List<SuggestionRes> res = service.suggestions(EMAIL, 10L);
+
+        assertThat(res).extracting(SuggestionRes::source).containsExactly("POPULAR", "AI", "TEMPLATE", "TEMPLATE");
+        assertThat(res.get(1).text()).isEqualTo("Dấu hiệu nhận biết thì hiện tại là gì?");
     }
 
     @Test
