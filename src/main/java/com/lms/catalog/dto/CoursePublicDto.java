@@ -73,7 +73,11 @@ public class CoursePublicDto {
             /** "Đăng ký (Quyền riêng tư)" kiểu Udemy (19/09/2026) — {@code true} khi khóa học ở
              * chế độ {@code PRIVATE_PASSWORD}, FE hiện ô nhập mật khẩu trước khi cho ghi danh.
              * Không bao giờ trả mật khẩu/hash thật. */
-            boolean requiresPassword
+            boolean requiresPassword,
+            /** Mục tiêu khoá học (26/11/2026) — rỗng nếu giảng viên chưa điền. */
+            List<String> learningOutcomes,
+            List<String> requirements,
+            List<String> targetAudience
     ) {}
 
     public record ChapterRes(

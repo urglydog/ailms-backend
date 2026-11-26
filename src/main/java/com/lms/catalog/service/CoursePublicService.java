@@ -314,7 +314,10 @@ public class CoursePublicService {
                 learnerCount,
                 price.finalPrice(),
                 price.discountPercent(),
-                course.getVisibility() == CourseVisibility.PRIVATE_PASSWORD
+                course.getVisibility() == CourseVisibility.PRIVATE_PASSWORD,
+                course.getLearningOutcomes() == null ? List.of() : List.copyOf(course.getLearningOutcomes()),
+                course.getRequirements() == null ? List.of() : List.copyOf(course.getRequirements()),
+                course.getTargetAudience() == null ? List.of() : List.copyOf(course.getTargetAudience())
         );
     }
 

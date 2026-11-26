@@ -99,6 +99,28 @@ class CourseServiceTest {
         lenient().when(instructorVerificationRepository.existsByUser_Id(anyLong())).thenReturn(true);
     }
 
+    // ── updateGoals (mục tiêu khoá học, 26/11/2026) ────────────────────
+
+    @Test
+    void updateGoals_trimsDropsBlankAndDuplicates_andReturnsThemInDetail() {
+        DetailRes res = courseService.updateGoals(OWNER_EMAIL, 10L, new GoalsUpdateReq(
+                java.util.Arrays.asList("  Nói được thì hiện tại  ", "", null, "Nói được thì hiện tại", "Viết email"),
+                List.of("Biết bảng chữ cái"),
+                null));
+
+        assertThat(res.learningOutcomes()).containsExactly("Nói được thì hiện tại", "Viết email");
+        assertThat(res.requirements()).containsExactly("Biết bảng chữ cái");
+        assertThat(res.targetAudience()).isEmpty();
+        assertThat(course.getLearningOutcomes()).hasSize(2);
+    }
+
+    @Test
+    void updateGoals_notOwner_isRejected() {
+        assertThatThrownBy(() -> courseService.updateGoals("other@lms.local", 10L,
+                new GoalsUpdateReq(List.of("x"), List.of(), List.of())))
+                .isInstanceOf(RuntimeException.class);
+    }
+
     // ── create (chia doanh thu 2 mức, 20/09/2026) ──────────────────────
 
     @Test

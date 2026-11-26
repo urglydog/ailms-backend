@@ -170,6 +170,34 @@ public class CourseService {
         return mapToDetailRes(saved);
     }
 
+    /** Mục tiêu khoá học (26/11/2026) — "Học viên sẽ học được gì", "Yêu cầu", "Đối tượng". */
+    @Transactional
+    public DetailRes updateGoals(String instructorEmail, Long id, com.lms.catalog.dto.CourseDto.GoalsUpdateReq req) {
+        Course course = loadOwnedCourse(id, instructorEmail);
+        course.setLearningOutcomes(cleanGoals(req.learningOutcomes()));
+        course.setRequirements(cleanGoals(req.requirements()));
+        course.setTargetAudience(cleanGoals(req.targetAudience()));
+        Course saved = courseRepository.save(course);
+        cacheEvictionHelper.evictCourseCacheAfterCommit(saved.getSlug());
+        return mapToDetailRes(saved);
+    }
+
+    /** Trim, bỏ mục rỗng/trùng, giữ thứ tự. Độ dài/số lượng đã chặn bằng Bean Validation. */
+    static List<String> cleanGoals(List<String> items) {
+        if (items == null) return new java.util.ArrayList<>();
+        return new java.util.ArrayList<>(items.stream()
+                .filter(java.util.Objects::nonNull)
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .distinct()
+                .limit(com.lms.catalog.dto.CourseDto.MAX_GOAL_ITEMS)
+                .toList());
+    }
+
+    private static List<String> listOrEmpty(List<String> l) {
+        return l == null ? List.of() : List.copyOf(l);
+    }
+
     @Transactional
     public DetailRes submitForReview(String instructorEmail, Long id) {
         Course course = loadOwnedCourse(id, instructorEmail);
@@ -527,7 +555,10 @@ public class CourseService {
                 missingConditions.isEmpty(),
                 course.getVisibility(),
                 course.getEnrollPasswordHash() != null,
-                course.getReferralCode()
+                course.getReferralCode(),
+                listOrEmpty(course.getLearningOutcomes()),
+                listOrEmpty(course.getRequirements()),
+                listOrEmpty(course.getTargetAudience())
         );
     }
 }

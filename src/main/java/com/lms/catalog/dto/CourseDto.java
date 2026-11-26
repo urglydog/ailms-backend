@@ -111,6 +111,25 @@ public class CourseDto {
             /** Chia doanh thu 2 mức (20/09/2026) — dựng liên kết giới thiệu
              * {@code /courses/{slug}?ref={referralCode}}. Chỉ trả về ở đây (response cho CHÍNH
              * chủ khóa học), không lộ qua bất kỳ API công khai nào khác. */
-            String referralCode
+            String referralCode,
+            /** Mục tiêu khoá học (26/11/2026) — xem {@link GoalsUpdateReq}. */
+            List<String> learningOutcomes,
+            List<String> requirements,
+            List<String> targetAudience
     ) {}
+
+    /** "Học viên mục tiêu" kiểu checklist trình soạn (26/11/2026). Mỗi danh sách ≤ 10 mục,
+     * mỗi mục ≤ 160 ký tự; mục rỗng bị bỏ khi lưu. Không bắt buộc đủ 4 mục (chỉ khuyến nghị —
+     * FE hiển thị gợi ý), để không chặn khoá học cũ. */
+    public record GoalsUpdateReq(
+            @Size(max = MAX_GOAL_ITEMS, message = "Tối đa 10 mục")
+            List<@Size(max = MAX_GOAL_LEN, message = "Mỗi mục tối đa 160 ký tự") String> learningOutcomes,
+            @Size(max = MAX_GOAL_ITEMS, message = "Tối đa 10 mục")
+            List<@Size(max = MAX_GOAL_LEN, message = "Mỗi mục tối đa 160 ký tự") String> requirements,
+            @Size(max = MAX_GOAL_ITEMS, message = "Tối đa 10 mục")
+            List<@Size(max = MAX_GOAL_LEN, message = "Mỗi mục tối đa 160 ký tự") String> targetAudience
+    ) {}
+
+    public static final int MAX_GOAL_ITEMS = 10;
+    public static final int MAX_GOAL_LEN = 160;
 }
