@@ -28,6 +28,7 @@ public class InstructorQaController {
             Principal principal,
             @RequestParam(required = false) Long courseId,
             @RequestParam(defaultValue = "false") boolean onlyUnanswered,
+            @RequestParam(defaultValue = "false") boolean noInstructorAnswer,
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "newest") String sort,
             @RequestParam(defaultValue = "0") int page,
@@ -37,7 +38,7 @@ public class InstructorQaController {
                 : org.springframework.data.domain.Sort.by("createdAt").descending();
         Pageable pageable = PageRequest.of(Math.max(0, page), Math.min(Math.max(1, size), 50), order);
         return ResponseEntity.ok(lessonChatService.listQuestionsForInstructor(
-                principal.getName(), courseId, onlyUnanswered, search, pageable));
+                principal.getName(), courseId, onlyUnanswered, noInstructorAnswer, search, pageable));
     }
 
     @GetMapping("/questions/{questionId}")

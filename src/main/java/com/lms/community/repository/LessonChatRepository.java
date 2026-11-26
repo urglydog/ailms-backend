@@ -33,11 +33,13 @@ public interface LessonChatRepository extends JpaRepository<LessonChat, String> 
             "SELECT q FROM LessonChat q JOIN q.lesson l JOIN l.chapter ch JOIN ch.course c "
             + "WHERE q.parent IS NULL AND c.instructor.email = :email AND (:courseId IS NULL OR c.id = :courseId) "
             + "AND (:unanswered = false OR NOT EXISTS (SELECT 1 FROM LessonChat r WHERE r.parent = q)) "
+            + "AND (:noInstructor = false OR NOT EXISTS (SELECT 1 FROM LessonChat ri WHERE ri.parent = q AND ri.user = c.instructor)) "
             + "AND (:search IS NULL OR LOWER(q.content) LIKE :search OR LOWER(q.userName) LIKE :search OR LOWER(l.title) LIKE :search OR LOWER(c.title) LIKE :search)")
     Page<LessonChat> searchQuestionsForInstructor(
             @org.springframework.data.repository.query.Param("email") String email,
             @org.springframework.data.repository.query.Param("courseId") Long courseId,
             @org.springframework.data.repository.query.Param("unanswered") boolean unanswered,
+            @org.springframework.data.repository.query.Param("noInstructor") boolean noInstructor,
             @org.springframework.data.repository.query.Param("search") String search,
             Pageable pageable);
 

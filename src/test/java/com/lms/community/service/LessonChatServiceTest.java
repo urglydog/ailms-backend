@@ -81,7 +81,7 @@ class LessonChatServiceTest {
     void listQuestionsForInstructor_passesFiltersAndSearchPatternToTheQuery() {
         LessonChat unanswered = questionOf("q2");
         PageRequest pageable = PageRequest.of(0, 20);
-        when(chatRepository.searchQuestionsForInstructor(eq(INSTRUCTOR_EMAIL), eq(10L), eq(true), eq("%an%"), eq(pageable)))
+        when(chatRepository.searchQuestionsForInstructor(eq(INSTRUCTOR_EMAIL), eq(10L), eq(true), eq(false), eq("%an%"), eq(pageable)))
                 .thenReturn(new PageImpl<>(List.of(unanswered)));
         when(chatRepository.countByParent_Id("q2")).thenReturn(0L);
 
@@ -95,7 +95,7 @@ class LessonChatServiceTest {
     @Test
     void listQuestionsForInstructor_blankSearchMeansNoSearchFilter() {
         PageRequest pageable = PageRequest.of(0, 20);
-        when(chatRepository.searchQuestionsForInstructor(eq(INSTRUCTOR_EMAIL), eq(null), eq(false), eq(null), eq(pageable)))
+        when(chatRepository.searchQuestionsForInstructor(eq(INSTRUCTOR_EMAIL), eq(null), eq(false), eq(false), eq(null), eq(pageable)))
                 .thenReturn(new PageImpl<>(List.of()));
 
         assertThat(lessonChatService.listQuestionsForInstructor(INSTRUCTOR_EMAIL, null, false, "   ", pageable).getContent()).isEmpty();

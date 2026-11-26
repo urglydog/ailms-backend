@@ -87,8 +87,15 @@ public class LessonChatService {
     @Transactional(readOnly = true)
     public Page<QuestionRes> listQuestionsForInstructor(
             String email, Long courseId, boolean onlyUnanswered, String search, Pageable pageable) {
+        return listQuestionsForInstructor(email, courseId, onlyUnanswered, false, search, pageable);
+    }
+
+    /** {@code noInstructorAnswer} — "Giảng viên chưa trả lời" (26/11/2026): chưa có trả lời nào của chính giảng viên khoá. */
+    @Transactional(readOnly = true)
+    public Page<QuestionRes> listQuestionsForInstructor(
+            String email, Long courseId, boolean onlyUnanswered, boolean noInstructorAnswer, String search, Pageable pageable) {
         String kw = (search == null || search.isBlank()) ? null : "%" + search.trim().toLowerCase(java.util.Locale.ROOT) + "%";
-        return chatRepository.searchQuestionsForInstructor(email, courseId, onlyUnanswered, kw, pageable).map(this::toQuestionRes);
+        return chatRepository.searchQuestionsForInstructor(email, courseId, onlyUnanswered, noInstructorAnswer, kw, pageable).map(this::toQuestionRes);
     }
 
     @Transactional(readOnly = true)
