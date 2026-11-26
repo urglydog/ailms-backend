@@ -96,7 +96,7 @@ public class TutorAiSuggestionService {
 
     /** Job nền — xử lý tối đa {@link #BATCH} dòng PENDING mỗi lượt. */
     @Scheduled(fixedDelay = 20_000, initialDelay = 60_000)
-    @SchedulerLock(name = "TutorAiSuggestionService.processPending", lockAtMostFor = "PT5M", lockAtLeastFor = "PT5S")
+    @SchedulerLock(name = "TutorAiSuggestionService.processPending", lockAtMostFor = "PT5M", lockAtLeastFor = "PT16S")
     @Transactional
     public void processPending() {
         for (LessonAiSuggestion row : repository.findByStatusOrderByUpdatedAtAsc(

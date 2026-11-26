@@ -106,7 +106,7 @@ public class TutorInsightService {
     }
 
     @Scheduled(fixedDelay = 30_000, initialDelay = 90_000)
-    @SchedulerLock(name = "TutorInsightService.processPending", lockAtMostFor = "PT10M", lockAtLeastFor = "PT5S")
+    @SchedulerLock(name = "TutorInsightService.processPending", lockAtMostFor = "PT10M", lockAtLeastFor = "PT24S")
     @Transactional
     public void processPending() {
         for (CourseTutorInsight row : insightRepository.findByStatusOrderByUpdatedAtAsc(
