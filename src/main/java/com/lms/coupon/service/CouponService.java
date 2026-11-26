@@ -512,7 +512,9 @@ public class CouponService {
         return new PriceRes(
                 result.originalPrice(), result.finalPrice(), discountPercent,
                 result.appliedCoupon() != null ? result.appliedCoupon().getCode() : null,
-                result.enteredCodeValid()
+                result.enteredCodeValid(),
+                result.appliedCoupon() != null && Boolean.TRUE.equals(result.appliedCoupon().getAutoApply())
+                        ? result.appliedCoupon().getEndAt() : null
         );
     }
 }

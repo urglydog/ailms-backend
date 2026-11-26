@@ -317,7 +317,8 @@ public class CoursePublicService {
                 course.getVisibility() == CourseVisibility.PRIVATE_PASSWORD,
                 course.getLearningOutcomes() == null ? List.of() : List.copyOf(course.getLearningOutcomes()),
                 course.getRequirements() == null ? List.of() : List.copyOf(course.getRequirements()),
-                course.getTargetAudience() == null ? List.of() : List.copyOf(course.getTargetAudience())
+                course.getTargetAudience() == null ? List.of() : List.copyOf(course.getTargetAudience()),
+                price.discountEndsAt()
         );
     }
 

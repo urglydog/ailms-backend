@@ -77,7 +77,9 @@ public class CoursePublicDto {
             /** Mục tiêu khoá học (26/11/2026) — rỗng nếu giảng viên chưa điền. */
             List<String> learningOutcomes,
             List<String> requirements,
-            List<String> targetAudience
+            List<String> targetAudience,
+            /** Hết hạn ưu đãi tự động đang áp (26/11/2026) — FE đếm ngược; null nếu không có. */
+            LocalDateTime discountEndsAt
     ) {}
 
     public record ChapterRes(
