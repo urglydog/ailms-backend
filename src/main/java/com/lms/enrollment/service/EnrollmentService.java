@@ -4,6 +4,7 @@ import java.util.Map;
 import java.util.HashMap;
 import java.util.ArrayList;
 import com.lms.enrollment.repository.projection.CourseProgressRef;
+import com.lms.enrollment.repository.projection.CourseLessonRef;
 import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
 import com.lms.catalog.entity.Course;
@@ -76,8 +77,11 @@ public class EnrollmentService {
                 .forEach(c -> certificateByCourse.put(c.courseId(), c.certificateCode()));
         // Truy vấn đã sắp đúng thứ tự khóa → chương → bài, nên giữ thứ tự khi gom theo khóa.
         Map<Long, List<Long>> lessonsByCourse = new HashMap<>();
-        lessonRepository.findLessonRefsByCourseIds(courseIds)
-                .forEach(l -> lessonsByCourse.computeIfAbsent(l.courseId(), k -> new ArrayList<>()).add(l.lessonId()));
+        Map<Long, CourseLessonRef> lessonRefById = new HashMap<>();
+        for (CourseLessonRef l : lessonRepository.findLessonRefsByCourseIds(courseIds)) {
+            lessonsByCourse.computeIfAbsent(l.courseId(), k -> new ArrayList<>()).add(l.lessonId());
+            lessonRefById.put(l.lessonId(), l);
+        }
         // Bản ghi tiến độ mới nhất của từng khóa: dùng cho cả "học tiếp" và "truy cập gần nhất".
         Map<Long, CourseProgressRef> latestByCourse = new HashMap<>();
         for (CourseProgressRef p : lessonProgressRepository.findProgressRefsByUserAndCourseIds(userId, courseIds)) {
@@ -94,6 +98,7 @@ public class EnrollmentService {
                             latest.lastPositionSec() == null ? 0 : latest.lastPositionSec(),
                             Boolean.TRUE.equals(latest.completed())));
             Integer myRating = ratingByCourse.get(courseId);
+            CourseLessonRef resumeRef = resume.lessonId() == null ? null : lessonRefById.get(resume.lessonId());
             return new Res(
                     courseId,
                     course.getTitle(),
@@ -115,7 +120,9 @@ public class EnrollmentService {
                     latest == null ? null : latest.updatedAt(),
                     certificateByCourse.get(courseId),
                     resume.lessonId(),
-                    resume.positionSec()
+                    resume.positionSec(),
+                    resumeRef == null ? null : resumeRef.lessonTitle(),
+                    resumeRef == null ? null : resumeRef.durationSec()
             );
         }).toList();
     }

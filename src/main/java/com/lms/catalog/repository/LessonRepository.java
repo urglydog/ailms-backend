@@ -49,7 +49,7 @@ public interface LessonRepository extends JpaRepository<Lesson, Long> {
     @Query("SELECT l.id, c.title FROM Lesson l LEFT JOIN l.chapter c WHERE l.id IN :ids")
     List<Object[]> findChapterTitlesByLessonIds(@Param("ids") java.util.Collection<Long> ids);
     /** Mọi bài học của các khóa cho trước, theo thứ tự khóa → chương → bài (1 truy vấn cho cả danh sách). */
-    @Query("SELECT new com.lms.enrollment.repository.projection.CourseLessonRef(ch.course.id, l.id) FROM Lesson l JOIN l.chapter ch "
+    @Query("SELECT new com.lms.enrollment.repository.projection.CourseLessonRef(ch.course.id, l.id, l.title, l.durationSec) FROM Lesson l JOIN l.chapter ch "
             + "WHERE ch.course.id IN :courseIds ORDER BY ch.course.id, ch.displayOrder, l.displayOrder")
     List<CourseLessonRef> findLessonRefsByCourseIds(@Param("courseIds") Collection<Long> courseIds);
 
