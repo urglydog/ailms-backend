@@ -1,8 +1,8 @@
 # Đợt 8: Hoàn thiện chạy production và sẵn sàng giám sát
 
 > Nhánh `perf` (backend). Làm sau khi nhận kết quả [KIEM_TRA_SERVER.md](KIEM_TRA_SERVER.md) ngày 25/11/2026.
-> Phần Prometheus + Grafana nằm ở nhánh riêng `feat/monitoring`, xem
-> [GIAM_SAT_PROMETHEUS_GRAFANA.md](GIAM_SAT_PROMETHEUS_GRAFANA.md) (có trên nhánh đó).
+> Phần Prometheus + Grafana nằm ở nhánh riêng `feat/monitoring`. Các bước trên server (phát hành, đo tải, bật
+> giám sát) gom trong **[HUONG_DAN_SERVER_DOT8.md](HUONG_DAN_SERVER_DOT8.md)**.
 
 ## Bối cảnh: kết quả kiểm tra server
 
