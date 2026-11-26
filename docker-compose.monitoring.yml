@@ -7,7 +7,7 @@
 #   docker compose -f docker-compose.yml -f docker-compose.monitoring.yml stop prometheus grafana node-exporter
 #
 # KHÔNG mở cổng nào ra Internet: Grafana chỉ nghe 127.0.0.1:3001, xem qua SSH tunnel
-# (xem docs/perf/GIAM_SAT_PROMETHEUS_GRAFANA.md). Tổng trần RAM ~ 450 MB.
+# (xem docs/perf/HUONG_DAN_SERVER_DOT8.md (phần 7)). Tổng trần RAM ~ 450 MB.
 # =====================================================================
 # Anchor YAML không dùng chéo giữa các file compose nên khai riêng mẫu log ở đây.
 x-mon-logging: &mon_logging
