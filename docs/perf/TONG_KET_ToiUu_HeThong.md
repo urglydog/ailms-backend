@@ -19,6 +19,7 @@
 | 5 | Chat realtime | Polling 5 s và 15 s; topic WebSocket không kiểm quyền | Đẩy qua STOMP/WebSocket + `ChannelInterceptor` kiểm quyền | ~16 → ~2 request/phút mỗi người; vá lỗ hổng nghe lén |
 | 6 | Ổn định nhiều người dùng/nhiều backend | 19 job chung 1 luồng; chạy 2 backend thì job chạy trùng; deploy cắt ngang request; JSON không nén | Pool scheduler 6 luồng, ShedLock + Redis, graceful shutdown, gzip | Chi tiết: [DOT6_OnDinh_NhieuNguoiDung.md](DOT6_OnDinh_NhieuNguoiDung.md) |
 | 7 | Tải trang và giảm tải | Thư viện nặng (mermaid, mindmap, recharts) tải ngay khi mở trang; banner thông báo mỗi lần gọi là 1 câu SQL | `import()` động / `next/dynamic`; cache Redis 30 s + evict khi admin sửa | Chi tiết: [DOT7_TaiTrang_GiamTai.md](DOT7_TaiTrang_GiamTai.md) |
+| 8 | Sẵn sàng giám sát | Server chạy bản dev (1,6 GB RAM, log mọi SQL); chưa có số liệu để giám sát | Endpoint Prometheus + histogram độ trễ, xoay vòng log còn thiếu, `stop_grace_period`; nhánh `feat/monitoring` có Prometheus + Grafana | Bản prod 0,9 GB RAM (−45%); chi tiết [DOT8_SanSangGiamSat.md](DOT8_SanSangGiamSat.md) |
 
 Tổng số test sau cùng: **491 test backend** và **564 test frontend**, tất cả đều qua.
 
