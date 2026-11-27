@@ -197,6 +197,7 @@ class LessonPlayerServiceTest {
 
         assertThat(res.isPreview()).isTrue();
         assertThat(res.enrolled()).isTrue();
+        assertThat(res.viewerIsOwner()).isFalse();
     }
 
     @Test
@@ -225,6 +226,7 @@ class LessonPlayerServiceTest {
         Res res = service.getLessonForPlayback(EMAIL, 21L);
 
         assertThat(res.enrolled()).isTrue();
+        assertThat(res.viewerIsOwner()).isTrue();
     }
 
     @Test

@@ -79,8 +79,19 @@ public class CoursePublicDto {
             List<String> requirements,
             List<String> targetAudience,
             /** Hết hạn ưu đãi tự động đang áp (26/11/2026) — FE đếm ngược; null nếu không có. */
-            LocalDateTime discountEndsAt
-    ) {}
+            LocalDateTime discountEndsAt,
+            /** (27/11/2026) — người xem đang đăng nhập là giảng viên SỞ HỮU khoá: FE thay nút mua bằng
+             * "Chỉnh sửa khoá học" / "Vào học". Luôn false trong bản cache dùng chung; gắn theo
+             * từng request ở {@code CoursePublicService#getBySlug}. */
+            boolean viewerIsOwner
+    ) {
+        public DetailRes withViewerIsOwner(boolean owner) {
+            return new DetailRes(id, title, slug, description, instructorName, instructorAvatarUrl, thumbnailUrl, level,
+                    price, isFree, avgRating, reviewCount, totalDurationSec, categorySlug, categoryName, chapters,
+                    updatedAt, sourceLanguage, dubbedLanguages, learnerCount, finalPrice, discountPercent,
+                    requiresPassword, learningOutcomes, requirements, targetAudience, discountEndsAt, owner);
+        }
+    }
 
     public record ChapterRes(
             Long id,

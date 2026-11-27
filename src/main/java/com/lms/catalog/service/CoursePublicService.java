@@ -156,7 +156,10 @@ public class CoursePublicService {
         // người được phép xem — không có field cá nhân hóa theo requester trong DetailRes, nên
         // an toàn để cache theo slug, tách biệt khỏi bước kiểm tra quyền ở trên. Gọi QUA self
         // (proxy) — gọi trực tiếp loadCachedDetail(slug) ở đây sẽ không đi qua @Cacheable.
-        return self.loadCachedDetail(slug);
+        DetailRes detail = self.loadCachedDetail(slug);
+        boolean owner = requesterEmail != null && course.getInstructor() != null
+                && requesterEmail.equalsIgnoreCase(course.getInstructor().getEmail());
+        return owner ? detail.withViewerIsOwner(true) : detail;
     }
 
     /** Chỉ gọi từ {@link #getBySlug} SAU KHI đã qua kiểm tra quyền — bản thân method này không
@@ -318,7 +321,8 @@ public class CoursePublicService {
                 course.getLearningOutcomes() == null ? List.of() : List.copyOf(course.getLearningOutcomes()),
                 course.getRequirements() == null ? List.of() : List.copyOf(course.getRequirements()),
                 course.getTargetAudience() == null ? List.of() : List.copyOf(course.getTargetAudience()),
-                price.discountEndsAt()
+                price.discountEndsAt(),
+                false
         );
     }
 
