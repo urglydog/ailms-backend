@@ -1,0 +1,42 @@
+##### NỀN — 2026-11-27T03:08:45Z UTC (10:08 VN)
+Mem: tổng 3815 dùng 2683 còn 854
+Swap: tổng 4095 dùng 98 còn 
+đĩa trống 7.1G
+số container không Up: 0
+dữ liệu TRƯỚC: users=145 courses=92 enrollments=3760 payments=1541 lesson_progress=57783 flyway=102
+
+##### DIỄN TẬP MySQL — 2026-11-27T03:08:45Z UTC
+=== TRƯỚC KHI THỬ
+[  0s] courses:200/0.272038s categories:200/0.266218s health:200/0.550968s
+=== dừng lms_mysql ~20 giây
+[  8s] courses:200/0.211230s categories:200/0.250375s health:503/5.599171s
+[ 19s] courses:200/0.254175s categories:200/0.236146s health:503/5.623868s
+[ 30s] courses:200/0.580135s categories:200/0.571380s health:503/5.881470s
+[ 40s] courses:200/0.346455s categories:200/0.331848s health:503/5.482727s
+=== bật lại MySQL
+MySQL healthy sau 7s
+=== SAU PHỤC HỒI (chờ 20 giây cho các kết nối nối lại)
+[ 73s] courses:200/0.105880s categories:200/0.230567s health:200/0.466069s
+##### KẾT THÚC 2026-11-27T03:09:59Z UTC
+
+##### SAU
+lms_adminer	Up 34 minutes
+lms_ai_api	Up 34 minutes (healthy)
+lms_ai_beat	Up 34 minutes
+lms_ai_worker	Up 34 minutes
+lms_backend	Up 8 minutes (healthy)
+lms_caddy	Up 34 minutes (healthy)
+lms_mailpit	Up 34 minutes (healthy)
+lms_mysql	Up 27 seconds (healthy)
+lms_redis	Up 5 minutes (healthy)
+roadmap-worker-1	Up 34 minutes
+Mem: tổng 3815 dùng 2618 còn 919
+Swap: tổng 4095 dùng 102 còn 
+backend health=healthy restarts=0 oom=false
+mysql health=healthy restarts=0 oom=false
+dữ liệu SAU:   users=145 courses=92 enrollments=3760 payments=1541 lesson_progress=57783 flyway=102
+--- MySQL log (tắt/khởi động)
+[System] [MY-013172] [Server] Received SHUTDOWN from user <via user signal>. Shutting down mysqld (Version: 8.0.46).
+[System] [MY-010910] [Server] /usr/sbin/mysqld: Shutdown complete (mysqld 8.0.46)  MySQL Community Server - GPL.
+[System] [MY-011323] [Server] X Plugin ready for connections. Bind-address: '::' port: 33060, socket: /var/run/mysqld/my
+[System] [MY-010931] [Server] /usr/sbin/mysqld: ready for connections. Version: '8.0.46'  socket: '/var/run/mysqld/mysql

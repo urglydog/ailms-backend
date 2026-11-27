@@ -1,0 +1,48 @@
+##### NỀN — 2026-11-27T03:13:04Z UTC (10:13 VN)
+Mem: tổng 3815 dùng 2657 còn 879
+Swap: tổng 4095 dùng 124 còn 
+đĩa trống 7.1G
+số container không Up: 0
+backend trước: restarts=0 policy=unless-stopped
+
+##### DIỄN TẬP backend — 2026-11-27T03:13:04Z UTC
+=== TRƯỚC KHI THỬ
+[  0s] courses:200/0.681959s categories:200/0.685257s health:200/1.028992s
+=== docker kill lms_backend (mô phỏng sập đột ngột)
+[  6s] courses:502/0.221145s categories:502/0.280466s health:502/0.272927s
+[ 11s] courses:502/0.211360s categories:502/0.244384s health:502/0.258868s
+[ 17s] courses:502/0.651567s categories:502/0.605153s health:502/0.655453s
+[ 22s] courses:502/0.640793s categories:502/0.639558s health:502/0.608975s
+[ 28s] courses:502/0.191672s categories:502/0.213101s health:502/0.079238s
+[ 33s] courses:502/0.624086s categories:502/0.067597s health:502/0.636281s
+[ 39s] courses:502/0.069404s categories:502/0.205383s health:502/0.210336s
+[ 44s] courses:502/0.252482s categories:502/0.206559s health:502/0.240729s
+[ 50s] courses:502/0.140076s categories:502/0.117959s health:502/0.107158s
+[ 55s] courses:502/0.129406s categories:502/0.104453s health:502/0.102561s
+[ 60s] courses:502/0.095909s categories:502/0.077444s health:502/0.104944s
+[ 65s] courses:502/0.108407s categories:502/0.117753s health:502/0.071308s
+[ 71s] courses:502/0.124575s categories:502/0.111637s health:502/0.091428s
+[ 76s] courses:502/0.072438s categories:502/0.123060s health:502/0.132546s
+[ 81s] courses:502/0.113707s categories:502/0.106052s health:502/0.072902s
+[ 86s] courses:502/0.070328s categories:502/0.107695s health:502/0.114661s
+backend: health=unhealthy sau 86s, restarts=0
+=== SAU PHỤC HỒI (chờ 20 giây cho các kết nối nối lại)
+[107s] courses:502/0.100299s categories:502/0.103116s health:502/0.066827s
+##### KẾT THÚC 2026-11-27T03:14:52Z UTC
+
+##### SAU
+lms_adminer	Up 39 minutes
+lms_ai_api	Up 39 minutes (healthy)
+lms_ai_beat	Up 39 minutes
+lms_ai_worker	Up 39 minutes
+lms_caddy	Up 39 minutes (healthy)
+lms_mailpit	Up 39 minutes (healthy)
+lms_mysql	Up 5 minutes (healthy)
+lms_redis	Up 10 minutes (healthy)
+roadmap-worker-1	Up 39 minutes
+Mem: tổng 3815 dùng 1994 còn 1542
+Swap: tổng 4095 dùng 124 còn 
+backend health=unhealthy restarts=0 oom=false exit-trước-đó=137
+ERROR trong log sau khởi động: 60
+[ai-powered-lms] [           main] o.f.core.internal.command.DbMigrate      : Schema `lms_db` is up to date. No migration necessary.
+[ai-powered-lms] [           main] com.lms.LmsApplication                   : Started LmsApplication in 59.635 seconds (process running for 
