@@ -99,6 +99,28 @@ class CourseServiceTest {
         lenient().when(instructorVerificationRepository.existsByUser_Id(anyLong())).thenReturn(true);
     }
 
+    // ── % hoàn thiện: danh sách và trình soạn cùng 1 nguồn (27/11/2026, sửa lỗi 0% vs 20%) ──
+
+    @Test
+    void completionPercent_isIdenticalInListAndEditor_andIgnoresAccountConditions() {
+        // Chỉ có tiêu đề (thiếu mô tả, ảnh bìa, chương, bài học) + CHƯA xác minh định danh:
+        // trước đây trình soạn trừ cả điều kiện xác minh nên hiện 0% trong khi danh sách hiện 20%.
+        course.setDescription(null);
+        course.setThumbnailUrl(null);
+        when(instructorVerificationRepository.existsByUser_Id(anyLong())).thenReturn(false);
+        when(courseRepository.findByInstructor_Email(eq(OWNER_EMAIL), any()))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(course)));
+
+        int fromList = courseService.getMine(OWNER_EMAIL, null, org.springframework.data.domain.PageRequest.of(0, 10))
+                .getContent().get(0).completionPercent();
+        DetailRes detail = courseService.getMineDetail(OWNER_EMAIL, 10L);
+
+        assertThat(fromList).isEqualTo(20);
+        assertThat(detail.completionPercent()).isEqualTo(fromList);
+        assertThat(detail.missingConditions()).hasSize(5);
+        assertThat(detail.canSubmit()).isFalse();
+    }
+
     // ── updateGoals (mục tiêu khoá học, 26/11/2026) ────────────────────
 
     @Test

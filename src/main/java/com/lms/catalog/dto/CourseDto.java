@@ -115,7 +115,10 @@ public class CourseDto {
             /** Mục tiêu khoá học (26/11/2026) — xem {@link GoalsUpdateReq}. */
             List<String> learningOutcomes,
             List<String> requirements,
-            List<String> targetAudience
+            List<String> targetAudience,
+            /** (27/11/2026) — CÙNG giá trị với {@code SummaryRes.completionPercent} để thanh trên
+             * trình soạn khớp danh sách khoá học. */
+            Integer completionPercent
     ) {}
 
     /** "Học viên mục tiêu" kiểu checklist trình soạn (26/11/2026). Mỗi danh sách ≤ 10 mục,
