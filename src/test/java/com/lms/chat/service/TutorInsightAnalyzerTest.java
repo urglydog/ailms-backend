@@ -64,6 +64,18 @@ class TutorInsightAnalyzerTest {
     }
 
     @Test
+    void label_fourSyllablePhrase_kiemTraChamDat_notCutAtThirdSyllable() {
+        List<Question> qs = List.of(
+                q("Kiểm tra chạm đất thế nào cho đúng?", 1, 1, "ok", 0),
+                q("Tại sao kiểm tra chạm đất bị sai khi nhảy?", 2, 1, "ok", 1),
+                q("Có cách nào kiểm tra chạm đất nhanh hơn không?", 3, 1, "ok", 2));
+
+        var topics = TutorInsightAnalyzer.analyze(qs, lessons()).lessons().get(0).topics();
+
+        assertThat(topics).extracting(t -> t.label()).contains("kiểm tra chạm đất").doesNotContain("kiểm tra chạm");
+    }
+
+    @Test
     void label_vongLapFor_keepsProgrammingKeywordAtEdge() {
         List<Question> qs = List.of(
                 q("Vòng lặp for chạy mấy lần?", 1, 1, "ok", 0),

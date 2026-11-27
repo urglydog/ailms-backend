@@ -42,6 +42,7 @@ public final class TutorInsightAnalyzer {
             "nhe", "day", "kia", "ai", "bai", "hoc", "giang", "video", "phan", "can", "muon", "biet", "hieu",
             "ro", "hon", "o", "ra", "vao", "len", "di", "den", "tu", "neu", "ma", "con", "se", "da", "dang",
             "roi", "cung", "nua", "vi", "nen", "tai", "sau", "truoc", "nhieu", "it", "rat", "qua",
+            "them", "gium", "giup", "dum", "ah", "ha",
             // tiếng Anh
             "an", "is", "are", "what", "how", "why", "of", "to", "in", "for", "and", "or",
             "you", "me", "this", "that", "does", "explain", "please", "about", "with", "on", "my");
@@ -214,7 +215,8 @@ public final class TutorInsightAnalyzer {
             List<String> w = new ArrayList<>();
             for (String x : words) if (!x.isEmpty()) w.add(x);
             Set<String> seenInQuestion = new HashSet<>();
-            for (int n = 2; n <= 3; n++) {
+            // Tới 4 âm tiết: "kiểm tra chạm đất", "rigidbody 2d khác collider" — 3 thì hay cắt cụt từ cuối.
+            for (int n = 2; n <= 4; n++) {
                 for (int a = 0; a + n <= w.size(); a++) {
                     List<String> norm = w.subList(a, a + n).stream().map(TutorSuggestionService::normalize).toList();
                     if (!edgeOk(norm.get(0)) || !edgeOk(norm.get(n - 1))) continue;
