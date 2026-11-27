@@ -50,6 +50,10 @@ services:
       GF_ANALYTICS_REPORTING_ENABLED: "false"
       GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/lms-overview.json
+      # Cảnh báo qua Telegram (27/11/2026): giá trị lấy từ be/.env, file cấu hình chỉ tham chiếu $TELEGRAM_* (xem
+      # monitoring/grafana/provisioning/alerting/). Để trống thì Grafana vẫn chạy nhưng không gửi được tin.
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
     volumes:
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
@@ -65,9 +69,12 @@ services:
     restart: unless-stopped
     command:
       - --path.rootfs=/host
+      # Đọc số liệu do script sao lưu ghi (lms_backup_*, lms_restore_test_*) để cảnh báo "sao lưu quá hạn".
+      - --collector.textfile.directory=/textfile
     pid: host
     volumes:
       - /:/host:ro,rslave
+      - ${OPS_METRICS_DIR:-/home/dev-thien/ops/metrics}:/textfile:ro
     logging: *mon_logging
 
 volumes:
