@@ -37,6 +37,14 @@ public class LessonChat {
     @Column(nullable = false, columnDefinition = "TEXT")
     private String content;
 
+    /** Hỏi đáp (27/11/2026): lúc giảng viên sở hữu khoá mở câu hỏi; null = chưa đọc. Chỉ dùng trên tin GỐC. */
+    @Column(name = "instructor_read_at")
+    private Instant instructorReadAt;
+
+    /** Hỏi đáp (27/11/2026): id tin trả lời được đánh dấu "hay nhất"; chỉ dùng trên tin GỐC. */
+    @Column(name = "best_answer_id", length = 36)
+    private String bestAnswerId;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 

@@ -20,4 +20,14 @@ public class LessonChatController {
     public List<ChatMessageDto> getChatHistory(@PathVariable Long lessonId) {
         return chatService.getChatHistory(lessonId);
     }
+
+    /** Câu trả lời hay nhất (27/11/2026) — người hỏi hoặc giảng viên khoá; body {@code {"answerId": null}} = bỏ đánh dấu. */
+    @PreAuthorize("isAuthenticated()")
+    @PutMapping("/{questionId}/best-answer")
+    public org.springframework.http.ResponseEntity<Void> setBestAnswer(
+            java.security.Principal principal, @PathVariable Long lessonId, @PathVariable String questionId,
+            @RequestBody com.lms.community.dto.LessonQaDto.BestAnswerReq req) {
+        chatService.setBestAnswer(principal.getName(), questionId, req.answerId());
+        return org.springframework.http.ResponseEntity.noContent().build();
+    }
 }

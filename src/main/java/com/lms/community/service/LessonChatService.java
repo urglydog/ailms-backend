@@ -55,7 +55,8 @@ public class LessonChatService {
                         chat.getContent(),
                         chat.getCreatedAt().toString(),
                         chat.getParent() != null ? chat.getParent().getId() : null,
-                        chat.getUser().getId().equals(instructorId)
+                        chat.getUser().getId().equals(instructorId),
+                        chat.getParent() == null ? chat.getBestAnswerId() : null
                 ))
                 .toList();
     }
@@ -78,6 +79,10 @@ public class LessonChatService {
         if (parentId != null && !parentId.isBlank()) {
             LessonChat parent = chatRepository.findById(parentId).orElse(null);
             chat.setParent(parent);
+            // Có trả lời mới từ người khác giảng viên -> câu hỏi lại thành "Chưa đọc" với giảng viên.
+            if (parent != null && !userId.equals(lesson.getChapter().getCourse().getInstructor().getId())) {
+                parent.setInstructorReadAt(null);
+            }
         }
 
         LessonChat saved = chatRepository.save(chat);
@@ -103,13 +108,40 @@ public class LessonChatService {
     @Transactional(readOnly = true)
     public Page<QuestionRes> listQuestionsForInstructor(
             String email, Long courseId, boolean onlyUnanswered, boolean noInstructorAnswer, String search, Pageable pageable) {
-        String kw = (search == null || search.isBlank()) ? null : "%" + search.trim().toLowerCase(java.util.Locale.ROOT) + "%";
-        return chatRepository.searchQuestionsForInstructor(email, courseId, onlyUnanswered, noInstructorAnswer, kw, pageable).map(this::toQuestionRes);
+        return listQuestionsForInstructor(email, new QaFilter(courseId, onlyUnanswered, noInstructorAnswer, false, false, search, "newest"), pageable);
+    }
+
+    /** Bộ lọc hộp thư Hỏi đáp (27/11/2026). {@code sort}: newest | oldest | most_replies. */
+    public record QaFilter(Long courseId, boolean onlyUnanswered, boolean noInstructorAnswer,
+                           boolean unread, boolean noBestAnswer, String search, String sort) {
     }
 
     @Transactional(readOnly = true)
+    public Page<QuestionRes> listQuestionsForInstructor(String email, QaFilter f, Pageable pageable) {
+        String kw = (f.search() == null || f.search().isBlank()) ? null : "%" + f.search().trim().toLowerCase(java.util.Locale.ROOT) + "%";
+        Page<LessonChat> page;
+        if ("most_replies".equalsIgnoreCase(f.sort())) {
+            Pageable unsorted = org.springframework.data.domain.PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
+            page = chatRepository.searchQuestionsForInstructorByReplies(email, f.courseId(), f.onlyUnanswered(),
+                    f.noInstructorAnswer(), f.unread(), f.noBestAnswer(), kw, unsorted);
+        } else {
+            org.springframework.data.domain.Sort order = "oldest".equalsIgnoreCase(f.sort())
+                    ? org.springframework.data.domain.Sort.by("createdAt").ascending()
+                    : org.springframework.data.domain.Sort.by("createdAt").descending();
+            Pageable sorted = org.springframework.data.domain.PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), order);
+            page = chatRepository.searchQuestionsForInstructor(email, f.courseId(), f.onlyUnanswered(),
+                    f.noInstructorAnswer(), f.unread(), f.noBestAnswer(), kw, sorted);
+        }
+        return page.map(this::toQuestionRes);
+    }
+
+    /** Mở câu hỏi = đánh dấu đã đọc (27/11/2026). */
+    @Transactional
     public ThreadRes getThread(String email, String questionId) {
         LessonChat question = loadOwnedQuestion(email, questionId);
+        if (question.getInstructorReadAt() == null) {
+            question.setInstructorReadAt(java.time.Instant.now());
+        }
         List<AnswerRes> answers = chatRepository.findByParent_IdOrderByCreatedAtAsc(questionId).stream()
                 .map(a -> toAnswerRes(a, question))
                 .toList();
@@ -144,6 +176,46 @@ public class LessonChatService {
                 linkUrl);
     }
 
+    /** Đánh dấu / bỏ đánh dấu đã đọc thủ công từ hộp thư (27/11/2026). */
+    @Transactional
+    public void setRead(String email, String questionId, boolean read) {
+        LessonChat question = loadOwnedQuestion(email, questionId);
+        question.setInstructorReadAt(read ? java.time.Instant.now() : null);
+    }
+
+    /**
+     * Câu trả lời hay nhất (27/11/2026): chỉ NGƯỜI HỎI hoặc GIẢNG VIÊN sở hữu khoá được đặt/bỏ.
+     * {@code answerId} null = bỏ đánh dấu; phải là trả lời TRỰC TIẾP của câu hỏi. Phát lại qua
+     * WebSocket để tab "Hỏi đáp" đang mở cập nhật huy hiệu ngay.
+     */
+    @Transactional
+    public void setBestAnswer(String email, String questionId, String answerId) {
+        LessonChat question = chatRepository.findById(questionId)
+                .orElseThrow(() -> new ResourceNotFoundException("LessonChat", questionId));
+        if (question.getParent() != null) {
+            throw new com.lms.common.exception.InvalidRequestException("Chỉ câu hỏi gốc mới có câu trả lời hay nhất");
+        }
+        User instructor = question.getLesson().getChapter().getCourse().getInstructor();
+        boolean isOwner = email.equals(instructor.getEmail());
+        boolean isAuthor = email.equals(question.getUser().getEmail());
+        if (!isOwner && !isAuthor) {
+            throw new AccessDeniedDomainException("Chỉ người hỏi hoặc giảng viên mới được chọn câu trả lời hay nhất");
+        }
+        if (answerId != null && !answerId.isBlank()) {
+            LessonChat answer = chatRepository.findById(answerId)
+                    .orElseThrow(() -> new ResourceNotFoundException("LessonChat", answerId));
+            if (answer.getParent() == null || !answer.getParent().getId().equals(questionId)) {
+                throw new com.lms.common.exception.InvalidRequestException("Câu trả lời không thuộc câu hỏi này");
+            }
+            question.setBestAnswerId(answerId);
+        } else {
+            question.setBestAnswerId(null);
+        }
+        messagingTemplate.convertAndSend("/topic/lesson/" + question.getLesson().getId() + "/best-answer",
+                java.util.Map.of("questionId", questionId,
+                        "bestAnswerId", question.getBestAnswerId() == null ? "" : question.getBestAnswerId()));
+    }
+
     private LessonChat loadOwnedQuestion(String email, String questionId) {
         LessonChat question = chatRepository.findById(questionId)
                 .orElseThrow(() -> new ResourceNotFoundException("LessonChat", questionId));
@@ -161,13 +233,14 @@ public class LessonChatService {
         return new QuestionRes(
                 q.getId(), q.getLesson().getId(), q.getLesson().getTitle(),
                 q.getLesson().getChapter().getCourse().getId(), q.getLesson().getChapter().getCourse().getTitle(),
-                q.getUserName(), q.getUser().getAvatarUrl(), q.getContent(), q.getCreatedAt(), answerCount, hasInstructorAnswer);
+                q.getUserName(), q.getUser().getAvatarUrl(), q.getContent(), q.getCreatedAt(), answerCount, hasInstructorAnswer,
+                q.getBestAnswerId(), q.getInstructorReadAt() != null);
     }
 
     private AnswerRes toAnswerRes(LessonChat a, LessonChat question) {
         Long instructorId = question.getLesson().getChapter().getCourse().getInstructor().getId();
         return new AnswerRes(
                 a.getId(), a.getUserName(), a.getUser().getAvatarUrl(), a.getContent(), a.getCreatedAt(),
-                a.getUser().getId().equals(instructorId));
+                a.getUser().getId().equals(instructorId), a.getId().equals(question.getBestAnswerId()));
     }
 }

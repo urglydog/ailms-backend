@@ -29,21 +29,37 @@ public class InstructorQaController {
             @RequestParam(required = false) Long courseId,
             @RequestParam(defaultValue = "false") boolean onlyUnanswered,
             @RequestParam(defaultValue = "false") boolean noInstructorAnswer,
+            @RequestParam(defaultValue = "false") boolean unread,
+            @RequestParam(defaultValue = "false") boolean noBestAnswer,
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "newest") String sort,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        org.springframework.data.domain.Sort order = "oldest".equalsIgnoreCase(sort)
-                ? org.springframework.data.domain.Sort.by("createdAt").ascending()
-                : org.springframework.data.domain.Sort.by("createdAt").descending();
-        Pageable pageable = PageRequest.of(Math.max(0, page), Math.min(Math.max(1, size), 50), order);
-        return ResponseEntity.ok(lessonChatService.listQuestionsForInstructor(
-                principal.getName(), courseId, onlyUnanswered, noInstructorAnswer, search, pageable));
+        Pageable pageable = PageRequest.of(Math.max(0, page), Math.min(Math.max(1, size), 50));
+        return ResponseEntity.ok(lessonChatService.listQuestionsForInstructor(principal.getName(),
+                new LessonChatService.QaFilter(courseId, onlyUnanswered, noInstructorAnswer, unread, noBestAnswer, search, sort),
+                pageable));
     }
 
     @GetMapping("/questions/{questionId}")
     public ResponseEntity<ThreadRes> getThread(Principal principal, @PathVariable String questionId) {
         return ResponseEntity.ok(lessonChatService.getThread(principal.getName(), questionId));
+    }
+
+    /** Đánh dấu đã đọc / chưa đọc (27/11/2026). Mở câu hỏi đã tự đánh dấu đã đọc. */
+    @PutMapping("/questions/{questionId}/read")
+    public ResponseEntity<Void> setRead(Principal principal, @PathVariable String questionId,
+                                        @RequestParam(defaultValue = "true") boolean read) {
+        lessonChatService.setRead(principal.getName(), questionId, read);
+        return ResponseEntity.noContent().build();
+    }
+
+    /** Đặt / bỏ câu trả lời hay nhất (27/11/2026); body {@code {"answerId": null}} = bỏ. */
+    @PutMapping("/questions/{questionId}/best-answer")
+    public ResponseEntity<Void> setBestAnswer(Principal principal, @PathVariable String questionId,
+                                              @RequestBody com.lms.community.dto.LessonQaDto.BestAnswerReq req) {
+        lessonChatService.setBestAnswer(principal.getName(), questionId, req.answerId());
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/questions/{questionId}/reply")
