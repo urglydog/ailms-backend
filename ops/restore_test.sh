@@ -24,7 +24,7 @@ lms_restore_test_last_run_timestamp_seconds $(date +%s)
 EOF
   mv "$PROM.tmp" "$PROM"
 }
-cleanup() { docker rm -f "$CT" >/dev/null 2>&1 || true; }
+cleanup() { docker rm -fv "$CT" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 bad() { log "KHÔNG ĐẠT: $*"; prom 0; exit 1; }
 
