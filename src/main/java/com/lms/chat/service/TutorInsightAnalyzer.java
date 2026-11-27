@@ -139,21 +139,23 @@ public final class TutorInsightAnalyzer {
         Map<String, String> sigLabel = new HashMap<>();
         java.util.function.Function<String, String> labelOf = sig -> sigLabel.computeIfAbsent(sig,
                 k -> phraseLabel(k, qs, signatures, label(k, surface, position)));
-        // 3) gom chủ đề
+        // 3) gom chủ đề — theo NHÃN (2 chữ ký khác nhau có thể ra cùng 1 cụm nhãn, VD "game unity lên webgl"; gộp
+        // lại để không hiện trùng, số học viên là hợp của 2 nhóm).
         Map<String, Set<Long>> groupUsers = new LinkedHashMap<>();
         Map<String, Integer> groupCount = new HashMap<>();
         for (int i = 0; i < qs.size(); i++) {
             String sig = signatures.get(i);
             if (sig == null || qs.get(i).userId() == null) continue;
-            groupUsers.computeIfAbsent(sig, k -> new HashSet<>()).add(qs.get(i).userId());
-            groupCount.merge(sig, 1, Integer::sum);
+            String topic = labelOf.apply(sig);
+            groupUsers.computeIfAbsent(topic, k -> new HashSet<>()).add(qs.get(i).userId());
+            groupCount.merge(topic, 1, Integer::sum);
         }
         List<TopicRes> topics = groupUsers.entrySet().stream()
                 .filter(e -> e.getValue().size() >= MIN_LEARNERS)
                 .sorted(Comparator.comparingInt((Map.Entry<String, Set<Long>> e) -> -e.getValue().size())
                         .thenComparing(e -> -groupCount.get(e.getKey())))
                 .limit(MAX_TOPICS_PER_LESSON)
-                .map(e -> new TopicRes(labelOf.apply(e.getKey()), e.getValue().size(), groupCount.get(e.getKey())))
+                .map(e -> new TopicRes(e.getKey(), e.getValue().size(), groupCount.get(e.getKey())))
                 .toList();
         // 4) trả lời chưa tốt
         int poorCount = 0;
@@ -180,14 +182,14 @@ public final class TutorInsightAnalyzer {
             if (reason == null) continue;
             poorCount++;
             if (sig != null && q.userId() != null) {
-                poorUsers.computeIfAbsent(reason + "|" + sig, k -> new HashSet<>()).add(q.userId());
+                poorUsers.computeIfAbsent(reason + "|" + labelOf.apply(sig), k -> new HashSet<>()).add(q.userId());
             }
         }
         List<PoorGroup> poorGroups = poorUsers.entrySet().stream()
                 .filter(e -> e.getValue().size() >= MIN_LEARNERS)
                 .map(e -> {
                     String[] parts = e.getKey().split("\\|", 2);
-                    return new PoorGroup(labelOf.apply(parts[1]), parts[0], e.getValue().size());
+                    return new PoorGroup(parts[1], parts[0], e.getValue().size());
                 })
                 .toList();
         return new LessonAnalysis(learners.size(), poorCount, topics, poorGroups);

@@ -76,6 +76,22 @@ class TutorInsightAnalyzerTest {
     }
 
     @Test
+    void topics_withSameLabel_areMergedNotListedTwice() {
+        List<Question> qs = List.of(
+                q("Làm sao xuất bản game Unity lên WebGL?", 1, 1, "ok", 0),
+                q("Xuất bản game Unity lên WebGL cần cài gì thêm?", 1, 1, "ok", 1),
+                q("Làm sao xuất bản game Unity lên WebGL?", 2, 1, "ok", 2),
+                q("Xuất bản game Unity lên WebGL cần cài gì thêm?", 2, 1, "ok", 3),
+                q("Làm sao xuất bản game Unity lên WebGL?", 3, 1, "ok", 4),
+                q("Xuất bản game Unity lên WebGL cần cài gì thêm?", 3, 1, "ok", 5));
+
+        var labels = TutorInsightAnalyzer.analyze(qs, lessons()).lessons().get(0).topics()
+                .stream().map(t -> t.label()).toList();
+
+        assertThat(labels).doesNotHaveDuplicates();
+    }
+
+    @Test
     void label_vongLapFor_keepsProgrammingKeywordAtEdge() {
         List<Question> qs = List.of(
                 q("Vòng lặp for chạy mấy lần?", 1, 1, "ok", 0),
