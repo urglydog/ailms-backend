@@ -1,0 +1,24 @@
+# Prometheus — thu số liệu mỗi 15s, chỉ trong mạng Docker (không mở cổng ra Internet).
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Backend Spring Boot: /actuator/prometheus (Micrometer). Caddy chặn /actuator/* từ Internet.
+  - job_name: backend
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["backend:8080"]
+        labels:
+          service: backend
+
+  # RAM / CPU / ổ đĩa của chính máy chủ.
+  - job_name: node
+    static_configs:
+      - targets: ["node-exporter:9100"]
+        labels:
+          service: host
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
