@@ -107,10 +107,20 @@ server:
     include-binding-errors: always
 
 management:
+  # Nhãn chung cho mọi số liệu, để Grafana lọc đúng ứng dụng khi sau này có nhiều instance.
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    # Histogram cho request HTTP để Grafana tính độ trễ p95/p99 (histogram_quantile).
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
   endpoints:
     web:
       exposure:
-        include: health,info
+        # Hiệu năng đợt 8: prometheus cho Prometheus đọc qua mạng Docker (backend:8080). Caddy chặn
+        # /actuator/* (trừ health) từ Internet — xem Caddyfile — nên endpoint này không ra ngoài.
+        include: health,info,prometheus
   endpoint:
     health:
       show-details: when-authorized

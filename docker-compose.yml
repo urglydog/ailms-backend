@@ -14,6 +14,13 @@
 # Lưu ý: KHÔNG có key `version:` — Compose V2 đã bỏ, để lại sẽ cảnh báo.
 # =====================================================================
 
+# Hiệu năng đợt 8: mẫu xoay vòng log dùng chung (tối đa 3 file x 10 MB mỗi container).
+x-logging: &default_logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   # ── Cơ sở dữ liệu ─────────────────────────────────────────────
   mysql:
@@ -22,6 +29,8 @@ services:
     # Trần RAM (26/11/2026) — chỉ là giới hạn trên, không chiếm sẵn; xem docs/perf/GIOI_HAN_RAM.md
     mem_limit: 768m
     restart: unless-stopped
+    # Hiệu năng đợt 8: xoay vòng log (Docker mặc định để log tăng mãi) — dùng chung mẫu x-logging ở đầu file.
+    logging: *default_logging
     # utf8mb4 là BẮT BUỘC: transcript tiếng Việt/Nhật/Hàn sẽ lỗi với charset mặc định
     command: >
       --character-set-server=utf8mb4
@@ -52,6 +61,8 @@ services:
     # Trần RAM (26/11/2026) — chỉ là giới hạn trên, không chiếm sẵn; xem docs/perf/GIOI_HAN_RAM.md
     mem_limit: 320m
     restart: unless-stopped
+    # Hiệu năng đợt 8: xoay vòng log (Docker mặc định để log tăng mãi) — dùng chung mẫu x-logging ở đầu file.
+    logging: *default_logging
     # maxmemory 192mb (< trần container 320m, chừa chỗ cho ghi lại file AOF). volatile-lru: khi đầy chỉ loại khoá CÓ hạn dùng
     # (bộ đếm rate limit, cache); hàng đợi Celery và khoá không hạn không bị loại (26/11/2026).
     command: redis-server --appendonly yes --maxmemory 192mb --maxmemory-policy volatile-lru --requirepass ${REDIS_PASSWORD:?Thieu_Mat_Khau_Redis_trong_env}
@@ -71,6 +82,8 @@ services:
     # Trần RAM (26/11/2026) — chỉ là giới hạn trên, không chiếm sẵn; xem docs/perf/GIOI_HAN_RAM.md
     mem_limit: 64m
     restart: unless-stopped
+    # Hiệu năng đợt 8: xoay vòng log (Docker mặc định để log tăng mãi) — dùng chung mẫu x-logging ở đầu file.
+    logging: *default_logging
     ports:
       - "127.0.0.1:${ADMINER_PORT:-8083}:8080"
     environment:
@@ -87,6 +100,8 @@ services:
     # Trần RAM (26/11/2026) — chỉ là giới hạn trên, không chiếm sẵn; xem docs/perf/GIOI_HAN_RAM.md
     mem_limit: 96m
     restart: unless-stopped
+    # Hiệu năng đợt 8: xoay vòng log (Docker mặc định để log tăng mãi) — dùng chung mẫu x-logging ở đầu file.
+    logging: *default_logging
     ports:
       - "127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025"
       - "127.0.0.1:${MAILPIT_SMTP_PORT:-1025}:1025"
@@ -106,6 +121,9 @@ services:
     # Trần RAM (26/11/2026) — chỉ là giới hạn trên, không chiếm sẵn; xem docs/perf/GIOI_HAN_RAM.md
     mem_limit: 1536m
     restart: unless-stopped
+    # Hiệu năng đợt 8: Docker mặc định chỉ chờ 10s rồi kill; backend tắt an toàn tối đa 30s
+    # (server.shutdown: graceful + SHUTDOWN_TIMEOUT), nên cho Docker chờ 35s.
+    stop_grace_period: 35s
     # Giới hạn dung lượng log (25/11/2026): log backend ở chế độ dev đã lên tới 302 MB và tăng mãi
     # vì Docker mặc định không xoay vòng. Tối đa 3 file x 20 MB.
     logging:
