@@ -45,6 +45,7 @@ lms_backup_offsite_success $offsite
 lms_backup_last_ok $1
 EOF
   mv "$PROM.tmp" "$PROM"
+  chmod 644 "$PROM"   # node-exporter (user nobody) cần đọc được; chỉ chứa dấu thời gian/số liệu, không nhạy cảm
 }
 
 fail() { log "LỖI: $*"; rm -f "$file.tmp"; write_prom 0; exit 1; }

@@ -1,0 +1,36 @@
+##### NỀN — 2026-11-27T02:57:01Z UTC (09:57 VN)
+Mem: tổng 3815 dùng 2688 còn 835
+Swap: tổng 4095 dùng 79 còn 
+đĩa trống 7.1G
+0
+(số container không Up ở trên, 0 = tốt)
+
+##### DIỄN TẬP Redis lần 2 — 2026-11-27T02:57:01Z UTC
+=== TRƯỚC KHI THỬ
+[  0s] courses:200/0.967756s categories:200/0.977488s health:200/1.320308s
+=== dừng lms_redis ~25 giây
+[  6s] courses:000/15.000131s categories:000/15.000642s health:503/5.922763s
+[ 26s] courses:000/15.000469s categories:000/14.999970s health:503/5.685424s
+[ 46s] courses:000/15.000105s categories:000/15.000331s health:503/6.136995s
+[ 66s] courses:000/15.000478s categories:000/15.000193s health:503/5.592541s
+[ 86s] courses:000/15.001028s categories:000/15.001372s health:503/5.530215s
+=== bật lại Redis
+Redis healthy sau 6s
+=== SAU PHỤC HỒI (chờ 20 giây cho các kết nối nối lại)
+[127s] courses:200/0.130410s categories:200/0.130298s health:200/0.452978s
+##### KẾT THÚC 2026-11-27T02:59:10Z UTC
+
+##### SAU
+lms_adminer	Up 23 minutes
+lms_ai_api	Up 23 minutes (healthy)
+lms_ai_beat	Up 23 minutes
+lms_ai_worker	Up 23 minutes
+lms_backend	Up 23 minutes (healthy)
+lms_caddy	Up 23 minutes (healthy)
+lms_mailpit	Up 23 minutes (healthy)
+lms_mysql	Up 23 minutes (healthy)
+lms_redis	Up 27 seconds (healthy)
+roadmap-worker-1	Up 23 minutes
+Mem: tổng 3815 dùng 2665 còn 857
+Swap: tổng 4095 dùng 79 còn 
+backend health=healthy restarts=0 oom=false

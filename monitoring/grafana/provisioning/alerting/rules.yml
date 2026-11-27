@@ -1,0 +1,303 @@
+# Sinh bởi Claude Code 27/11/2026. Cảnh báo Grafana -> Telegram. Token/chat id lấy từ biến môi trường của container Grafana
+# (TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID trong be/.env) — KHÔNG ghi giá trị thật vào file này.
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: lms-canh-bao
+    folder: LinguaLearn
+    interval: 1m
+    rules:
+      - uid: lms-backend-down
+        title: "Backend ngừng phản hồi"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: "up{job=\"backend\"}"
+              instant: true
+              range: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: lt
+                    params: [1]
+        noDataState: Alerting
+        execErrState: Alerting
+        for: 1m
+        annotations:
+          summary: "Prometheus không thu được số liệu từ backend quá 1 phút"
+          description: "Backend có thể đã sập hoặc đang khởi động lại (bình thường mất ~70 giây). Nếu kéo dài quá 3 phút: docker ps -a, docker logs lms_backend, docker start lms_backend."
+        labels:
+          severity: critical
+          he_thong: lingualearn
+      - uid: lms-5xx-high
+        title: "Tỷ lệ lỗi 5xx cao"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: "sum(rate(http_server_requests_seconds_count{job=\"backend\",status=~\"5..\"}[5m])) / clamp_min(sum(rate(http_server_requests_seconds_count{job=\"backend\"}[5m])), 0.05)"
+              instant: true
+              range: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0.05]
+        noDataState: OK
+        execErrState: Alerting
+        for: 5m
+        annotations:
+          summary: "Hơn 5% yêu cầu trả lỗi 5xx liên tục 5 phút"
+          description: "Xem log backend (docker logs lms_backend), kiểm tra MySQL/Redis có healthy không."
+        labels:
+          severity: critical
+          he_thong: lingualearn
+      - uid: lms-latency-p95
+        title: "API chậm (p95 trên 2 giây)"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: "histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket{job=\"backend\",uri!~\"/ws.*|/actuator.*|.*tutor.*|.*discovery.*|.*materials.*|.*dubbing.*|.*quiz.*|.*export.*|.*chat.*\"}[5m])))"
+              instant: true
+              range: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [2]
+        noDataState: OK
+        execErrState: Alerting
+        for: 10m
+        annotations:
+          summary: "p95 độ trễ API thường (không tính AI, chat, xuất file) trên 2 giây trong 10 phút"
+          description: "Xem dashboard Tổng quan: panel 10 endpoint chậm nhất, kết nối DB, CPU; kiểm tra slow log MySQL."
+        labels:
+          severity: warning
+          he_thong: lingualearn
+      - uid: lms-ram-low
+        title: "RAM máy chủ thấp"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: "node_memory_MemAvailable_bytes"
+              instant: true
+              range: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: lt
+                    params: [314572800]
+        noDataState: OK
+        execErrState: Alerting
+        for: 5m
+        annotations:
+          summary: "RAM còn dùng được dưới 300 MB trong 5 phút"
+          description: "Kiểm tra swap và docker stats; cân nhắc giảm tải AI worker hoặc nâng gói (Rescale)."
+        labels:
+          severity: warning
+          he_thong: lingualearn
+      - uid: lms-swap-high
+        title: "Swap dùng nhiều"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: "node_memory_SwapTotal_bytes - node_memory_SwapFree_bytes"
+              instant: true
+              range: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [3221225472]
+        noDataState: OK
+        execErrState: Alerting
+        for: 10m
+        annotations:
+          summary: "Swap đã dùng trên 3 GB trong 10 phút (máy đang thiếu RAM)"
+          description: "Máy sẽ chậm. Xem docker stats, tìm container ngốn RAM; nếu lặp lại thì cần thêm RAM."
+        labels:
+          severity: warning
+          he_thong: lingualearn
+      - uid: lms-disk-low
+        title: "Ổ đĩa sắp đầy"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: "node_filesystem_avail_bytes{mountpoint=\"/\",fstype!~\"tmpfs|overlay\"}"
+              instant: true
+              range: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: lt
+                    params: [2147483648]
+        noDataState: OK
+        execErrState: Alerting
+        for: 5m
+        annotations:
+          summary: "Ổ đĩa gốc còn trống dưới 2 GB"
+          description: "Dọn dung lượng ngay: docker system df, docker builder prune, xoá image/volume không dùng, ~/backups cũ. Đĩa đầy sẽ làm MySQL dừng."
+        labels:
+          severity: critical
+          he_thong: lingualearn
+      - uid: lms-backup-stale
+        title: "Sao lưu MySQL quá hạn"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: "time() - lms_backup_last_success_timestamp_seconds"
+              instant: true
+              range: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [93600]
+        noDataState: Alerting
+        execErrState: Alerting
+        for: 5m
+        annotations:
+          summary: "Không có bản sao lưu thành công trong 26 giờ (hoặc không đọc được số liệu sao lưu)"
+          description: "Xem /home/dev-thien/ops/logs/backup.log và crontab -l; chạy tay /home/dev-thien/ops/backup_mysql.sh. Nếu cả node-exporter ngừng thì cũng báo ở đây."
+        labels:
+          severity: critical
+          he_thong: lingualearn

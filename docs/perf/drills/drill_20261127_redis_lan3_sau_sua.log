@@ -1,0 +1,45 @@
+##### ÁP DỤNG SPRING_DATA_REDIS_TIMEOUT=1s — 2026-11-27T03:01:48Z UTC
+Mem: tổng 3815 dùng 2674 còn 849
+Swap: tổng 4095 dùng 79 còn 
+03:01:48
+ Container lms_backend Starting 
+ Container lms_backend Started 
+backend health=healthy lúc 03:02:57
+SPRING_DATA_REDIS_TIMEOUT=1s
+restarts=0 oom=false
+ERROR khi khởi động: 0
+
+##### NỀN — 2026-11-27T03:03:23Z UTC (10:03 VN)
+Mem: tổng 3815 dùng 2639 còn 898
+Swap: tổng 4095 dùng 86 còn 
+đĩa trống 7.1G
+
+##### DIỄN TẬP Redis lần 3 (SAU KHI SỬA timeout 1s) — 2026-11-27T03:03:23Z UTC
+=== TRƯỚC KHI THỬ
+[  0s] courses:200/1.005490s categories:200/0.841255s health:200/0.838453s
+=== dừng lms_redis ~25 giây
+[  6s] courses:200/3.280791s categories:200/3.298729s health:503/1.709551s
+[ 14s] courses:200/3.637067s categories:200/3.615177s health:503/1.983489s
+[ 23s] courses:200/3.337806s categories:200/3.305487s health:503/1.695704s
+[ 31s] courses:200/3.315410s categories:200/3.254730s health:503/1.627760s
+[ 39s] courses:200/3.700928s categories:200/3.732936s health:503/2.062795s
+=== bật lại Redis
+Redis healthy sau 7s
+=== SAU PHỤC HỒI (chờ 20 giây cho các kết nối nối lại)
+[ 70s] courses:200/0.525414s categories:200/0.493522s health:200/0.451573s
+##### KẾT THÚC 2026-11-27T03:04:34Z UTC
+
+##### SAU
+lms_adminer	Up 29 minutes
+lms_ai_api	Up 29 minutes (healthy)
+lms_ai_beat	Up 29 minutes
+lms_ai_worker	Up 29 minutes
+lms_backend	Up 2 minutes (healthy)
+lms_caddy	Up 29 minutes (healthy)
+lms_mailpit	Up 29 minutes (healthy)
+lms_mysql	Up 29 minutes (healthy)
+lms_redis	Up 27 seconds (healthy)
+roadmap-worker-1	Up 29 minutes
+Mem: tổng 3815 dùng 2662 còn 875
+Swap: tổng 4095 dùng 91 còn 
+backend health=healthy restarts=0 oom=false

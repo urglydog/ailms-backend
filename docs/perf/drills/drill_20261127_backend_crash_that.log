@@ -1,0 +1,29 @@
+03:19:57 UTC  NỀN: state=running health=healthy restarts=0 pid=33109 web=200/0.633812s  | RAM: dùng 2757 còn 782 MB  swap: 175 MB
+03:19:57 UTC  Đang chờ bạn chạy: sudo kill -9 $(docker inspect -f '{{.State.Pid}}' lms_backend)   (PID hiện tại 33109)
+03:20:16 UTC  PHÁT HIỆN backend bị dừng/đổi tiến trình (sau 18s chờ).
+03:20:18 UTC  [+0s] state=running health=starting restarts=1 pid=37494 web=502/0.893332s
+03:20:18 UTC    → container ĐÃ CHẠY LẠI sau 0s (Docker tự chạy lại)
+03:20:22 UTC  [+5s] state=running health=starting restarts=1 pid=37494 web=502/0.479810s
+03:20:26 UTC  [+9s] state=running health=starting restarts=1 pid=37494 web=502/0.499325s
+03:20:30 UTC  [+13s] state=running health=starting restarts=1 pid=37494 web=502/0.787209s
+03:20:34 UTC  [+17s] state=running health=starting restarts=1 pid=37494 web=502/0.083388s
+03:20:37 UTC  [+21s] state=running health=starting restarts=1 pid=37494 web=502/0.151539s
+03:20:41 UTC  [+24s] state=running health=starting restarts=1 pid=37494 web=502/0.356383s
+03:20:45 UTC  [+28s] state=running health=starting restarts=1 pid=37494 web=502/0.097746s
+03:20:48 UTC  [+32s] state=running health=starting restarts=1 pid=37494 web=502/0.125550s
+03:20:52 UTC  [+35s] state=running health=starting restarts=1 pid=37494 web=502/0.193234s
+03:20:55 UTC  [+39s] state=running health=starting restarts=1 pid=37494 web=502/0.096867s
+03:20:59 UTC  [+42s] state=running health=starting restarts=1 pid=37494 web=502/0.100706s
+03:21:03 UTC  [+46s] state=running health=starting restarts=1 pid=37494 web=502/0.491119s
+03:21:06 UTC  [+50s] state=running health=starting restarts=1 pid=37494 web=502/0.098132s
+03:21:10 UTC  [+53s] state=running health=starting restarts=1 pid=37494 web=502/0.085285s
+03:21:13 UTC  [+57s] state=running health=starting restarts=1 pid=37494 web=502/0.080476s
+03:21:17 UTC  [+60s] state=running health=starting restarts=1 pid=37494 web=502/0.938492s
+03:21:21 UTC  [+64s] state=running health=starting restarts=1 pid=37494 web=503/0.593130s
+03:21:25 UTC  [+68s] state=running health=starting restarts=1 pid=37494 web=200/0.436527s
+03:21:29 UTC  [+72s] state=running health=healthy restarts=1 pid=37494 web=200/0.443828s
+03:21:29 UTC  ===== TÓM TẮT =====
+03:21:29 UTC  Docker tự chạy lại: CÓ
+03:21:29 UTC  Thời gian tới khi container chạy: 0s | tới khi healthy: 72s | RestartCount 0 → 1
+03:21:30 UTC  SAU: state=running health=healthy restarts=1 pid=37494 web=200/0.449159s | RAM dùng 2714 còn 824 MB | OOMKilled=false | exit=0
+03:21:30 UTC  Container khác: 0 không Up
