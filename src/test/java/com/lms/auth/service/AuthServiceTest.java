@@ -362,21 +362,41 @@ class AuthServiceTest {
         assertNull(savedUser.getPasswordHash());
     }
 
+    /** Tên/ảnh người dùng đã có (kể cả đã tự đổi trong LinguaLearn) KHÔNG bị Google ghi đè ở lần đăng nhập sau. */
     @Test
-    void testLoginWithGoogle_ShouldUpdateExistingUser() throws GeneralSecurityException, IOException {
+    void testLoginWithGoogle_ShouldKeepExistingNameAndAvatar() throws GeneralSecurityException, IOException {
+        User existingUser = googleLoginWith("Updated Name", "https://example.com/new-pic.jpg", "Old Name", "https://example.com/old-pic.jpg");
+
+        assertEquals("Old Name", existingUser.getFullName());
+        assertEquals("https://example.com/old-pic.jpg", existingUser.getAvatarUrl());
+        verify(userRepository).save(existingUser);
+    }
+
+    /** Tài khoản chưa có tên/ảnh thì lấy từ Google. */
+    @Test
+    void testLoginWithGoogle_ShouldFillBlankNameAndAvatarFromGoogle() throws GeneralSecurityException, IOException {
+        User existingUser = googleLoginWith("Google Name", "https://example.com/google-pic.jpg", "", null);
+
+        assertEquals("Google Name", existingUser.getFullName());
+        assertEquals("https://example.com/google-pic.jpg", existingUser.getAvatarUrl());
+        verify(userRepository).save(existingUser);
+    }
+
+    private User googleLoginWith(String googleName, String googlePicture, String currentName, String currentAvatar)
+            throws GeneralSecurityException, IOException {
         String googleEmail = "existing@gmail.com";
         String idToken = "valid-google-token";
 
         GoogleIdToken.Payload payload = mock(GoogleIdToken.Payload.class);
         when(payload.getEmail()).thenReturn(googleEmail);
-        when(payload.get("name")).thenReturn("Updated Name");
-        when(payload.get("picture")).thenReturn("https://example.com/new-pic.jpg");
+        when(payload.get("name")).thenReturn(googleName);
+        when(payload.get("picture")).thenReturn(googlePicture);
         when(googleOAuthProvider.verifyToken(idToken)).thenReturn(payload);
 
         User existingUser = new User();
         existingUser.setEmail(googleEmail);
-        existingUser.setFullName("Old Name");
-        existingUser.setAvatarUrl("https://example.com/old-pic.jpg");
+        existingUser.setFullName(currentName);
+        existingUser.setAvatarUrl(currentAvatar);
         when(userRepository.findByEmail(googleEmail)).thenReturn(Optional.of(existingUser));
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(redisTemplate.opsForSet()).thenReturn(setOperations);
@@ -387,9 +407,7 @@ class AuthServiceTest {
 
         assertNotNull(tokens);
         assertNotNull(tokens.accessToken());
-        assertEquals("Updated Name", existingUser.getFullName());
-        assertEquals("https://example.com/new-pic.jpg", existingUser.getAvatarUrl());
-        verify(userRepository).save(existingUser);
+        return existingUser;
     }
 
     @Test

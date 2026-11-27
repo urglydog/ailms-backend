@@ -26,7 +26,10 @@ public interface FlashcardReviewRepository extends JpaRepository<FlashcardReview
      */
     @Query("SELECT new com.lms.material.repository.projection.FlashcardDueCount(r.user.id, c.id, c.title, COUNT(r)) "
             + "FROM FlashcardReview r JOIN r.flashcard f JOIN f.flashcardDeck d JOIN d.materialGeneration g JOIN g.course c "
-            + "WHERE r.nextReviewAt <= :now GROUP BY r.user.id, c.id, c.title")
+            + "WHERE r.nextReviewAt <= :now AND g.isDeleted = false "
+            // Chỉ nhắc học viên CÒN ghi danh khoá đó (ghi danh bị thu hồi khi hoàn tiền thì `@SQLRestriction` của Enrollment tự loại).
+            + "AND EXISTS (SELECT 1 FROM Enrollment en WHERE en.user.id = r.user.id AND en.course.id = c.id) "
+            + "GROUP BY r.user.id, c.id, c.title")
     java.util.List<FlashcardDueCount> countDueByUser(@Param("now") java.time.LocalDateTime now);
 
 }

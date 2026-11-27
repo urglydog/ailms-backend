@@ -432,11 +432,12 @@ public class AuthService {
         User user;
         if (existingUser.isPresent()) {
             user = existingUser.get();
-            // Update profile fields from Google
-            if (payload.get("name") != null) {
+            // Chỉ lấy tên/ảnh từ Google khi tài khoản CHƯA có — trước đây mỗi lần đăng nhập Google đều ghi đè, nên tên/ảnh người dùng
+            // tự đổi trong LinguaLearn bị mất ở lần đăng nhập kế tiếp.
+            if (payload.get("name") != null && (user.getFullName() == null || user.getFullName().isBlank())) {
                 user.setFullName((String) payload.get("name"));
             }
-            if (payload.get("picture") != null) {
+            if (payload.get("picture") != null && (user.getAvatarUrl() == null || user.getAvatarUrl().isBlank())) {
                 user.setAvatarUrl((String) payload.get("picture"));
             }
             log.info("Updated existing Google OAuth user: {}", email);
