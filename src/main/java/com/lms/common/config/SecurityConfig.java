@@ -65,6 +65,7 @@ public class SecurityConfig {
             "/actuator/health",
             "/actuator/health/**",
             "/actuator/info",
+            "/actuator/prometheus",     // chỉ đọc được trong mạng Docker: Caddy chặn /actuator/* từ Internet
             "/api/v1/auth/**",          // UC01 đăng ký, UC02 đăng nhập, UC04 quên mật khẩu
             "/api/v1/oauth2/**",        // UC02 Google OAuth2
             "/api/v1/payments/callback/**", // UC14 IPN từ cổng thanh toán (xác thực bằng HMAC, không phải JWT)

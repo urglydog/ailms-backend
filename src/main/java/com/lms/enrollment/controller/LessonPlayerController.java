@@ -6,6 +6,7 @@ import com.lms.enrollment.service.PlayerHeartbeatService;
 import java.security.Principal;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -20,6 +21,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/lessons")
 @RequiredArgsConstructor
+// `/api/v1/lessons/**` nằm trong PUBLIC_GET_ENDPOINTS nên PHẢI chặn ở tầng method (26/11/2026: khách chưa đăng nhập từng nhận 500).
+@PreAuthorize("isAuthenticated()")
 public class LessonPlayerController {
 
     private final LessonPlayerService lessonPlayerService;

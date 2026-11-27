@@ -20,6 +20,7 @@ import org.springframework.stereotype.Component;
  *       Không có token vẫn kết nối được (topic công khai như chat bài học).</li>
  *   <li>SUBSCRIBE {@code /topic/notifications/{x}}: chỉ chính chủ ({@code x} = id hoặc email).</li>
  *   <li>SUBSCRIBE {@code /topic/conversations/{id}}: chỉ 2 người trong hội thoại.</li>
+ *   <li>SEND {@code /app/**}: phải có JWT hợp lệ ở CONNECT (26/11/2026); trước đây khách chưa đăng nhập gửi được tin vào mọi bài học.</li>
  * </ul>
  * Trước đây ai biết id đều nghe được tin nhắn riêng/thông báo của người khác.
  */
@@ -27,8 +28,9 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class StompAuthInterceptor implements ChannelInterceptor {
 
-    static final String ATTR_USER_ID = "lms.userId";
-    static final String ATTR_EMAIL = "lms.email";
+    public static final String ATTR_USER_ID = "lms.userId";
+    public static final String ATTR_EMAIL = "lms.email";
+    private static final String APP_PREFIX = "/app/";
     private static final String NOTIFY_PREFIX = "/topic/notifications/";
     private static final String CONVERSATION_PREFIX = "/topic/conversations/";
 
@@ -49,6 +51,12 @@ public class StompAuthInterceptor implements ChannelInterceptor {
                     session.put(ATTR_USER_ID, jwtTokenProvider.getUserId(token));
                     session.put(ATTR_EMAIL, jwtTokenProvider.getAuthentication(token).getName());
                 }
+            }
+        } else if (accessor.getCommand() == StompCommand.SEND) {
+            String dest = accessor.getDestination();
+            if (dest != null && dest.startsWith(APP_PREFIX)
+                    && (session == null || session.get(ATTR_USER_ID) == null)) {
+                throw new MessageDeliveryException("Cần đăng nhập để gửi tin nhắn");
             }
         } else if (accessor.getCommand() == StompCommand.SUBSCRIBE) {
             String dest = accessor.getDestination();
