@@ -48,6 +48,47 @@ class TutorInsightAnalyzerTest {
         assertThat(l1.topics()).noneMatch(t -> t.label().contains("abc123") || t.label().contains("khẩu"));
     }
 
+    // ── Nhãn là cụm từ tiếng Việt liền kề, không cắt giữa từ (27/11/2026) ──
+
+    @Test
+    void label_keepsMultiSyllableVietnameseWordWhole_kieuDuLieu() {
+        List<Question> qs = List.of(
+                q("Kiểu dữ liệu float khác int thế nào?", 1, 1, "ok", 0),
+                q("Tại sao kiểu dữ liệu float bị sai số?", 2, 1, "ok", 1),
+                q("float với kiểu dữ liệu decimal khác gì?", 3, 1, "ok", 2),
+                q("Kiểu dữ liệu float dùng khi nào?", 4, 1, "ok", 3));
+
+        var topics = TutorInsightAnalyzer.analyze(qs, lessons()).lessons().get(0).topics();
+
+        assertThat(topics).extracting(t -> t.label()).contains("kiểu dữ liệu").doesNotContain("kiểu dữ");
+    }
+
+    @Test
+    void label_vongLapFor_keepsProgrammingKeywordAtEdge() {
+        List<Question> qs = List.of(
+                q("Vòng lặp for chạy mấy lần?", 1, 1, "ok", 0),
+                q("vòng lặp for với range đếm từ đâu", 2, 1, "ok", 1),
+                q("Vòng lặp for lồng nhau viết sao?", 3, 1, "ok", 2));
+
+        var topics = TutorInsightAnalyzer.analyze(qs, lessons()).lessons().get(0).topics();
+
+        assertThat(topics).extracting(t -> t.label()).containsExactly("vòng lặp for");
+    }
+
+    @Test
+    void label_epKieu_prefersPhraseSharedByMostLearners() {
+        List<Question> qs = List.of(
+                q("Ép kiểu str sang int bằng gì?", 1, 1, "ok", 0),
+                q("Ép kiểu int sang str thì sao?", 2, 1, "ok", 1),
+                q("Ép kiểu str lỗi ValueError là sao?", 3, 1, "ok", 2));
+
+        var topics = TutorInsightAnalyzer.analyze(qs, lessons()).lessons().get(0).topics();
+
+        // "ép kiểu" được cả 3 học viên dùng; "ép kiểu str" chỉ 2 -> chọn "ép kiểu"; không câu nào lộ nguyên văn.
+        assertThat(topics.get(0).label()).isEqualTo("ép kiểu");
+        assertThat(topics).noneMatch(t -> t.label().contains("ValueError"));
+    }
+
     @Test
     void sameUserAskingManyTimes_isNotATopic() {
         List<Question> qs = List.of(

@@ -80,8 +80,8 @@ public class TutorInsightService {
             n.setStatus(CourseTutorInsight.FAILED); // để nhánh dưới chuyển sang PENDING
             return n;
         });
-        boolean cooling = row.getGeneratedAt() != null
-                && row.getGeneratedAt().isAfter(LocalDateTime.now().minusMinutes(REFRESH_COOLDOWN_MINUTES));
+        LocalDateTime retryAfter = retryAfter(row);
+        boolean cooling = retryAfter != null;
         if (!CourseTutorInsight.PENDING.equals(row.getStatus()) && !cooling) {
             row.setStatus(CourseTutorInsight.PENDING);
             insightRepository.save(row);
@@ -181,7 +181,7 @@ public class TutorInsightService {
 
     private SummaryRes summary(Long courseId) {
         return insightRepository.findByCourseId(courseId).map(this::toSummary)
-                .orElse(new SummaryRes("NONE", null, List.of(), null));
+                .orElse(new SummaryRes("NONE", null, List.of(), null, null));
     }
 
     private SummaryRes toSummary(CourseTutorInsight row) {
@@ -193,7 +193,25 @@ public class TutorInsightService {
                 // giữ rỗng
             }
         }
-        return new SummaryRes(row.getStatus(), row.getSummary(), actions, row.getGeneratedAt());
+        return new SummaryRes(row.getStatus(), row.getSummary(), actions, row.getGeneratedAt(),
+                CourseTutorInsight.PENDING.equals(row.getStatus()) ? null : retryAfter(row));
+    }
+
+    /**
+     * Giới hạn {@link #REFRESH_COOLDOWN_MINUTES} phút/lần tính từ LẦN THỬ gần nhất (27/11/2026, sửa lỗi):
+     * trước đây chỉ tính từ {@code generatedAt} (chỉ đặt khi THÀNH CÔNG) nên khi AI Worker lỗi, bấm
+     * "Thử lại" liên tục gọi AI Worker không giới hạn. Lần thử thất bại lấy mốc {@code updatedAt}.
+     * Trả null nếu được thử ngay.
+     */
+    static LocalDateTime retryAfter(CourseTutorInsight row) {
+        LocalDateTime last = row.getGeneratedAt();
+        if (CourseTutorInsight.FAILED.equals(row.getStatus()) && row.getUpdatedAt() != null
+                && (last == null || row.getUpdatedAt().isAfter(last))) {
+            last = row.getUpdatedAt();
+        }
+        if (last == null) return null;
+        LocalDateTime next = last.plusMinutes(REFRESH_COOLDOWN_MINUTES);
+        return next.isAfter(LocalDateTime.now()) ? next : null;
     }
 
     private Course loadOwned(String email, Long courseId) {

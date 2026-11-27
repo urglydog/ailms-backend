@@ -134,6 +134,10 @@ public final class TutorInsightAnalyzer {
                     .toList();
             signatures.add(shared.isEmpty() ? null : String.join(" ", shared));
         }
+        // Nhãn chủ đề: cụm từ liền kề phổ biến nhất (xem phraseLabel), tính 1 lần cho mỗi chữ ký.
+        Map<String, String> sigLabel = new HashMap<>();
+        java.util.function.Function<String, String> labelOf = sig -> sigLabel.computeIfAbsent(sig,
+                k -> phraseLabel(k, qs, signatures, label(k, surface, position)));
         // 3) gom chủ đề
         Map<String, Set<Long>> groupUsers = new LinkedHashMap<>();
         Map<String, Integer> groupCount = new HashMap<>();
@@ -148,7 +152,7 @@ public final class TutorInsightAnalyzer {
                 .sorted(Comparator.comparingInt((Map.Entry<String, Set<Long>> e) -> -e.getValue().size())
                         .thenComparing(e -> -groupCount.get(e.getKey())))
                 .limit(MAX_TOPICS_PER_LESSON)
-                .map(e -> new TopicRes(label(e.getKey(), surface, position), e.getValue().size(), groupCount.get(e.getKey())))
+                .map(e -> new TopicRes(labelOf.apply(e.getKey()), e.getValue().size(), groupCount.get(e.getKey())))
                 .toList();
         // 4) trả lời chưa tốt
         int poorCount = 0;
@@ -182,10 +186,59 @@ public final class TutorInsightAnalyzer {
                 .filter(e -> e.getValue().size() >= MIN_LEARNERS)
                 .map(e -> {
                     String[] parts = e.getKey().split("\\|", 2);
-                    return new PoorGroup(label(parts[1], surface, position), parts[0], e.getValue().size());
+                    return new PoorGroup(labelOf.apply(parts[1]), parts[0], e.getValue().size());
                 })
                 .toList();
         return new LessonAnalysis(learners.size(), poorCount, topics, poorGroups);
+    }
+
+    /** Từ dừng KHÔNG được đứng ở đầu/cuối cụm nhãn; trừ từ khoá lập trình hay gặp ("vòng lặp for"). */
+    private static final Set<String> EDGE_OK = Set.of("for", "in", "and", "or", "is", "with", "on");
+
+    /**
+     * Nhãn chủ đề (27/11/2026, sửa lỗi cắt giữa từ — vd "kiểu dữ" thay vì "kiểu dữ liệu"): tiếng Việt
+     * là ngôn ngữ đơn lập, 1 từ thường gồm 2–3 âm tiết nên KHÔNG thể ghép 2 âm tiết rời làm nhãn.
+     * Xét mọi cụm 2–3 âm tiết LIỀN KỀ trong các câu thuộc chủ đề, đếm số HỌC VIÊN KHÁC NHAU dùng
+     * cụm đó; chọn cụm có nhiều học viên nhất (bằng nhau thì cụm dài hơn), phải chứa ít nhất 1 từ
+     * khoá của chữ ký và được &gt;= {@link #MIN_LEARNERS} học viên dùng — nên nhãn không bao giờ là câu
+     * riêng của 1 người. Không có cụm nào đạt thì dùng {@code fallback}.
+     */
+    static String phraseLabel(String signature, List<Question> qs, List<String> signatures, String fallback) {
+        Set<String> sigKeys = Set.of(signature.split(" "));
+        Map<String, Set<Long>> users = new HashMap<>();
+        Map<String, Map<String, Integer>> surfaces = new HashMap<>();
+        for (int i = 0; i < qs.size(); i++) {
+            Question q = qs.get(i);
+            if (!signature.equals(signatures.get(i)) || q.userId() == null || q.text() == null) continue;
+            String[] words = q.text().toLowerCase(java.util.Locale.ROOT).split("[^\\p{L}\\p{N}]+");
+            List<String> w = new ArrayList<>();
+            for (String x : words) if (!x.isEmpty()) w.add(x);
+            Set<String> seenInQuestion = new HashSet<>();
+            for (int n = 2; n <= 3; n++) {
+                for (int a = 0; a + n <= w.size(); a++) {
+                    List<String> norm = w.subList(a, a + n).stream().map(TutorSuggestionService::normalize).toList();
+                    if (!edgeOk(norm.get(0)) || !edgeOk(norm.get(n - 1))) continue;
+                    if (norm.stream().noneMatch(sigKeys::contains)) continue;
+                    String key = String.join(" ", norm);
+                    if (!seenInQuestion.add(key)) continue;
+                    users.computeIfAbsent(key, k -> new HashSet<>()).add(q.userId());
+                    surfaces.computeIfAbsent(key, k -> new HashMap<>()).merge(String.join(" ", w.subList(a, a + n)), 1, Integer::sum);
+                }
+            }
+        }
+        return users.entrySet().stream()
+                .filter(e -> e.getValue().size() >= MIN_LEARNERS)
+                .max(Comparator.<Map.Entry<String, Set<Long>>>comparingInt(e -> e.getValue().size())
+                        .thenComparingInt(e -> e.getKey().split(" ").length)
+                        .thenComparing(Map.Entry::getKey, Comparator.reverseOrder()))
+                .map(e -> surfaces.get(e.getKey()).entrySet().stream()
+                        .max(Map.Entry.<String, Integer>comparingByValue().thenComparing(Map.Entry.comparingByKey()))
+                        .map(Map.Entry::getKey).orElse(e.getKey()))
+                .orElse(fallback);
+    }
+
+    private static boolean edgeOk(String key) {
+        return key.length() >= 2 && (!STOP.contains(key) || EDGE_OK.contains(key));
     }
 
     /** Nhãn = các từ khoá (dạng có dấu hay gặp nhất), xếp theo vị trí trung bình trong câu. */

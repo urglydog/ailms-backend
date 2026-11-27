@@ -29,7 +29,8 @@ public class TutorInsightDto {
     public record PoorTopicRes(Long lessonId, String lessonTitle, String label, String reason, int learnerCount) {}
 
     /** @param status NONE | PENDING | READY | FAILED */
-    public record SummaryRes(String status, String text, List<String> actions, LocalDateTime generatedAt) {}
+    /** {@code retryAfter} (27/11/2026): thời điểm sớm nhất được bấm "Làm mới/Thử lại" (giới hạn 10 phút); null = được ngay. */
+    public record SummaryRes(String status, String text, List<String> actions, LocalDateTime generatedAt, LocalDateTime retryAfter) {}
 
     public record CourseInsightRes(Long courseId, int windowDays, int totalQuestions, int learnerCount,
                                    List<LessonInsightRes> lessons, List<PoorTopicRes> poorTopics,

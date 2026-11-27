@@ -95,6 +95,35 @@ class TutorInsightServiceTest {
     }
 
     @Test
+    void requestSummary_afterRecentFailure_respectsCooldown_andExposesRetryAfter() {
+        CourseTutorInsight failed = new CourseTutorInsight();
+        failed.setCourseId(5L);
+        failed.setStatus(CourseTutorInsight.FAILED);
+        failed.setUpdatedAt(LocalDateTime.now().minusMinutes(2));
+        when(insightRepository.findByCourseId(5L)).thenReturn(Optional.of(failed));
+
+        SummaryRes res = service.requestSummary("owner@lms.local", 5L);
+
+        assertThat(res.status()).isEqualTo("FAILED");
+        assertThat(res.retryAfter()).isAfter(LocalDateTime.now());
+        verify(insightRepository, never()).save(failed);
+    }
+
+    @Test
+    void requestSummary_afterOldFailure_requeues() {
+        CourseTutorInsight failed = new CourseTutorInsight();
+        failed.setCourseId(5L);
+        failed.setStatus(CourseTutorInsight.FAILED);
+        failed.setUpdatedAt(LocalDateTime.now().minusMinutes(11));
+        when(insightRepository.findByCourseId(5L)).thenReturn(Optional.of(failed));
+
+        SummaryRes res = service.requestSummary("owner@lms.local", 5L);
+
+        assertThat(res.status()).isEqualTo("PENDING");
+        assertThat(res.retryAfter()).isNull();
+    }
+
+    @Test
     void generate_withoutQuestions_skipsLlm() {
         when(lessonRepository.findByChapter_CourseIdOrderByChapter_DisplayOrderAscDisplayOrderAsc(5L)).thenReturn(List.of());
         when(chatMessageRepository.findQuestionsForCourseInsight(eq(5L), any(), anyInt())).thenReturn(List.of());
