@@ -18,7 +18,7 @@ Bật lại đúng danh sách dịch vụ (KHÔNG chạy `docker compose up -d` 
 | --- | --- | --- | --- | --- |
 | Backend sập / hết RAM | web trả 502/lỗi; `lms_backend` không healthy | Docker tự chạy lại (`unless-stopped`), ~70 s | xem `docker logs lms_backend`; nếu lặp lại: tăng `mem_limit` hoặc xem rò rỉ bộ nhớ | chạy `ops/drill.sh backend` |
 | MySQL sập | web lỗi 500 hàng loạt | tự chạy lại; dữ liệu nằm volume `be_mysql_data` | nếu không lên: xem `docker logs lms_mysql`; **khôi phục từ sao lưu** (mục 4) | chạy `ops/drill.sh mysql` |
-| Redis sập | đăng nhập/giới hạn tần suất lỗi, chat/WebSocket chập chờn | tự chạy lại; dữ liệu AOF giữ lại | chờ ~10 s; backend tự nối lại; khoá/phiên không mất vì có AOF | đã gặp thật khi tạo lại Redis: lỗi tạm ~11 s rồi tự hết; thử có kiểm soát: `ops/drill.sh redis` |
+| Redis sập | **API công khai gần như không trả lời** (mỗi yêu cầu chờ ≥ 15 s vì timeout Redis 5 s cộng dồn), `/actuator/health` trả 503 | tự chạy lại; backend tự nối lại; dữ liệu AOF giữ | bật lại Redis (`docker start lms_redis`); sau khi Redis `healthy`, web tự hồi phục trong ≤ ~21 s | **đã thử 27/11**: `drills/DRILL_20261127.md` |
 | Cạn RAM (OOM) | `OOMKilled=true`, swap cao | hệ điều hành dừng **ai-worker trước** (`oom_score_adj`), MySQL/backend được bảo vệ | giảm `--concurrency`, tăng RAM bằng Rescale nếu thường xuyên | chưa |
 | Đĩa đầy | ghi file lỗi, MySQL ngừng | — | `docker system df`, xoá image/cache cũ (`docker builder prune`, `docker image prune`), dọn `~/backups` cũ; log container đã giới hạn | log đã giới hạn |
 | Máy chủ treo / mất | không SSH được | không | Hetzner Console: Power → Reset; nếu hỏng đĩa: khôi phục từ Snapshot/Backups, hoặc dựng máy mới + khôi phục DB (mục 4) | chưa |
