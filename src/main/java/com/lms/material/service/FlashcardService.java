@@ -2,7 +2,9 @@ package com.lms.material.service;
 
 import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
+import com.lms.common.exception.AccessDeniedDomainException;
 import com.lms.common.exception.ResourceNotFoundException;
+import com.lms.enrollment.repository.EnrollmentRepository;
 import com.lms.material.dto.FlashcardDto;
 import com.lms.material.entity.Flashcard;
 import com.lms.material.entity.FlashcardReview;
@@ -31,6 +33,27 @@ public class FlashcardService {
     private final FlashcardDeckRepository flashcardDeckRepository;
     private final FlashcardReviewRepository reviewRepository;
     private final UserRepository userRepository;
+    private final EnrollmentRepository enrollmentRepository;
+
+    /**
+     * Quyền dùng một bộ thẻ để ôn: giảng viên của khoá, hoặc học viên CÒN ghi danh khoá đó (ghi danh bị thu hồi khi hoàn tiền thì không còn)
+     * và là chủ bộ thẻ cá nhân hoặc bộ thẻ do giảng viên đánh dấu chính thức. Trước đây xem thẻ/chấm điểm ôn không kiểm quyền: ai đăng nhập
+     * cũng đọc được nội dung và ghi tiến độ ôn của bất kỳ bộ thẻ nào chỉ cần biết mã.
+     */
+    private void requireDeckAccess(User user, FlashcardDeck deck) {
+        var generation = deck.getMaterialGeneration();
+        var course = generation.getCourse();
+        if (course.getInstructor().getId().equals(user.getId())) {
+            return;
+        }
+        if (!enrollmentRepository.existsByUser_IdAndCourse_Id(user.getId(), course.getId())) {
+            throw new AccessDeniedDomainException("Bạn chưa sở hữu khóa học này");
+        }
+        boolean owner = generation.getUser() != null && generation.getUser().getId().equals(user.getId());
+        if (!owner && !Boolean.TRUE.equals(deck.getIsOfficial())) {
+            throw new AccessDeniedDomainException("Học liệu này thuộc về người khác");
+        }
+    }
 
     /**
      * Update flashcard content (frontText / backText). Only owner of personal material can edit.
@@ -199,6 +222,10 @@ public class FlashcardService {
         User student = userRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("User", userEmail));
 
+        FlashcardDeck deck = flashcardDeckRepository.findById(deckId)
+                .orElseThrow(() -> new ResourceNotFoundException("FlashcardDeck", deckId));
+        requireDeckAccess(student, deck);
+
         List<Flashcard> cards = flashcardRepository.findByFlashcardDeck_Id(deckId);
         List<FlashcardReview> reviews = reviewRepository.findByUser_IdAndFlashcard_FlashcardDeck_Id(student.getId(), deckId);
 
@@ -233,6 +260,7 @@ public class FlashcardService {
         
         Flashcard flashcard = flashcardRepository.findById(flashcardId)
                 .orElseThrow(() -> new ResourceNotFoundException("Flashcard", flashcardId));
+        requireDeckAccess(student, flashcard.getFlashcardDeck());
 
         FlashcardReview review = reviewRepository.findByUser_IdAndFlashcard_Id(student.getId(), flashcardId)
                 .orElseGet(() -> {
