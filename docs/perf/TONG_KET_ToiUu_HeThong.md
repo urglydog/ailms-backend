@@ -20,6 +20,7 @@
 | 6 | Ổn định nhiều người dùng/nhiều backend | 19 job chung 1 luồng; chạy 2 backend thì job chạy trùng; deploy cắt ngang request; JSON không nén | Pool scheduler 6 luồng, ShedLock + Redis, graceful shutdown, gzip | Chi tiết: [DOT6_OnDinh_NhieuNguoiDung.md](DOT6_OnDinh_NhieuNguoiDung.md) |
 | 7 | Tải trang và giảm tải | Thư viện nặng (mermaid, mindmap, recharts) tải ngay khi mở trang; banner thông báo mỗi lần gọi là 1 câu SQL | `import()` động / `next/dynamic`; cache Redis 30 s + evict khi admin sửa | Chi tiết: [DOT7_TaiTrang_GiamTai.md](DOT7_TaiTrang_GiamTai.md) |
 | 8 | Sẵn sàng giám sát | Server chạy bản dev (1,6 GB RAM, log mọi SQL); chưa có số liệu để giám sát | Endpoint Prometheus + histogram độ trễ, xoay vòng log còn thiếu, `stop_grace_period`; nhánh `feat/monitoring` có Prometheus + Grafana | Bản prod 0,9 GB RAM (−45%); chi tiết [DOT8_SanSangGiamSat.md](DOT8_SanSangGiamSat.md) |
+| 9 | Tiến độ học và trang học bài | Mỗi lần gửi tiến độ (15 s/lần/người) đều tính lại tiến độ cả khóa; trang học bài tải sẵn mọi tab | Chỉ tính lại khi bài vừa hoàn thành hoặc mở lần đầu; tải lười 9 tab/panel | ~15 → ~11 câu MySQL/lần gửi; trang học bài 328 → 247 kB; chi tiết [DOT9_TienDo_TrangHocBai.md](DOT9_TienDo_TrangHocBai.md) |
 
 Tổng số test sau cùng: **491 test backend** và **564 test frontend**, tất cả đều qua.
 
