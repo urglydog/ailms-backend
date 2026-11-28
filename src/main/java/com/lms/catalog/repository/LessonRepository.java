@@ -27,6 +27,11 @@ public interface LessonRepository extends JpaRepository<Lesson, Long> {
 
     List<Lesson> findByChapterIdOrderByDisplayOrderAsc(Long chapterId);
 
+    /** Bài học kèm chương + khoá trong 1 truy vấn — cho luồng đọc chạy NGOÀI giao dịch (gợi ý Gia sư). */
+    @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"chapter", "chapter.course"})
+    @org.springframework.data.jpa.repository.Query("SELECT l FROM Lesson l WHERE l.id = :id")
+    Optional<Lesson> findWithChapterAndCourseById(@org.springframework.data.repository.query.Param("id") Long id);
+
     /** "Học ngay" (my-courses) — bài học đầu tiên của khoá theo đúng thứ tự chương rồi bài. */
     Optional<Lesson> findFirstByChapter_CourseIdOrderByChapter_DisplayOrderAscDisplayOrderAsc(Long courseId);
 
