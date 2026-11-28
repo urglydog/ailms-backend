@@ -171,6 +171,21 @@ class CoursePublicServiceTest {
         DetailRes result = coursePublicService.getBySlug("khoa-mat-khau", null);
 
         assertThat(result.requiresPassword()).isTrue();
+        assertThat(result.viewerIsOwner()).isFalse();
+    }
+
+    @Test
+    void getBySlug_flagsViewerIsOwner_onlyForTheCourseInstructor() {
+        Course course = privateInviteCourseOf();
+        course.setVisibility(CourseVisibility.PUBLIC);
+        course.getInstructor().setEmail("gv@lms.local");
+        when(courseRepository.findBySlugAndStatus("khoa-rieng-tu", CourseStatus.PUBLISHED)).thenReturn(Optional.of(course));
+        lenient().when(chapterRepository.findByCourseIdOrderByDisplayOrderAsc(5L)).thenReturn(List.of());
+        lenient().when(audioTrackRepository.findAvailableLanguagesByCourse(5L)).thenReturn(List.of());
+
+        assertThat(coursePublicService.getBySlug("khoa-rieng-tu", "GV@lms.local").viewerIsOwner()).isTrue();
+        assertThat(coursePublicService.getBySlug("khoa-rieng-tu", "hv@lms.local").viewerIsOwner()).isFalse();
+        assertThat(coursePublicService.getBySlug("khoa-rieng-tu", null).viewerIsOwner()).isFalse();
     }
 
     private Course privateInviteCourseOf() {

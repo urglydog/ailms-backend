@@ -97,6 +97,14 @@ public class CourseController {
         return ResponseEntity.ok(courseService.updateVisibility(principal.getName(), id, req));
     }
 
+    /** Mục tiêu khoá học (26/11/2026) — học được gì / yêu cầu / đối tượng. */
+    @PutMapping("/mine/{id}/goals")
+    @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
+    public ResponseEntity<DetailRes> updateGoals(
+            Principal principal, @PathVariable Long id, @Valid @RequestBody com.lms.catalog.dto.CourseDto.GoalsUpdateReq req) {
+        return ResponseEntity.ok(courseService.updateGoals(principal.getName(), id, req));
+    }
+
     @GetMapping("/mine/{id}/activities")
     @PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
     public ResponseEntity<List<java.util.Map<String, Object>>> getActivities(

@@ -103,4 +103,19 @@ public class Course extends BaseEntity {
      * DetailRes) — không lộ qua API công khai, tương tự {@code enrollPasswordHash}. */
     @Column(name = "referral_code", nullable = false, unique = true, length = 20)
     private String referralCode;
+
+    /** "Học viên sẽ học được gì" (26/11/2026) — khuyến nghị ≥ 4 mục, mỗi mục ≤ 160 ký tự. */
+    @Convert(converter = com.lms.common.util.StringListJsonConverter.class)
+    @Column(name = "learning_outcomes", columnDefinition = "TEXT")
+    private java.util.List<String> learningOutcomes = new java.util.ArrayList<>();
+
+    /** "Yêu cầu" trước khi học (26/11/2026). */
+    @Convert(converter = com.lms.common.util.StringListJsonConverter.class)
+    @Column(name = "requirements", columnDefinition = "TEXT")
+    private java.util.List<String> requirements = new java.util.ArrayList<>();
+
+    /** "Khoá học này dành cho ai" (26/11/2026). */
+    @Convert(converter = com.lms.common.util.StringListJsonConverter.class)
+    @Column(name = "target_audience", columnDefinition = "TEXT")
+    private java.util.List<String> targetAudience = new java.util.ArrayList<>();
 }

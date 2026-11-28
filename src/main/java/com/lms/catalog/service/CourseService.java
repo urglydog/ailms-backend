@@ -170,6 +170,34 @@ public class CourseService {
         return mapToDetailRes(saved);
     }
 
+    /** Mục tiêu khoá học (26/11/2026) — "Học viên sẽ học được gì", "Yêu cầu", "Đối tượng". */
+    @Transactional
+    public DetailRes updateGoals(String instructorEmail, Long id, com.lms.catalog.dto.CourseDto.GoalsUpdateReq req) {
+        Course course = loadOwnedCourse(id, instructorEmail);
+        course.setLearningOutcomes(cleanGoals(req.learningOutcomes()));
+        course.setRequirements(cleanGoals(req.requirements()));
+        course.setTargetAudience(cleanGoals(req.targetAudience()));
+        Course saved = courseRepository.save(course);
+        cacheEvictionHelper.evictCourseCacheAfterCommit(saved.getSlug());
+        return mapToDetailRes(saved);
+    }
+
+    /** Trim, bỏ mục rỗng/trùng, giữ thứ tự. Độ dài/số lượng đã chặn bằng Bean Validation. */
+    static List<String> cleanGoals(List<String> items) {
+        if (items == null) return new java.util.ArrayList<>();
+        return new java.util.ArrayList<>(items.stream()
+                .filter(java.util.Objects::nonNull)
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .distinct()
+                .limit(com.lms.catalog.dto.CourseDto.MAX_GOAL_ITEMS)
+                .toList());
+    }
+
+    private static List<String> listOrEmpty(List<String> l) {
+        return l == null ? List.of() : List.copyOf(l);
+    }
+
     @Transactional
     public DetailRes submitForReview(String instructorEmail, Long id) {
         Course course = loadOwnedCourse(id, instructorEmail);
@@ -428,6 +456,20 @@ public class CourseService {
         if (debtGuard.levelOf(course.getInstructor().getId()) >= 2) {
             missing.add("Còn công nợ quá hạn, hãy trả nợ ở trang Thu nhập (DEBT-01)");
         }
+        missing.addAll(computeMissingContentConditions(course));
+        return missing;
+    }
+
+    /** Số điều kiện NỘI DUNG của khoá (tiêu đề, mô tả, ảnh bìa, chương, bài học sẵn sàng). */
+    static final int CONTENT_CONDITIONS = 5;
+
+    /**
+     * Điều kiện NỘI DUNG còn thiếu (27/11/2026, sửa lỗi lệch %): nguồn DUY NHẤT cho cả
+     * {@code completionPercent} (danh sách khoá + trình soạn) lẫn phần nội dung của
+     * {@code missingConditions}. Không gồm điều kiện cấp tài khoản (xác minh, công nợ).
+     */
+    private List<String> computeMissingContentConditions(Course course) {
+        List<String> missing = new ArrayList<>();
         if (course.getTitle() == null || course.getTitle().isBlank()) {
             missing.add("Chưa có tiêu đề");
         }
@@ -469,14 +511,12 @@ public class CourseService {
 
     /** Xem docblock {@code SummaryRes.completionPercent}. */
     private int computeCompletionPercent(Course course) {
-        int total = 5;
-        int met = 0;
-        if (course.getTitle() != null && !course.getTitle().isBlank()) met++;
-        if (course.getDescription() != null && !course.getDescription().isBlank()) met++;
-        if (course.getThumbnailUrl() != null && !course.getThumbnailUrl().isBlank()) met++;
-        if (chapterRepository.countByCourseId(course.getId()) >= MIN_CHAPTERS_TO_SUBMIT) met++;
-        if (lessonRepository.countByChapter_CourseIdAndStatus(course.getId(), "READY") >= MIN_LESSONS_TO_SUBMIT) met++;
-        return Math.round(met * 100f / total);
+        return completionPercentOf(computeMissingContentConditions(course).size());
+    }
+
+    static int completionPercentOf(int missingContentConditions) {
+        int met = Math.max(0, CONTENT_CONDITIONS - missingContentConditions);
+        return Math.round(met * 100f / CONTENT_CONDITIONS);
     }
 
     private DetailRes mapToDetailRes(Course course) {
@@ -505,6 +545,7 @@ public class CourseService {
                 .toList();
 
         List<String> missingConditions = computeMissingConditions(course);
+        int completionPercent = computeCompletionPercent(course);
 
         return new DetailRes(
                 course.getId(),
@@ -527,7 +568,11 @@ public class CourseService {
                 missingConditions.isEmpty(),
                 course.getVisibility(),
                 course.getEnrollPasswordHash() != null,
-                course.getReferralCode()
+                course.getReferralCode(),
+                listOrEmpty(course.getLearningOutcomes()),
+                listOrEmpty(course.getRequirements()),
+                listOrEmpty(course.getTargetAudience()),
+                completionPercent
         );
     }
 }

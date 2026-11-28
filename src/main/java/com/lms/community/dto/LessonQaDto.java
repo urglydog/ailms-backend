@@ -19,7 +19,11 @@ public class LessonQaDto {
             String content,
             Instant createdAt,
             long answerCount,
-            boolean hasInstructorAnswer
+            boolean hasInstructorAnswer,
+            /** (27/11/2026) — id câu trả lời hay nhất, null nếu chưa có. */
+            String bestAnswerId,
+            /** (27/11/2026) — giảng viên đã mở câu hỏi này (kể từ trả lời mới nhất của người khác). */
+            boolean read
     ) {
     }
 
@@ -30,7 +34,9 @@ public class LessonQaDto {
             String userAvatarUrl,
             String content,
             Instant createdAt,
-            boolean isInstructor
+            boolean isInstructor,
+            /** (27/11/2026) — là câu trả lời hay nhất của câu hỏi. */
+            boolean isBest
     ) {
     }
 
@@ -38,5 +44,9 @@ public class LessonQaDto {
     }
 
     public record ReplyReq(String content) {
+    }
+
+    /** (27/11/2026) — đánh dấu câu trả lời hay nhất; {@code answerId} null = bỏ đánh dấu. */
+    public record BestAnswerReq(String answerId) {
     }
 }

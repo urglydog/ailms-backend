@@ -91,7 +91,7 @@ class EnrollmentServiceTest {
         LocalDateTime at = LocalDateTime.of(2026, 11, 1, 9, 0);
         when(enrollmentRepository.findWithCourseByUser_Email(EMAIL)).thenReturn(List.of(enrollment));
         when(lessonRepository.findLessonRefsByCourseIds(List.of(10L)))
-                .thenReturn(List.of(new CourseLessonRef(10L, 11L), new CourseLessonRef(10L, 12L), new CourseLessonRef(10L, 13L)));
+                .thenReturn(List.of(new CourseLessonRef(10L, 11L), new CourseLessonRef(10L, 12L, "Bai hai", 320), new CourseLessonRef(10L, 13L)));
         when(lessonProgressRepository.findProgressRefsByUserAndCourseIds(1L, List.of(10L)))
                 .thenReturn(List.of(
                         new CourseProgressRef(10L, 11L, 600, true, at.minusDays(1)),
@@ -101,6 +101,8 @@ class EnrollmentServiceTest {
 
         assertThat(res.resumeLessonId()).isEqualTo(12L);
         assertThat(res.resumePositionSec()).isEqualTo(245);
+        assertThat(res.resumeLessonTitle()).isEqualTo("Bai hai");
+        assertThat(res.resumeLessonDurationSec()).isEqualTo(320);
         assertThat(res.firstLessonId()).isEqualTo(11L);
         assertThat(res.lastAccessedAt()).isEqualTo(at);
     }

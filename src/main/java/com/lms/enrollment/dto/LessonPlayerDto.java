@@ -34,7 +34,10 @@ public class LessonPlayerDto {
              * Phụ đề ngôn ngữ GỐC — chỉ có khi bài học đã qua ít nhất 1 lần lồng tiếng (Transcript
              * gốc chỉ được tạo ở lần dịch đầu tiên). Rỗng nếu bài chưa từng lồng tiếng.
              */
-            List<SubtitleSegmentRes> originalSubtitles
+            List<SubtitleSegmentRes> originalSubtitles,
+            /** (27/11/2026) — người xem là giảng viên SỞ HỮU khoá (xem như học viên): FE bỏ qua các
+             * API chỉ dành cho học viên đã ghi danh như bảng điểm (tránh 403). */
+            boolean viewerIsOwner
     ) {}
 
     /** Một câu phụ đề kèm mốc thời gian chính xác tới mili-giây (khác {@code AudioChunkRes} chia

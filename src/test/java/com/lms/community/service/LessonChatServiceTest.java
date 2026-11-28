@@ -81,7 +81,7 @@ class LessonChatServiceTest {
     void listQuestionsForInstructor_passesFiltersAndSearchPatternToTheQuery() {
         LessonChat unanswered = questionOf("q2");
         PageRequest pageable = PageRequest.of(0, 20);
-        when(chatRepository.searchQuestionsForInstructor(eq(INSTRUCTOR_EMAIL), eq(10L), eq(true), eq("%an%"), eq(pageable)))
+        when(chatRepository.searchQuestionsForInstructor(eq(INSTRUCTOR_EMAIL), eq(10L), eq(true), eq(false), eq(false), eq(false), eq("%an%"), any()))
                 .thenReturn(new PageImpl<>(List.of(unanswered)));
         when(chatRepository.countByParent_Id("q2")).thenReturn(0L);
 
@@ -95,7 +95,7 @@ class LessonChatServiceTest {
     @Test
     void listQuestionsForInstructor_blankSearchMeansNoSearchFilter() {
         PageRequest pageable = PageRequest.of(0, 20);
-        when(chatRepository.searchQuestionsForInstructor(eq(INSTRUCTOR_EMAIL), eq(null), eq(false), eq(null), eq(pageable)))
+        when(chatRepository.searchQuestionsForInstructor(eq(INSTRUCTOR_EMAIL), eq(null), eq(false), eq(false), eq(false), eq(false), eq(null), any()))
                 .thenReturn(new PageImpl<>(List.of()));
 
         assertThat(lessonChatService.listQuestionsForInstructor(INSTRUCTOR_EMAIL, null, false, "   ", pageable).getContent()).isEmpty();
@@ -226,6 +226,142 @@ class LessonChatServiceTest {
         assertThat(result.id()).isEqualTo("new-msg-id");
         assertThat(result.senderId()).isEqualTo("1");
         assertThat(result.isInstructor()).isTrue();
+    }
+
+    // ── Chưa đọc / câu trả lời hay nhất / sắp xếp (27/11/2026) ─────────────
+
+    @Test
+    void listQuestions_unreadNoBestAndMostReplies_useReplyCountQuery() {
+        when(chatRepository.searchQuestionsForInstructorByReplies(eq(INSTRUCTOR_EMAIL), eq(null), eq(false), eq(false),
+                eq(true), eq(true), eq(null), any())).thenReturn(new PageImpl<>(List.of(questionOf("q9"))));
+
+        var result = lessonChatService.listQuestionsForInstructor(INSTRUCTOR_EMAIL,
+                new LessonChatService.QaFilter(null, false, false, true, true, null, "most_replies"), PageRequest.of(0, 20));
+
+        assertThat(result.getContent()).extracting(QuestionRes::id).containsExactly("q9");
+        assertThat(result.getContent().get(0).read()).isFalse();
+    }
+
+    @Test
+    void listQuestions_oldestSortsByCreatedAtAscending() {
+        org.mockito.ArgumentCaptor<org.springframework.data.domain.Pageable> captor =
+                org.mockito.ArgumentCaptor.forClass(org.springframework.data.domain.Pageable.class);
+        when(chatRepository.searchQuestionsForInstructor(anyString(), any(), org.mockito.ArgumentMatchers.anyBoolean(),
+                org.mockito.ArgumentMatchers.anyBoolean(), org.mockito.ArgumentMatchers.anyBoolean(),
+                org.mockito.ArgumentMatchers.anyBoolean(), any(), captor.capture())).thenReturn(new PageImpl<>(List.of()));
+
+        lessonChatService.listQuestionsForInstructor(INSTRUCTOR_EMAIL,
+                new LessonChatService.QaFilter(null, false, false, false, false, null, "oldest"), PageRequest.of(0, 20));
+
+        assertThat(captor.getValue().getSort().getOrderFor("createdAt").isAscending()).isTrue();
+    }
+
+    @Test
+    void getThread_marksQuestionReadForInstructor() {
+        LessonChat question = questionOf("q1");
+        when(chatRepository.findById("q1")).thenReturn(Optional.of(question));
+        when(chatRepository.findByParent_IdOrderByCreatedAtAsc("q1")).thenReturn(List.of());
+
+        lessonChatService.getThread(INSTRUCTOR_EMAIL, "q1");
+
+        assertThat(question.getInstructorReadAt()).isNotNull();
+    }
+
+    @Test
+    void saveMessage_learnerReply_marksQuestionUnreadAgain() {
+        User student = new User();
+        student.setId(2L);
+        LessonChat question = questionOf("q1");
+        question.setInstructorReadAt(Instant.now());
+        when(lessonRepository.getReferenceById(100L)).thenReturn(lesson);
+        when(userRepository.getReferenceById(2L)).thenReturn(student);
+        when(chatRepository.findById("q1")).thenReturn(Optional.of(question));
+        when(chatRepository.save(any(LessonChat.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        lessonChatService.saveMessage(100L, 2L, "HV", "Em bổ sung", "q1");
+
+        assertThat(question.getInstructorReadAt()).isNull();
+    }
+
+    @Test
+    void setBestAnswer_byQuestionAuthor_setsAndBroadcasts() {
+        User student = studentAuthor();
+        LessonChat question = questionOf("q1");
+        question.setUser(student);
+        LessonChat answer = answerOf("a1", question);
+        when(chatRepository.findById("q1")).thenReturn(Optional.of(question));
+        when(chatRepository.findById("a1")).thenReturn(Optional.of(answer));
+
+        lessonChatService.setBestAnswer("hv@lms.local", "q1", "a1");
+
+        assertThat(question.getBestAnswerId()).isEqualTo("a1");
+        verify(messagingTemplate).convertAndSend(eq("/topic/lesson/100/best-answer"), any(Object.class));
+    }
+
+    @Test
+    void setBestAnswer_byInstructor_canUnmark() {
+        LessonChat question = questionOf("q1");
+        question.setUser(studentAuthor());
+        question.setBestAnswerId("a1");
+        when(chatRepository.findById("q1")).thenReturn(Optional.of(question));
+
+        lessonChatService.setBestAnswer(INSTRUCTOR_EMAIL, "q1", null);
+
+        assertThat(question.getBestAnswerId()).isNull();
+    }
+
+    @Test
+    void setBestAnswer_byOtherLearner_isDenied() {
+        LessonChat question = questionOf("q1");
+        question.setUser(studentAuthor());
+        when(chatRepository.findById("q1")).thenReturn(Optional.of(question));
+
+        assertThatThrownBy(() -> lessonChatService.setBestAnswer("khac@lms.local", "q1", "a1"))
+                .isInstanceOf(AccessDeniedDomainException.class);
+    }
+
+    @Test
+    void setBestAnswer_answerOfAnotherQuestion_isRejected() {
+        LessonChat question = questionOf("q1");
+        LessonChat answer = answerOf("a2", questionOf("q2"));
+        when(chatRepository.findById("q1")).thenReturn(Optional.of(question));
+        when(chatRepository.findById("a2")).thenReturn(Optional.of(answer));
+
+        assertThatThrownBy(() -> lessonChatService.setBestAnswer(INSTRUCTOR_EMAIL, "q1", "a2"))
+                .isInstanceOf(com.lms.common.exception.InvalidRequestException.class);
+        assertThat(question.getBestAnswerId()).isNull();
+    }
+
+    @Test
+    void getThread_flagsBestAnswer() {
+        LessonChat question = questionOf("q1");
+        question.setBestAnswerId("a1");
+        when(chatRepository.findById("q1")).thenReturn(Optional.of(question));
+        when(chatRepository.findByParent_IdOrderByCreatedAtAsc("q1")).thenReturn(List.of(answerOf("a1", question), answerOf("a2", question)));
+
+        ThreadRes thread = lessonChatService.getThread(INSTRUCTOR_EMAIL, "q1");
+
+        assertThat(thread.answers()).extracting(a -> a.isBest()).containsExactly(true, false);
+        assertThat(thread.question().bestAnswerId()).isEqualTo("a1");
+    }
+
+    private User studentAuthor() {
+        User student = new User();
+        student.setId(2L);
+        student.setEmail("hv@lms.local");
+        return student;
+    }
+
+    private LessonChat answerOf(String id, LessonChat parent) {
+        LessonChat a = new LessonChat();
+        a.setId(id);
+        a.setParent(parent);
+        a.setLesson(lesson);
+        a.setUser(instructor);
+        a.setUserName("Cô Lan");
+        a.setContent("Trả lời " + id);
+        a.setCreatedAt(Instant.now());
+        return a;
     }
 
     private LessonChat questionOf(String id) {

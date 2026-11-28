@@ -18,6 +18,12 @@ public record ChatMessageDto(
         String content,
         String timestamp,
         String parentId,
-        boolean isInstructor
+        boolean isInstructor,
+        /** Hỏi đáp (27/11/2026): trên tin GỐC — id câu trả lời hay nhất (null nếu chưa có); tin trả lời luôn null. */
+        String bestAnswerId
 ) {
+    public ChatMessageDto(String id, String senderId, String senderName, String senderAvatarUrl,
+                          String content, String timestamp, String parentId, boolean isInstructor) {
+        this(id, senderId, senderName, senderAvatarUrl, content, timestamp, parentId, isInstructor, null);
+    }
 }

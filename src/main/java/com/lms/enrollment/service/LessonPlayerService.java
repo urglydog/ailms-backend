@@ -89,8 +89,8 @@ public class LessonPlayerService {
         // (19/09/2026) — Giảng viên sở hữu khóa cũng coi như "đã ghi danh" ở đây, để nút "Xem
         // trước > Với tư cách là Giảng viên" (trang chỉnh sửa khóa học) thấy ĐẦY ĐỦ trải nghiệm
         // (Hỏi đáp/Học liệu/Bài tập/Gia sư AI), không bị khóa như khách chưa mua.
-        boolean enrolled = enrollmentRepository.existsByUser_EmailAndCourse_Id(email, course.getId())
-                || (course.getInstructor() != null && course.getInstructor().getEmail().equals(email));
+        boolean owner = course.getInstructor() != null && course.getInstructor().getEmail().equals(email);
+        boolean enrolled = enrollmentRepository.existsByUser_EmailAndCourse_Id(email, course.getId()) || owner;
 
         return new Res(
                 lesson.getId(),
@@ -108,7 +108,8 @@ public class LessonPlayerService {
                 lastPositionSec,
                 languages,
                 chapters,
-                loadSubtitles(transcriptRepository.findByLesson_IdAndIsSourceTrue(lessonId))
+                loadSubtitles(transcriptRepository.findByLesson_IdAndIsSourceTrue(lessonId)),
+                owner
         );
     }
 

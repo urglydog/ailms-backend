@@ -39,6 +39,9 @@ public class EnrollmentDto {
              * Xem {@code ResumePointResolver}. */
             Long resumeLessonId,
             /** Vị trí (giây) để mở {@link #resumeLessonId}; 0 khi bắt đầu bài từ đầu. */
-            Integer resumePositionSec
+            Integer resumePositionSec,
+            /** Tên + thời lượng bài {@link #resumeLessonId} (26/11/2026) — hàng thẻ "Tiếp tục học". */
+            String resumeLessonTitle,
+            Integer resumeLessonDurationSec
     ) {}
 }

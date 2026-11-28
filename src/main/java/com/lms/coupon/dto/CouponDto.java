@@ -91,6 +91,13 @@ public class CouponDto {
             BigDecimal finalPrice,
             Integer discountPercent,
             String appliedCouponCode,
-            boolean enteredCodeValid
-    ) {}
+            boolean enteredCodeValid,
+            /** Hết hạn của coupon autoApply đang áp (26/11/2026) — FE đếm ngược "Ưu đãi kết thúc sau…"; null khi không áp coupon tự động. */
+            java.time.LocalDateTime discountEndsAt
+    ) {
+        public PriceRes(BigDecimal originalPrice, BigDecimal finalPrice, Integer discountPercent,
+                        String appliedCouponCode, boolean enteredCodeValid) {
+            this(originalPrice, finalPrice, discountPercent, appliedCouponCode, enteredCodeValid, null);
+        }
+    }
 }
