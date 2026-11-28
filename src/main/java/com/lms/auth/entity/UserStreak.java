@@ -51,5 +51,7 @@ public class UserStreak {
 
     @Version
     @Column(name = "version", nullable = false)
-    private Integer version = 0;
+    // null = entity mới -> Spring Data persist() thay vì merge(). Để "= 0" làm Hibernate coi streak mới (ID gán
+    // tay qua @MapsId) là bản ghi đã có -> UPDATE 0 dòng -> OptimisticLock -> /streak/me 500 với user chưa có streak.
+    private Integer version;
 }

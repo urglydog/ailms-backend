@@ -96,6 +96,15 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(Exception.class)
     public ProblemDetail handleUnexpected(Exception ex, HttpServletRequest request) {
+        // Lỗi phía client mà Spring MVC đã biết mã (sai method 405, thiếu tham số/header 400, 404, 415...)
+        // trước đây rơi vào đây thành 500 — giữ đúng mã của Spring, không log như lỗi hệ thống.
+        if (ex instanceof org.springframework.web.ErrorResponse er && er.getStatusCode().is4xxClientError()) {
+            HttpStatus status = HttpStatus.valueOf(er.getStatusCode().value());
+            return build(status, status.getReasonPhrase(), status.name(), request);
+        }
+        if (ex instanceof org.springframework.http.converter.HttpMessageNotReadableException) {
+            return build(HttpStatus.BAD_REQUEST, "Du lieu gui len khong hop le.", "MALFORMED_REQUEST", request);
+        }
         log.error("Loi khong mong doi tai {}", request.getRequestURI(), ex);
         return build(HttpStatus.INTERNAL_SERVER_ERROR,
                 "Da xay ra loi khong mong doi. Vui long thu lai sau.", "INTERNAL_ERROR", request);
