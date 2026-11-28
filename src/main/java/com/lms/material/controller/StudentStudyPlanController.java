@@ -2,7 +2,9 @@ package com.lms.material.controller;
 
 import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
+import com.lms.common.exception.AccessDeniedDomainException;
 import com.lms.common.exception.ResourceNotFoundException;
+import com.lms.enrollment.repository.EnrollmentRepository;
 import com.lms.material.dto.StudyPlanDto;
 import com.lms.material.dto.StudyPlanReq;
 import com.lms.material.service.StudentStudyPlanService;
@@ -17,11 +19,20 @@ import java.security.Principal;
 @RestController
 @RequestMapping("/api/v1/student/courses/{courseId}/study-plan")
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('STUDENT')")
+// Tài khoản đã lên Giảng viên (role INSTRUCTOR) vẫn học các khoá của người khác nên cũng dùng được lộ trình — trước đây chỉ STUDENT nên bị 403.
+@PreAuthorize("hasAnyRole('STUDENT', 'INSTRUCTOR')")
 public class StudentStudyPlanController {
 
     private final StudentStudyPlanService studyPlanService;
     private final UserRepository userRepository;
+    private final EnrollmentRepository enrollmentRepository;
+
+    /** Lộ trình chỉ dành cho người còn ghi danh khoá (trước đây không kiểm: ai cũng tạo/đọc được lộ trình của khoá chưa mua). */
+    private void requireEnrolled(Long userId, Long courseId) {
+        if (!enrollmentRepository.existsByUser_IdAndCourse_Id(userId, courseId)) {
+            throw new AccessDeniedDomainException("Bạn chưa sở hữu khóa học này");
+        }
+    }
 
     private Long getUserId(Principal principal) {
         return userRepository.findByEmail(principal.getName())
@@ -37,7 +48,9 @@ public class StudentStudyPlanController {
         // (CourseStudyPlanTab.tsx) lại bắt lỗi theo `err.status === 404` để coi là "chưa có
         // plan" — 2 bên không khớp hợp đồng API (chạy được là NHỜ 204 vẫn resolve thành công
         // với body rỗng, không phải vì FE xử lý đúng case 204). Đổi BE trả đúng 404 để khớp FE.
-        StudyPlanDto plan = studyPlanService.getPlan(getUserId(principal), courseId);
+        Long userId = getUserId(principal);
+        requireEnrolled(userId, courseId);
+        StudyPlanDto plan = studyPlanService.getPlan(userId, courseId);
         if (plan == null) {
             throw new ResourceNotFoundException("StudyPlan", courseId);
         }
@@ -49,7 +62,9 @@ public class StudentStudyPlanController {
             @PathVariable Long courseId,
             @Valid @RequestBody StudyPlanReq req,
             Principal principal) {
-        return ResponseEntity.ok(studyPlanService.generatePlan(getUserId(principal), courseId, req));
+        Long userId = getUserId(principal);
+        requireEnrolled(userId, courseId);
+        return ResponseEntity.ok(studyPlanService.generatePlan(userId, courseId, req));
     }
 
     @DeleteMapping
@@ -70,7 +85,9 @@ public class StudentStudyPlanController {
                 ? java.time.LocalDate.parse(req.getTargetDate())
                 : null;
                 
-        return ResponseEntity.ok(studyPlanService.reschedulePlan(getUserId(principal), courseId, targetDate));
+        Long userId = getUserId(principal);
+        requireEnrolled(userId, courseId);
+        return ResponseEntity.ok(studyPlanService.reschedulePlan(userId, courseId, targetDate));
     }
 
     @lombok.Data
