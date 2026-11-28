@@ -34,6 +34,26 @@ Cả ba ngưỡng đạt.
 
 Sau đo: backend `healthy`, 0 lần tự khởi động lại, không có dòng `ERROR` trong log, không có yêu cầu bị chặn 429.
 
+## Số liệu đọc từ ảnh Grafana và UptimeRobot (chụp 19:24–19:27)
+Ảnh gốc: `docs/perf/k6/anh/`. Cửa sổ k6 là **19:16:21–19:20:53**; mọi nhận xét dưới đây chỉ tính trong cửa sổ đó.
+
+| Nguồn | Quan sát |
+|---|---|
+| Grafana, "Request / giây" | Đỉnh khoảng **125 request/giây** quanh 19:18–19:19 (k6 đo trung bình 101/giây, đỉnh cao hơn trung bình). Trước 18:30 gần như không có tải nền |
+| Grafana, "Lỗi 5xx và bị chặn 429" | Không có điểm nào trong cửa sổ k6. Một đốm 5xx rất nhỏ (~0,003 request/giây, tức khoảng 1 request) lúc ~18:00, **trước** lần đo và không liên quan |
+| Grafana, "10 endpoint chậm nhất (trung bình 5 phút, đo sau k6)" | `/api/v1/courses` 15,6 ms · `/categories` 5,3 ms · `/courses/featured` 55,4 ms · `/courses/mine/{id}` 36,5 ms · `/cart` 134 ms · `/admin/payouts` 24,1 ms · `/admin/promotions` 30,9 ms · `/admin/support/tickets` 33,0 ms |
+| Grafana, "CPU tiến trình backend" | Đỉnh khoảng **55 %** (chuẩn hoá theo số nhân; tương đương ~110 % của một nhân, khớp 125 % do `docker stats` ghi) |
+| Grafana, "CPU máy chủ" | Đỉnh thứ hai khoảng **60 %** lúc k6 chạy (đỉnh thứ nhất ~85 % lúc 18:48 là lúc phát hành, không phải k6) |
+| Grafana, "Kết nối DB (HikariCP, pool 20)" | Đang dùng tối đa khoảng **4/20**, đang chờ = 0 |
+| Grafana, "Bộ nhớ heap JVM" | Dao động khoảng 256–420 MiB, trần `-Xmx` 896 MiB, không tiến gần trần |
+| Grafana, "RAM còn dùng được / swap" | Trong cửa sổ k6 giữ quanh **1 GiB** (khớp 982–1.075 MB ở file đo). Điểm tụt xuống ~0,5 GiB ở cuối biểu đồ (~19:27) là do **lệnh build `mvn verify` chạy trên chính server sau lần đo**, không phải do k6 |
+| UptimeRobot (Châu Âu → server qua Internet, 5 phút/lần) | Phản hồi trong khung đo 340–596 ms (trung bình 468 ms), **không có lần kiểm tra nào lỗi trong cửa sổ k6**. Khối đỏ duy nhất trên biểu đồ là lúc khởi động lại backend 18:47–18:52. Độ trễ cao hơn 41 ms của k6 vì đi qua Internet và Caddy |
+
+Lưu ý khi dùng số liệu:
+- Độ trễ p99 trên Grafana nhìn rất gồ ghề (có đỉnh 2,3 giây lúc ~19:03) vì ở mức tải nền dưới 1 request/giây, một vài request chậm (thường là các API AI/xuất file đã được loại khỏi luật cảnh báo) đủ làm lệch phân vị. Số p95 tin cậy là số của k6 (hàng nghìn mẫu).
+- Trong lúc k6 chạy có chạy `eslint` ngắn cho 2 file web trên server (vài chục giây), có thể đóng góp một phần rất nhỏ vào CPU.
+- Cảnh báo UptimeRobot "Down 5 phút 5 giây" lúc 18:48 là do phát hành backend, xem `CANH_BAO_TELEGRAM.md` về lý do Telegram không báo.
+
 ## Nhận xét
 - Với 50 người dùng đồng thời trên API đọc công khai, server giữ được ~100 request/giây, độ trễ p95 ~41 ms, không lỗi — cao hơn nhiều so với mục tiêu đặt ra (p95 < 800 ms).
 - Nút cổ chai quan sát được là **CPU của backend** (đỉnh 125 % trên 2 vCPU), không phải RAM (RAM khả dụng không xuống dưới 982 MB, swap không tăng).
@@ -43,4 +63,4 @@ Sau đo: backend `healthy`, 0 lần tự khởi động lại, không có dòng 
 ## Tệp số liệu gốc
 - `docs/perf/k6/k6-B-20261128.txt` — bản tóm tắt k6 (đã bỏ các dòng tiến trình từng giây).
 - `docs/perf/k6/ram-B-20261128.csv` — RAM máy chủ và từng container mỗi 10 giây.
-- Ảnh Grafana (`LinguaLearn — Tổng quan`) và UptimeRobot trong khung 19:10–19:25 do chủ dự án chụp bổ sung.
+- `docs/perf/k6/anh/uptimerobot-1924.png`, `grafana-request-do-tre-1926.png`, `grafana-tai-nguyen-1927.png` — ảnh do chủ dự án chụp.
