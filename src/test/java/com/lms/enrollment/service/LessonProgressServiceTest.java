@@ -274,4 +274,57 @@ class LessonProgressServiceTest {
         assertThat(captor.getValue().getProgressPct()).isEqualByComparingTo("100.00");
         assertThat(captor.getValue().getCompletedAt()).isNotNull();
     }
+
+    // ── Hiệu năng đợt 9: ping tiến độ 15s/lần KHÔNG tính lại tiến độ khóa nếu không có gì đổi ──
+
+    private LessonProgress existingProgress(int watched, boolean completed) {
+        LessonProgress p = new LessonProgress();
+        p.setUser(user);
+        p.setLesson(lesson);
+        p.setWatchedSec(watched);
+        p.setLastPositionSec(watched);
+        p.setIsCompleted(completed);
+        when(lessonProgressRepository.findByUser_IdAndLesson_Id(1L, 21L)).thenReturn(Optional.of(p));
+        return p;
+    }
+
+    @Test
+    void pingBinhThuong_chuaHoanThanh_khongTinhLaiTienDoKhoa() {
+        existingProgress(300, false);
+
+        service.recordProgress(EMAIL, 21L, new RecordReq(315, 315));
+
+        // Chỉ lưu vị trí xem; không đếm bài, không tìm quiz, không đọc/ghi enrollment.
+        verify(enrollmentRepository, never()).findByUser_IdAndCourse_Id(org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong());
+        verify(lessonRepository, never()).countByChapter_CourseIdAndStatus(org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyString());
+        verify(enrollmentRepository, never()).save(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void pingVuotNguong_vuaHoanThanh_tinhLaiTienDoKhoa() {
+        existingProgress(890, false);
+        Enrollment enrollment = new Enrollment();
+        enrollment.setUser(user);
+        enrollment.setCourse(course);
+        when(enrollmentRepository.findByUser_IdAndCourse_Id(1L, 10L)).thenReturn(Optional.of(enrollment));
+        when(lessonRepository.countByChapter_CourseIdAndStatus(10L, "READY")).thenReturn(4L);
+        when(lessonProgressRepository.countByUser_IdAndLesson_Chapter_Course_IdAndIsCompletedTrue(1L, 10L))
+                .thenReturn(2L);
+
+        service.recordProgress(EMAIL, 21L, new RecordReq(905, 905));
+
+        ArgumentCaptor<Enrollment> captor = ArgumentCaptor.forClass(Enrollment.class);
+        verify(enrollmentRepository).save(captor.capture());
+        assertThat(captor.getValue().getProgressPct()).isEqualByComparingTo("50.00");
+    }
+
+    @Test
+    void xemLaiBaiDaHoanThanh_khongTinhLaiTienDoKhoa() {
+        existingProgress(950, true);
+
+        service.recordProgress(EMAIL, 21L, new RecordReq(970, 970));
+
+        verify(enrollmentRepository, never()).findByUser_IdAndCourse_Id(org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong());
+        verify(enrollmentRepository, never()).save(org.mockito.ArgumentMatchers.any());
+    }
 }
