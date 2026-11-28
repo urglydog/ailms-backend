@@ -82,7 +82,7 @@ public class PromotionService {
         }
         assertEligible(course);
         debtGuard.assertCanPromote(user.getId());
-        if (promotionRepository.existsByCourse_IdAndPlacementAndStatusIn(course.getId(), req.placement(), OPEN_STATUSES)) {
+        if (promotionRepository.existsOpen(course.getId(), req.placement(), java.time.LocalDateTime.now())) {
             throw new BusinessRuleViolationException("Khóa này đã có đăng ký quảng bá cho vị trí này đang chờ duyệt hoặc đang chạy");
         }
         CoursePromotion p = new CoursePromotion();

@@ -171,7 +171,7 @@ class PromotionServiceTest {
 
     @Test
     void request_whenAnOpenRequestAlreadyExistsForTheSamePlacement_isRejected() {
-        when(promotionRepository.existsByCourse_IdAndPlacementAndStatusIn(eq(10L), eq(PromotionPlacement.HOME_FEATURED), any()))
+        when(promotionRepository.existsOpen(eq(10L), eq(PromotionPlacement.HOME_FEATURED), any(java.time.LocalDateTime.class)))
                 .thenReturn(true);
 
         assertThatThrownBy(() -> service.request(EMAIL, createReq())).isInstanceOf(BusinessRuleViolationException.class);

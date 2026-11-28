@@ -47,5 +47,15 @@ public interface CoursePromotionRepository extends JpaRepository<CoursePromotion
     List<CoursePromotion> findByStatusOrderByCreatedAtDesc(PromotionStatus status);
 
     /** Đã có đăng ký đang chờ/đang chạy cho cùng khóa + vị trí. */
+    /**
+     * Đăng ký quảng bá còn "mở" của khoá ở vị trí này: đang chờ duyệt, hoặc đã duyệt mà CHƯA hết hạn. Đợt đã duyệt nhưng quá `endAt`
+     * không còn chặn đăng ký lại (trước đây vẫn coi là "đang chạy" nên giảng viên không đăng ký lại được cho tới khi admin bấm gỡ tay).
+     */
+    @Query("SELECT COUNT(p) > 0 FROM CoursePromotion p WHERE p.course.id = :courseId AND p.placement = :placement "
+            + "AND (p.status = com.lms.common.enums.PromotionStatus.REQUESTED "
+            + "OR (p.status = com.lms.common.enums.PromotionStatus.APPROVED AND p.endAt > :now))")
+    boolean existsOpen(@Param("courseId") Long courseId, @Param("placement") PromotionPlacement placement,
+                       @Param("now") java.time.LocalDateTime now);
+
     boolean existsByCourse_IdAndPlacementAndStatusIn(Long courseId, PromotionPlacement placement, Collection<PromotionStatus> statuses);
 }
