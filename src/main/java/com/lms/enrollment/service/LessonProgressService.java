@@ -124,8 +124,13 @@ public class LessonProgressService {
         
         lessonProgressRepository.save(progress);
 
-        Course course = lesson.getChapter().getCourse();
-        recalculateEnrollmentProgress(user, course);
+        // Hiệu năng (28/11/2026): API này bị mọi học viên đang xem gọi mỗi 15s. % khóa chỉ phụ thuộc số
+        // bài đã hoàn thành (+ Quiz, đã tự tính lại ở QuizService) nên chỉ tính lại khi bài VỪA hoàn
+        // thành — bỏ 4-5 query (enrollment, 2 count, quiz, attempts) + 1 UPDATE ở các lần gọi còn lại.
+        if (reachedThreshold && !wasCompleted) {
+            Course course = lesson.getChapter().getCourse();
+            recalculateEnrollmentProgress(user, course);
+        }
 
         return new Res(progress.getWatchedSec(), progress.getLastPositionSec(), progress.getIsCompleted());
     }
