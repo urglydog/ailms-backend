@@ -11,7 +11,9 @@ import java.util.List;
 
 @Repository
 public interface LessonChatRepository extends JpaRepository<LessonChat, String> {
-    List<LessonChat> findByLessonIdOrderByCreatedAtAsc(Long lessonId);
+    /** Hiệu năng (28/11/2026): nạp kèm người hỏi — trước đây mỗi người đăng khác nhau = 1 truy vấn users. */
+    @org.springframework.data.jpa.repository.Query("SELECT c FROM LessonChat c JOIN FETCH c.user WHERE c.lesson.id = :lessonId ORDER BY c.createdAt ASC")
+    List<LessonChat> findByLessonIdOrderByCreatedAtAsc(@org.springframework.data.repository.query.Param("lessonId") Long lessonId);
 
     /** Bảng điều khiển "Giao tiếp > Hỏi đáp" của Giảng viên (19/09/2026) — mỗi tin nhắn GỐC
      * (parent == null) trong 1 bài học coi như 1 "câu hỏi", tin trả lời là các `LessonChat` có
