@@ -14,6 +14,9 @@ public interface AudioTrackRepository extends JpaRepository<AudioTrack, Long> {
     /** BR-DUB-04 — tai su dung track da co san thay vi chay lai pipeline. */
     Optional<AudioTrack> findByLesson_IdAndLanguage(Long lessonId, String language);
 
+    /** Mọi track của 1 bài trong 1 truy vấn — trang player tránh N+1 theo từng ngôn ngữ (hiệu năng 28/11/2026). */
+    java.util.List<AudioTrack> findByLesson_Id(Long lessonId);
+
     /** UC47 — chan xoa 1 VoiceMapping dang duoc AudioTrack nao do tham chieu (FK). */
     boolean existsByVoiceMapping_Id(Long voiceMappingId);
 
