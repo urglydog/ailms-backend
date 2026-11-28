@@ -80,6 +80,19 @@ class TutorInsightServiceTest {
     }
 
     @Test
+    void insights_reuseAggregateScanWithinTtl() {
+        when(lessonRepository.findByChapter_CourseIdOrderByChapter_DisplayOrderAscDisplayOrderAsc(5L)).thenReturn(List.of());
+        when(chatMessageRepository.findQuestionsForCourseInsight(eq(5L), any(), anyInt())).thenReturn(List.of());
+        when(insightRepository.findByCourseId(5L)).thenReturn(Optional.empty());
+
+        service.insights("owner@lms.local", 5L, null);
+        service.insights("owner@lms.local", 5L, null);
+
+        org.mockito.Mockito.verify(chatMessageRepository, org.mockito.Mockito.times(1))
+                .findQuestionsForCourseInsight(eq(5L), any(), anyInt());
+    }
+
+    @Test
     void requestSummary_queuesPending_butRespectsCooldown() {
         when(insightRepository.findByCourseId(5L)).thenReturn(Optional.empty());
         SummaryRes queued = service.requestSummary("owner@lms.local", 5L);
