@@ -25,6 +25,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -60,7 +62,7 @@ class TutorSuggestionServiceTest {
         lesson.setTitle("Thi hien tai");
         lesson.setChapter(ch);
         lenient().when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(me));
-        lenient().when(lessonRepository.findById(10L)).thenReturn(Optional.of(lesson));
+        lenient().when(lessonRepository.findWithChapterAndCourseById(10L)).thenReturn(Optional.of(lesson));
         lenient().when(lessonRepository.findByChapter_CourseIdOrderByChapter_DisplayOrderAscDisplayOrderAsc(5L))
                 .thenReturn(List.of(prev, lesson));
     }
@@ -115,6 +117,22 @@ class TutorSuggestionServiceTest {
 
         assertThat(res).extracting(SuggestionRes::source).containsExactly("POPULAR", "AI", "TEMPLATE", "TEMPLATE");
         assertThat(res.get(1).text()).isEqualTo("Dấu hiệu nhận biết thì hiện tại là gì?");
+    }
+
+    @Test
+    void popularScan_isReusedAcrossRequests_butViewerFilterStaysPerRequest() {
+        when(enrollmentSecurity.canAccessLesson(EMAIL, 10L, false)).thenReturn(true);
+        List<Object[]> rows = new ArrayList<>();
+        rows.add(row("Câu chính tôi hỏi nhiều lần", 1)); // viewer (id 1)
+        rows.add(row("Câu chính tôi hỏi nhiều lần", 2));
+        when(chatMessageRepository.findRecentQuestionsForLesson(eq(5L), eq(10L), anyInt())).thenReturn(rows);
+
+        List<SuggestionRes> first = service.suggestions(EMAIL, 10L);
+        List<SuggestionRes> second = service.suggestions(EMAIL, 10L);
+
+        verify(chatMessageRepository, times(1)).findRecentQuestionsForLesson(eq(5L), eq(10L), anyInt());
+        assertThat(first).noneMatch(s -> s.source().equals("POPULAR"));
+        assertThat(second).isEqualTo(first);
     }
 
     @Test

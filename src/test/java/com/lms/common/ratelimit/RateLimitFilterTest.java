@@ -105,6 +105,25 @@ class RateLimitFilterTest {
     }
 
     @Test
+    void ignoresForwardedFor_whenRequestDoesNotComeFromPrivateProxy() throws Exception {
+        when(ops.increment(anyString())).thenReturn(1L);
+        // Gọi thẳng backend từ IP public (không qua Caddy) -> header tự gửi không được tin.
+        MockHttpServletRequest req = request("POST", "/api/v1/auth/login", "198.51.100.9");
+        req.addHeader("X-Forwarded-For", "6.6.6.6");
+
+        filter.doFilter(req, new MockHttpServletResponse(), chain);
+
+        verify(ops).increment(startsWith("rl:auth:198.51.100.9:"));
+    }
+
+    @Test
+    void trustsForwardedFor_fromLoopbackProxy() {
+        MockHttpServletRequest req = request("GET", "/api/v1/courses", "127.0.0.1");
+        req.addHeader("X-Forwarded-For", "203.0.113.7");
+        assertThat(RateLimitFilter.clientIp(req)).isEqualTo("203.0.113.7");
+    }
+
+    @Test
     void nonApiPaths_andInternalApi_areNotLimited() throws Exception {
         filter.doFilter(request("GET", "/actuator/health", "1.1.1.1"), new MockHttpServletResponse(), chain);
         filter.doFilter(request("POST", "/api/internal/dubbing/callback", "1.1.1.1"), new MockHttpServletResponse(), chain);

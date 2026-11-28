@@ -25,6 +25,9 @@ public interface TranscriptRepository extends JpaRepository<Transcript, Long> {
 
     Optional<Transcript> findByLesson_IdAndLanguage(Long lessonId, String language);
 
+    /** Mọi bản phụ đề của 1 bài trong 1 truy vấn — trang player tránh N+1 theo từng ngôn ngữ (hiệu năng 28/11/2026). */
+    List<Transcript> findByLesson_Id(Long lessonId);
+
     /** BR-MAT-01 — điều kiện DUY NHẤT để cho phép sinh học liệu: khoá học có ít nhất 1 bài đã có
      * transcript gốc, KHÔNG phụ thuộc đã lồng tiếng ngôn ngữ nào hay chưa. */
     @Query("SELECT COUNT(t) > 0 FROM Transcript t JOIN t.lesson l JOIN l.chapter c "

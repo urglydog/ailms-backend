@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
@@ -49,6 +50,11 @@ public class TutorInsightService {
     static final int WINDOW_DAYS = 90;
     static final int SCAN_LIMIT = 5000;
     static final int REFRESH_COOLDOWN_MINUTES = 10;
+    /** Hiệu năng (28/11/2026): số liệu gộp (quét tới {@link #SCAN_LIMIT} câu hỏi + phân tích từ khoá)
+     * được dùng lại trong 60s cho mỗi khoá — trang insight không chạy lại phép quét mỗi lần tải/đổi bài. */
+    static final long COMPUTE_TTL_MS = 60_000;
+    private record Computed(long expiresAt, TutorInsightAnalyzer.Result result) {}
+    private final Map<Long, Computed> computeCache = new ConcurrentHashMap<>();
 
     private final CourseRepository courseRepository;
     private final LessonRepository lessonRepository;
@@ -61,7 +67,7 @@ public class TutorInsightService {
     @Transactional(readOnly = true)
     public CourseInsightRes insights(String email, Long courseId, Long lessonId) {
         Course course = loadOwned(email, courseId);
-        TutorInsightAnalyzer.Result r = compute(course.getId());
+        TutorInsightAnalyzer.Result r = cachedCompute(course.getId());
         List<LessonInsightRes> lessons = lessonId == null ? r.lessons()
                 : r.lessons().stream().filter(l -> l.lessonId().equals(lessonId)).toList();
         var poor = lessonId == null ? r.poorTopics()
@@ -159,6 +165,16 @@ public class TutorInsightService {
             row.setStatus(CourseTutorInsight.FAILED);
         }
         insightRepository.save(row);
+    }
+
+    private TutorInsightAnalyzer.Result cachedCompute(Long courseId) {
+        long now = System.currentTimeMillis();
+        Computed c = computeCache.get(courseId);
+        if (c != null && c.expiresAt() > now) return c.result();
+        TutorInsightAnalyzer.Result r = compute(courseId);
+        if (computeCache.size() >= 1_000) computeCache.clear();
+        computeCache.put(courseId, new Computed(now + COMPUTE_TTL_MS, r));
+        return r;
     }
 
     TutorInsightAnalyzer.Result compute(Long courseId) {

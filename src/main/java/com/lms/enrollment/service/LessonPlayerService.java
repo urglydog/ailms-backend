@@ -26,9 +26,13 @@ import com.lms.enrollment.dto.LessonPlayerDto.SubtitleSegmentRes;
 import com.lms.enrollment.repository.EnrollmentRepository;
 import com.lms.enrollment.repository.LessonProgressRepository;
 import com.lms.enrollment.security.EnrollmentSecurity;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -72,14 +76,33 @@ public class LessonPlayerService {
                 .map(p -> p.getLastPositionSec())
                 .orElse(0);
 
+        // Hiệu năng (28/11/2026): trước đây mỗi ngôn ngữ đang bật = 2 truy vấn (track + phụ đề),
+        // ~70 ngôn ngữ → ~150 truy vấn/lần mở player. Nay nạp 1 lần rồi tra theo mã ngôn ngữ.
+        Map<String, AudioTrack> tracksByLang = new HashMap<>();
+        for (AudioTrack t : audioTrackRepository.findByLesson_Id(lessonId)) {
+            tracksByLang.putIfAbsent(t.getLanguage(), t);
+        }
+        Map<String, Transcript> transcriptsByLang = new HashMap<>();
+        for (Transcript t : transcriptRepository.findByLesson_Id(lessonId)) {
+            transcriptsByLang.putIfAbsent(t.getLanguage(), t);
+        }
         List<LanguageRes> languages = voiceMappingRepository.findByIsActiveTrue().stream()
                 .map(VoiceMapping::getLanguage)
                 .distinct()
-                .map(code -> toLanguageRes(code, lessonId))
+                .map(code -> toLanguageRes(code, tracksByLang.get(code), transcriptsByLang.get(code)))
                 .toList();
 
+        // Sidebar: 1 truy vấn bài của cả khoá + 1 truy vấn bài đã hoàn thành (trước: 2 truy vấn/bài).
+        Map<Long, List<Lesson>> lessonsByChapter = new HashMap<>();
+        List<Long> courseLessonIds = new ArrayList<>();
+        for (Lesson l : lessonRepository.findByChapter_CourseIdOrderByChapter_DisplayOrderAscDisplayOrderAsc(course.getId())) {
+            lessonsByChapter.computeIfAbsent(l.getChapter().getId(), k -> new ArrayList<>()).add(l);
+            courseLessonIds.add(l.getId());
+        }
+        Set<Long> completedIds = courseLessonIds.isEmpty() ? Set.of()
+                : lessonProgressRepository.findCompletedLessonIdsByUserIdAndLessonIdIn(userId, courseLessonIds);
         List<ChapterNavRes> chapters = chapterRepository.findByCourseIdOrderByDisplayOrderAsc(course.getId()).stream()
-                .map(chapter -> toChapterNavRes(chapter, userId))
+                .map(chapter -> toChapterNavRes(chapter, lessonsByChapter.getOrDefault(chapter.getId(), List.of()), completedIds))
                 .toList();
 
         // BR-ENROLL-02/03: sở hữu khóa học là điều kiện mở khoá Ghi chú/Học liệu AI/Socratic
@@ -132,17 +155,14 @@ public class LessonPlayerService {
     }
 
     /** UC21/22 — sidebar "Trong khoá học này": điều hướng + đánh dấu bài đã hoàn thành. */
-    private ChapterNavRes toChapterNavRes(Chapter chapter, Long userId) {
-        List<LessonNavRes> lessons = lessonRepository.findByChapterIdOrderByDisplayOrderAsc(chapter.getId()).stream()
-                .map(lesson -> toLessonNavRes(lesson, userId))
+    private ChapterNavRes toChapterNavRes(Chapter chapter, List<Lesson> chapterLessons, Set<Long> completedIds) {
+        List<LessonNavRes> lessons = chapterLessons.stream()
+                .map(lesson -> toLessonNavRes(lesson, completedIds.contains(lesson.getId())))
                 .toList();
         return new ChapterNavRes(chapter.getId(), chapter.getTitle(), chapter.getDisplayOrder(), lessons);
     }
 
-    private LessonNavRes toLessonNavRes(Lesson lesson, Long userId) {
-        boolean isCompleted = lessonProgressRepository.findByUser_IdAndLesson_Id(userId, lesson.getId())
-                .map(p -> p.getIsCompleted())
-                .orElse(false);
+    private LessonNavRes toLessonNavRes(Lesson lesson, boolean isCompleted) {
         return new LessonNavRes(
                 lesson.getId(),
                 lesson.getTitle(),
@@ -153,12 +173,11 @@ public class LessonPlayerService {
         );
     }
 
-    private LanguageRes toLanguageRes(String languageCode, Long lessonId) {
-        Optional<AudioTrack> trackOpt = audioTrackRepository.findByLesson_IdAndLanguage(lessonId, languageCode);
+    private LanguageRes toLanguageRes(String languageCode, AudioTrack track, Transcript transcript) {
+        Optional<AudioTrack> trackOpt = Optional.ofNullable(track);
         boolean available = trackOpt.filter(this::isPlayable).isPresent();
         AudioTrackRes trackRes = trackOpt.map(this::toAudioTrackRes).orElse(null);
-        List<SubtitleSegmentRes> subtitles =
-                loadSubtitles(transcriptRepository.findByLesson_IdAndLanguage(lessonId, languageCode));
+        List<SubtitleSegmentRes> subtitles = loadSubtitles(Optional.ofNullable(transcript));
         return new LanguageRes(languageCode, displayLabel(languageCode), available, trackRes, subtitles);
     }
 

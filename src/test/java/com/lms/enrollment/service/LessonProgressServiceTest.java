@@ -1,5 +1,9 @@
 package com.lms.enrollment.service;
 
+import static org.mockito.ArgumentMatchers.anyString;
+
+import static org.mockito.ArgumentMatchers.anyLong;
+
 import com.lms.auth.entity.User;
 import com.lms.auth.repository.UserRepository;
 import com.lms.auth.service.XpService;
@@ -151,7 +155,7 @@ class LessonProgressServiceTest {
     void khongCoEnrollment_khongCapNhatProgressPct() {
         when(enrollmentRepository.findByUser_IdAndCourse_Id(1L, 10L)).thenReturn(Optional.empty());
 
-        service.recordProgress(EMAIL, 21L, new RecordReq(100, 100));
+        service.recordProgress(EMAIL, 21L, new RecordReq(900, 900));
 
         verify(enrollmentRepository, never()).save(org.mockito.ArgumentMatchers.any());
     }
@@ -167,7 +171,7 @@ class LessonProgressServiceTest {
         when(lessonProgressRepository.countByUser_IdAndLesson_Chapter_Course_IdAndIsCompletedTrue(1L, 10L))
                 .thenReturn(1L);
 
-        service.recordProgress(EMAIL, 21L, new RecordReq(100, 100));
+        service.recordProgress(EMAIL, 21L, new RecordReq(900, 900));
 
         ArgumentCaptor<Enrollment> captor = ArgumentCaptor.forClass(Enrollment.class);
         verify(enrollmentRepository).save(captor.capture());

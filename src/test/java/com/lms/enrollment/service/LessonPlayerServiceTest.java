@@ -27,6 +27,7 @@ import com.lms.enrollment.security.EnrollmentSecurity;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -126,7 +127,7 @@ class LessonPlayerServiceTest {
         when(enrollmentSecurity.canAccessLesson(EMAIL, 21L, true)).thenReturn(true);
         VoiceMapping vi = voiceMapping("vi");
         when(voiceMappingRepository.findByIsActiveTrue()).thenReturn(List.of(vi));
-        when(audioTrackRepository.findByLesson_IdAndLanguage(21L, "vi")).thenReturn(Optional.empty());
+        when(audioTrackRepository.findByLesson_Id(21L)).thenReturn(List.of());
 
         Res res = service.getLessonForPlayback(EMAIL, 21L);
 
@@ -148,7 +149,7 @@ class LessonPlayerServiceTest {
         track.setStatus(TrackStatus.COMPLETED);
         track.setFinalUrl("https://b2.example/final.mp3");
         track.setDurationSec(900);
-        when(audioTrackRepository.findByLesson_IdAndLanguage(21L, "vi")).thenReturn(Optional.of(track));
+        when(audioTrackRepository.findByLesson_Id(21L)).thenReturn(List.of(track));
 
         Res res = service.getLessonForPlayback(EMAIL, 21L);
 
@@ -169,7 +170,7 @@ class LessonPlayerServiceTest {
         track.setLanguage("vi");
         track.setStatus(TrackStatus.PARTIAL);
         track.setFinalUrl(null);
-        when(audioTrackRepository.findByLesson_IdAndLanguage(21L, "vi")).thenReturn(Optional.of(track));
+        when(audioTrackRepository.findByLesson_Id(21L)).thenReturn(List.of(track));
 
         AudioChunk chunk0 = chunk(0, 0, 600, "https://b2.example/chunk_0.mp3");
         when(audioChunkRepository.findByAudioTrack_IdOrderByChunkIndexAsc(5L)).thenReturn(List.of(chunk0));
@@ -254,12 +255,12 @@ class LessonPlayerServiceTest {
         lesson2.setDisplayOrder(1);
         lesson2.setDurationSec(600);
         lesson2.setIsPreview(false);
-        when(lessonRepository.findByChapterIdOrderByDisplayOrderAsc(100L)).thenReturn(List.of(lesson, lesson2));
+        chapter.setCourse(lesson.getChapter().getCourse());
+        lesson.setChapter(chapter);
+        lesson2.setChapter(chapter);
+        when(lessonRepository.findByChapter_CourseIdOrderByChapter_DisplayOrderAscDisplayOrderAsc(10L)).thenReturn(List.of(lesson, lesson2));
 
-        LessonProgress completedProgress = new LessonProgress();
-        completedProgress.setIsCompleted(true);
-        when(lessonProgressRepository.findByUser_IdAndLesson_Id(1L, 21L)).thenReturn(Optional.of(completedProgress));
-        when(lessonProgressRepository.findByUser_IdAndLesson_Id(1L, 22L)).thenReturn(Optional.empty());
+        when(lessonProgressRepository.findCompletedLessonIdsByUserIdAndLessonIdIn(1L, List.of(21L, 22L))).thenReturn(Set.of(21L));
 
         Res res = service.getLessonForPlayback(EMAIL, 21L);
 
@@ -282,7 +283,7 @@ class LessonPlayerServiceTest {
         track.setId(5L);
         track.setLanguage("vi");
         track.setStatus(TrackStatus.PROCESSING);
-        when(audioTrackRepository.findByLesson_IdAndLanguage(21L, "vi")).thenReturn(Optional.of(track));
+        when(audioTrackRepository.findByLesson_Id(21L)).thenReturn(List.of(track));
 
         Res res = service.getLessonForPlayback(EMAIL, 21L);
 
@@ -295,7 +296,7 @@ class LessonPlayerServiceTest {
         VoiceMapping vi = voiceMapping("vi");
         when(voiceMappingRepository.findByIsActiveTrue()).thenReturn(List.of(vi));
         when(transcriptRepository.findByLesson_IdAndIsSourceTrue(21L)).thenReturn(Optional.empty());
-        when(transcriptRepository.findByLesson_IdAndLanguage(21L, "vi")).thenReturn(Optional.empty());
+        when(transcriptRepository.findByLesson_Id(21L)).thenReturn(List.of());
 
         Res res = service.getLessonForPlayback(EMAIL, 21L);
 
@@ -317,7 +318,9 @@ class LessonPlayerServiceTest {
 
         Transcript target = new Transcript();
         target.setId(2L);
-        when(transcriptRepository.findByLesson_IdAndLanguage(21L, "vi")).thenReturn(Optional.of(target));
+        target.setLanguage("vi");
+        source.setLanguage("en");
+        when(transcriptRepository.findByLesson_Id(21L)).thenReturn(List.of(target));
         when(transcriptSegmentRepository.findByTranscript_IdOrderBySeqAsc(2L))
                 .thenReturn(List.of(segment(1, "0.0", "3.5", "Chào mọi người")));
 

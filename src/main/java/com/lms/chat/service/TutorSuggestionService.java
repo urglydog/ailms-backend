@@ -17,9 +17,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Thẻ câu hỏi gợi ý ở trạng thái rỗng của Gia sư AI (26/11/2026, mở rộng ngoài đặc tả gốc).
@@ -49,11 +49,16 @@ public class TutorSuggestionService {
     private final EnrollmentSecurity enrollmentSecurity;
     private final TutorAiSuggestionService aiSuggestionService;
 
-    @Transactional(readOnly = true)
+    /**
+     * Hiệu năng (28/11/2026): KHÔNG bọc @Transactional nữa. Trước đây giao dịch readOnly ngoài giữ
+     * 1 kết nối DB trong khi {@code cachedOrSchedule} (REQUIRES_NEW) xin thêm kết nối thứ 2 → dưới
+     * tải, 20 luồng giữ 20 kết nối cùng chờ kết nối thứ 2 = cạn pool, request treo tới timeout 5s.
+     * Bài học được nạp sẵn chương + khoá (EntityGraph) nên không cần session mở.
+     */
     public List<SuggestionRes> suggestions(String email, Long lessonId) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("User", email));
-        Lesson lesson = lessonRepository.findById(lessonId)
+        Lesson lesson = lessonRepository.findWithChapterAndCourseById(lessonId)
                 .orElseThrow(() -> new ResourceNotFoundException("Lesson", lessonId));
         if (!enrollmentSecurity.canAccessLesson(email, lessonId, false)) {
             throw new AccessDeniedDomainException("Bạn chưa sở hữu khóa học này (BR-ENROLL-02)");
@@ -74,10 +79,29 @@ public class TutorSuggestionService {
         return out;
     }
 
+    /** Kết quả quét câu hỏi gần đây theo (khoá, bài) — dùng chung cho mọi học viên trong {@link #POPULAR_TTL_MS}. */
+    static final long POPULAR_TTL_MS = 60_000;
+    static final int POPULAR_CACHE_MAX = 2_000;
+    private record ScanEntry(long expiresAt, List<Object[]> rows) {}
+    private final Map<String, ScanEntry> popularScanCache = new ConcurrentHashMap<>();
+
+    /** Hiệu năng (28/11/2026): truy vấn quét tới {@link #SCAN_LIMIT} câu hỏi (subquery tương quan)
+     * chạy MỖI lần học viên mở bài — nay cache 60s theo bài; lọc người xem vẫn làm theo từng request. */
+    private List<Object[]> recentQuestionRows(Long courseId, Long lessonId) {
+        String key = courseId + ":" + lessonId;
+        long now = System.currentTimeMillis();
+        ScanEntry e = popularScanCache.get(key);
+        if (e != null && e.expiresAt() > now) return e.rows();
+        List<Object[]> rows = chatMessageRepository.findRecentQuestionsForLesson(courseId, lessonId, SCAN_LIMIT);
+        if (popularScanCache.size() >= POPULAR_CACHE_MAX) popularScanCache.clear();
+        popularScanCache.put(key, new ScanEntry(now + POPULAR_TTL_MS, rows));
+        return rows;
+    }
+
     List<SuggestionRes> popular(Long courseId, Long lessonId, Long viewerId) {
         Map<String, String> firstText = new LinkedHashMap<>();
         Map<String, Set<Long>> askers = new LinkedHashMap<>();
-        for (Object[] row : chatMessageRepository.findRecentQuestionsForLesson(courseId, lessonId, SCAN_LIMIT)) {
+        for (Object[] row : recentQuestionRows(courseId, lessonId)) {
             String text = row[0] == null ? "" : row[0].toString().trim().replaceAll("\\s+", " ");
             Long uid = row[1] == null ? null : ((Number) row[1]).longValue();
             if (uid == null || uid.equals(viewerId) || text.length() < MIN_LEN || text.length() > MAX_LEN) continue;
