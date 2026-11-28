@@ -78,7 +78,9 @@ public class LessonProgressService {
             throw new AccessDeniedDomainException("Bạn chưa sở hữu khóa học này (BR-ENROLL-02)");
         }
 
-        LessonProgress progress = lessonProgressRepository.findByUser_IdAndLesson_Id(user.getId(), lessonId)
+        Optional<LessonProgress> existing = lessonProgressRepository.findByUser_IdAndLesson_Id(user.getId(), lessonId);
+        boolean isNewRecord = existing.isEmpty();
+        LessonProgress progress = existing
                 .orElseGet(() -> {
                     LessonProgress p = new LessonProgress();
                     p.setUser(user);
@@ -124,10 +126,14 @@ public class LessonProgressService {
         
         lessonProgressRepository.save(progress);
 
-        // Hiệu năng (28/11/2026): API này bị mọi học viên đang xem gọi mỗi 15s. % khóa chỉ phụ thuộc số
-        // bài đã hoàn thành (+ Quiz, đã tự tính lại ở QuizService) nên chỉ tính lại khi bài VỪA hoàn
-        // thành — bỏ 4-5 query (enrollment, 2 count, quiz, attempts) + 1 UPDATE ở các lần gọi còn lại.
-        if (reachedThreshold && !wasCompleted) {
+        // Hiệu năng đợt 9: trình phát gửi tiến độ 15 giây/lần cho mỗi học viên đang xem. progressPct của khóa chỉ
+        // phụ thuộc số bài ĐÃ HOÀN THÀNH (+ quiz Official, đã tự tính lại ở QuizService) — đa số lần gửi chỉ đổi vị
+        // trí xem, tính lại là ~6 câu SQL vô ích (đếm bài, đếm bài xong, tìm quiz, tìm lượt làm, đọc + ghi enrollment).
+        // Chỉ tính lại khi bài VỪA hoàn thành, hoặc khi học viên mở bài này LẦN ĐẦU (để progressPct bắt kịp nếu
+        // giảng viên đã thêm/bớt bài từ lần tính trước). Enrollment.updatedAt không được dùng ở đâu ("lần truy
+        // cập gần nhất" lấy từ lesson_progress.updatedAt), nên bỏ các lần lưu enrollment không đổi là an toàn.
+        boolean justCompleted = Boolean.TRUE.equals(progress.getIsCompleted()) && !wasCompleted;
+        if (justCompleted || isNewRecord) {
             Course course = lesson.getChapter().getCourse();
             recalculateEnrollmentProgress(user, course);
         }

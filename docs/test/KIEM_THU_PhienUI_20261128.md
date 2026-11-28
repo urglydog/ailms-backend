@@ -14,7 +14,7 @@ Test thêm hoặc sửa:
 - `TutorInsightAnalyzerTest`: nhãn 4 âm tiết; gộp chủ đề trùng nhãn.
 
 ## Test tải (k6)
-- HTTP, luồng học viên: 200 và 500 người dùng ảo (kết quả trong `../perf/DOT9_PhienUI_ToiUu_20261128.md`).
+- HTTP, luồng học viên: 200 và 500 người dùng ảo (kết quả trong `../perf/DOT10_PhienUI_ToiUu_20261128.md`).
 - WebSocket: STOMP thô qua `ws://localhost:8080/ws/websocket` với JWT trong frame CONNECT. Kịch bản tăng dần 100 → 300 → 500 người cùng subscribe `/topic/lesson/9/chat`. Một người dùng ảo khác gửi `/app/chat/9` mỗi 3 giây, nội dung kèm timestamp để đo độ trễ nhận tin. Dữ liệu test đã được xoá sau khi chạy.
 
 ## Test E2E trên trình duyệt (web local qua cổng 3005)
