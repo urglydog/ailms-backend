@@ -2,6 +2,7 @@ package com.lms.common.config;
 
 import com.lms.auth.security.JwtTokenProvider;
 import com.lms.communication.repository.ConversationRepository;
+import com.lms.enrollment.security.EnrollmentSecurity;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.messaging.Message;
@@ -20,6 +21,8 @@ import org.springframework.stereotype.Component;
  *       Không có token vẫn kết nối được (topic công khai như chat bài học).</li>
  *   <li>SUBSCRIBE {@code /topic/notifications/{x}}: chỉ chính chủ ({@code x} = id hoặc email).</li>
  *   <li>SUBSCRIBE {@code /topic/conversations/{id}}: chỉ 2 người trong hội thoại.</li>
+ *   <li>SUBSCRIBE {@code /topic/lesson/{id}/**} và SEND {@code /app/chat/{id}}: phải học được bài đó (đã ghi danh,
+ *   là chủ khóa hoặc bài xem thử) — 28/11/2026, trước đây ai cũng nghe lén/gửi vào Hỏi đáp mọi bài.</li>
  *   <li>SEND {@code /app/**}: phải có JWT hợp lệ ở CONNECT (26/11/2026); trước đây khách chưa đăng nhập gửi được tin vào mọi bài học.</li>
  * </ul>
  * Trước đây ai biết id đều nghe được tin nhắn riêng/thông báo của người khác.
@@ -33,9 +36,12 @@ public class StompAuthInterceptor implements ChannelInterceptor {
     private static final String APP_PREFIX = "/app/";
     private static final String NOTIFY_PREFIX = "/topic/notifications/";
     private static final String CONVERSATION_PREFIX = "/topic/conversations/";
+    private static final String LESSON_TOPIC_PREFIX = "/topic/lesson/";
+    private static final String LESSON_CHAT_SEND_PREFIX = "/app/chat/";
 
     private final JwtTokenProvider jwtTokenProvider;
     private final ConversationRepository conversationRepository;
+    private final EnrollmentSecurity enrollmentSecurity;
 
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
@@ -58,6 +64,9 @@ public class StompAuthInterceptor implements ChannelInterceptor {
                     && (session == null || session.get(ATTR_USER_ID) == null)) {
                 throw new MessageDeliveryException("Cần đăng nhập để gửi tin nhắn");
             }
+            if (dest != null && dest.startsWith(LESSON_CHAT_SEND_PREFIX)) {
+                requireLessonAccess(session, dest.substring(LESSON_CHAT_SEND_PREFIX.length()));
+            }
         } else if (accessor.getCommand() == StompCommand.SUBSCRIBE) {
             String dest = accessor.getDestination();
             if (dest == null) return message;
@@ -73,9 +82,24 @@ public class StompAuthInterceptor implements ChannelInterceptor {
                         || !conversationRepository.isParticipant(conversationId, userId)) {
                     throw new MessageDeliveryException("Không có quyền nghe hội thoại này");
                 }
+            } else if (dest.startsWith(LESSON_TOPIC_PREFIX)) {
+                requireLessonAccess(session, dest.substring(LESSON_TOPIC_PREFIX.length()));
             }
         }
         return message;
+    }
+
+    private void requireLessonAccess(Map<String, Object> session, String rest) {
+        String email = session == null ? null : (String) session.get(ATTR_EMAIL);
+        int slash = rest.indexOf('/');
+        Long lessonId = parseId(slash < 0 ? rest : rest.substring(0, slash));
+        boolean ok;
+        try {
+            ok = email != null && lessonId != null && enrollmentSecurity.canAccessLesson(email, lessonId, true);
+        } catch (RuntimeException e) { // bài không tồn tại
+            ok = false;
+        }
+        if (!ok) throw new MessageDeliveryException("Không có quyền truy cập bài học này");
     }
 
     private static Long parseId(String s) {

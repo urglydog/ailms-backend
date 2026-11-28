@@ -2,6 +2,7 @@ package com.lms.common.config;
 
 import com.lms.auth.security.JwtTokenProvider;
 import com.lms.communication.repository.ConversationRepository;
+import com.lms.enrollment.security.EnrollmentSecurity;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,6 +29,7 @@ class StompAuthInterceptorTest {
 
     @Mock private JwtTokenProvider jwt;
     @Mock private ConversationRepository conversations;
+    @Mock private EnrollmentSecurity enrollment;
     @InjectMocks private StompAuthInterceptor interceptor;
 
     private static Message<byte[]> frame(StompCommand cmd, Map<String, Object> session, String dest, String auth) {
@@ -85,6 +87,7 @@ class StompAuthInterceptorTest {
     @Test
     void send_toAppDestination_allowedWhenLoggedIn() {
         Map<String, Object> session = connectedAs(7L, "a@lms.local");
+        when(enrollment.canAccessLesson("a@lms.local", 5L, true)).thenReturn(true);
         assertThatCode(() -> interceptor.preSend(frame(StompCommand.SEND, session, "/app/chat/5", null), null))
                 .doesNotThrowAnyException();
     }
@@ -94,9 +97,29 @@ class StompAuthInterceptorTest {
         Map<String, Object> session = new HashMap<>();
         interceptor.preSend(frame(StompCommand.CONNECT, session, null, null), null);
 
-        assertThatCode(() -> interceptor.preSend(frame(StompCommand.SUBSCRIBE, session, "/topic/lesson/3/chat", null), null))
+        assertThatCode(() -> interceptor.preSend(frame(StompCommand.SUBSCRIBE, session, "/topic/courses/3", null), null))
                 .doesNotThrowAnyException();
         assertThatThrownBy(() -> interceptor.preSend(frame(StompCommand.SUBSCRIBE, session, "/topic/conversations/1", null), null))
+                .isInstanceOf(MessageDeliveryException.class);
+    }
+
+    @Test
+    void lessonTopic_requiresLessonAccess() {
+        Map<String, Object> session = connectedAs(7L, "a@lms.local");
+        when(enrollment.canAccessLesson("a@lms.local", 9L, true)).thenReturn(true);
+        when(enrollment.canAccessLesson("a@lms.local", 10L, true)).thenReturn(false);
+
+        assertThatCode(() -> interceptor.preSend(frame(StompCommand.SUBSCRIBE, session, "/topic/lesson/9/chat", null), null))
+                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> interceptor.preSend(frame(StompCommand.SUBSCRIBE, session, "/topic/lesson/10/best-answer", null), null))
+                .isInstanceOf(MessageDeliveryException.class);
+        assertThatThrownBy(() -> interceptor.preSend(frame(StompCommand.SEND, session, "/app/chat/10", null), null))
+                .isInstanceOf(MessageDeliveryException.class);
+    }
+
+    @Test
+    void lessonTopic_anonymousRejected() {
+        assertThatThrownBy(() -> interceptor.preSend(frame(StompCommand.SUBSCRIBE, new HashMap<>(), "/topic/lesson/9/chat", null), null))
                 .isInstanceOf(MessageDeliveryException.class);
     }
 }
