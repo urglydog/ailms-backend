@@ -59,8 +59,10 @@ public class AuthService {
     @Value("${lms.frontend-base-url:http://localhost:3000}")
     private String frontendBaseUrl;
 
-    /** Scheme app mobile hợp lệ để redirect về sau khi đăng nhập Google — chặn open-redirect, xem app.json "scheme". */
-    private static final Set<String> ALLOWED_MOBILE_RETURN_SCHEMES = Set.of("exp", "mobile");
+    /** Scheme app mobile hợp lệ để redirect về sau khi đăng nhập Google — chặn open-redirect, xem app.json "scheme".
+     * {@code exp}/{@code exps}: Expo Go (exps là bản HTTPS của tunnel Expo mới, vd {@code exps://c-xxx.on.expo.app/--/...});
+     * {@code mobile}: app build thật (scheme khai báo ở app.json). */
+    private static final Set<String> ALLOWED_MOBILE_RETURN_SCHEMES = Set.of("exp", "exps", "mobile");
 
     private static final String LOGIN_FAIL_PREFIX = "login_fail:";
     private static final String REFRESH_TOKEN_PREFIX = "refresh_token:";
@@ -430,11 +432,12 @@ public class AuthService {
         User user;
         if (existingUser.isPresent()) {
             user = existingUser.get();
-            // Update profile fields from Google
-            if (payload.get("name") != null) {
+            // Chỉ lấy tên/ảnh từ Google khi tài khoản CHƯA có — trước đây mỗi lần đăng nhập Google đều ghi đè, nên tên/ảnh người dùng
+            // tự đổi trong LinguaLearn bị mất ở lần đăng nhập kế tiếp.
+            if (payload.get("name") != null && (user.getFullName() == null || user.getFullName().isBlank())) {
                 user.setFullName((String) payload.get("name"));
             }
-            if (payload.get("picture") != null) {
+            if (payload.get("picture") != null && (user.getAvatarUrl() == null || user.getAvatarUrl().isBlank())) {
                 user.setAvatarUrl((String) payload.get("picture"));
             }
             log.info("Updated existing Google OAuth user: {}", email);

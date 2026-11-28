@@ -1,0 +1,30 @@
+##### NỀN — 2026-11-27T03:37:51Z
+Mem: tổng 3815 dùng 2445 còn 1089
+Swap: tổng 4095 dùng 598 còn 
+đĩa trống 6.6G
+container đang chạy: 10
+
+##### BẬT: prometheus grafana node-exporter (--no-deps, không đụng dịch vụ khác)
+ Volume be_prometheus_data Created 
+ Container lms_prometheus Creating 
+ Container lms_node_exporter Created 
+ Container lms_prometheus Created 
+ Container lms_grafana Creating 
+ Container lms_grafana Created 
+ Container lms_node_exporter Starting 
+ Container lms_prometheus Starting 
+ Container lms_node_exporter Started 
+ Container lms_prometheus Started 
+ Container lms_grafana Starting 
+ Container lms_grafana Started 
+
+##### SAU KHI BẬT 03:38:17
+lms_backend	Up 3 minutes (healthy)
+lms_grafana	Up 20 seconds
+lms_mysql	Up 29 minutes (healthy)
+lms_node_exporter	Up 21 seconds
+lms_prometheus	Up 20 seconds
+lms_redis	Up 34 minutes (healthy)
+Mem: tổng 3815 dùng 2339 còn 1190
+Swap: tổng 4095 dùng 847 còn 
+đĩa trống 5.2G

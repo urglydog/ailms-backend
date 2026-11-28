@@ -1,0 +1,73 @@
+##### NỀN TRƯỚC KHI THỬ — 2026-11-27T02:52:37Z UTC (09:52 giờ VN)
+               total        used        free      shared  buff/cache   available
+Mem:            3815        2674         117           7        1023         858
+Swap:           4095          59        4036
+/dev/sda1        38G   29G  7.1G  81% /
+ 02:52:37 up 17 min,  0 users,  load average: 0.13, 0.27, 0.32
+lms_adminer	Up 17 minutes
+lms_ai_api	Up 17 minutes (healthy)
+lms_ai_beat	Up 17 minutes
+lms_ai_worker	Up 17 minutes
+lms_backend	Up 17 minutes (healthy)
+lms_caddy	Up 17 minutes (healthy)
+lms_mailpit	Up 17 minutes (healthy)
+lms_mysql	Up 17 minutes (healthy)
+lms_redis	Up 17 minutes (healthy)
+roadmap-worker-1	Up 17 minutes
+lms_adminer	11.97MiB / 64MiB	0.00%
+lms_ai_api	103.3MiB / 384MiB	0.27%
+lms_ai_beat	62.09MiB / 192MiB	0.00%
+lms_ai_worker	300.7MiB / 1.25GiB	0.42%
+lms_backend	670MiB / 1.5GiB	0.42%
+lms_caddy	27.05MiB / 128MiB	0.00%
+lms_mailpit	21.91MiB / 96MiB	0.00%
+lms_mysql	415.7MiB / 768MiB	1.35%
+lms_redis	9.582MiB / 320MiB	1.24%
+roadmap-worker-1	98.27MiB / 200MiB	0.29%
+ERROR backend 10 phút gần: 16
+
+##### DIỄN TẬP: dừng Redis — bắt đầu 2026-11-27T02:52:47Z UTC
+/bin/bash: line 1: ./drill.sh: Permission denied
+##### KẾT THÚC 2026-11-27T02:52:47Z UTC
+
+##### DIỄN TẬP: dừng Redis — bắt đầu 2026-11-27T02:52:56Z UTC (chạy lại sau khi sửa quyền thực thi)
+=== TRƯỚC KHI THỬ
+[  0s] courses:200 categories:200 health:200 
+=== dừng lms_redis ~25 giây
+[  5s] courses:000 categories:000 health:000 
+[ 22s] courses:000 categories:000 health:000 
+[ 39s] courses:000 categories:000 health:000 
+[ 56s] courses:000 categories:000 health:000 
+[ 74s] courses:000 categories:000 health:000 
+=== bật lại Redis
+Redis healthy sau 6s
+=== SAU PHỤC HỒI (chờ 20 giây cho các kết nối nối lại)
+[112s] courses:200 categories:200 health:200 
+##### KẾT THÚC 2026-11-27T02:54:51Z UTC
+
+##### SAU DIỄN TẬP — 2026-11-27T02:55:04Z
+lms_adminer	Up 19 minutes
+lms_ai_api	Up 19 minutes (healthy)
+lms_ai_beat	Up 19 minutes
+lms_ai_worker	Up 19 minutes
+lms_backend	Up 19 minutes (healthy)
+lms_caddy	Up 19 minutes (healthy)
+lms_mailpit	Up 19 minutes (healthy)
+lms_mysql	Up 19 minutes (healthy)
+lms_redis	Up 40 seconds (healthy)
+roadmap-worker-1	Up 19 minutes
+Mem:            3815        2654         137           7        1022         878
+Swap:           4095          61        4034
+backend: health=healthy restarts=0 oom=false
+--- backend trong cửa sổ diễn tập (02:52:56–02:55:00 UTC)
+     15 ERROR 1 --- [ai-powered-lms] [MessageBroker-2] o.s.s.s.TaskUtils$LoggingErrorHandler    : Unexpected error occurred in scheduled task
+     14 ERROR 1 --- [ai-powered-lms] [MessageBroker-1] o.s.s.s.TaskUtils$LoggingErrorHandler    : Unexpected error occurred in scheduled task
+      9  WARN 1 --- [ai-powered-lms] [ioEventLoop-4-2] i.l.core.protocol.ConnectionWatchdog     : Cannot reconnect to [redis/<unresolved>:6379]: java.nio.channels.ClosedChannelEx
+      9  WARN 1 --- [ai-powered-lms] [ioEventLoop-4-1] i.l.core.protocol.ConnectionWatchdog     : Cannot reconnect to [redis/<unresolved>:6379]: java.nio.channels.ClosedChannelEx
+      5  WARN 1 --- [ai-powered-lms] [xecutorLoop-1-2] o.s.b.a.d.r.RedisReactiveHealthIndicator : Redis health check failed
+      5  WARN 1 --- [ai-powered-lms] [xecutorLoop-1-1] o.s.b.a.d.r.RedisReactiveHealthIndicator : Redis health check failed
+      5  WARN 1 --- [ai-powered-lms] [ioEventLoop-4-2] i.l.core.protocol.ConnectionWatchdog     : Cannot reconnect to [redis/<unresolved>:6379]: redis
+      4  WARN 1 --- [ai-powered-lms] [ioEventLoop-4-1] i.l.core.protocol.ConnectionWatchdog     : Cannot reconnect to [redis/<unresolved>:6379]: redis
+--- ngày giờ lỗi đầu/cuối
+org.springframework.dao.
+Caused by: io.lettuce.co

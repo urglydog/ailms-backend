@@ -158,6 +158,9 @@ services:
       # (property đã đổi tên từ Boot 3.0 — dùng tên cũ là Redis không kết nối được)
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
+      # Timeout lệnh Redis 1 giây (27/11/2026). Mặc định application.yml là 5s: khi Redis chết, mỗi yêu cầu cần ≥ 3 thao tác Redis
+      # (giới hạn tần suất, đọc/ghi cache) nên chờ cộng dồn ≥ 15s → API treo (diễn tập docs/perf/drills/DRILL_20261127.md).
+      SPRING_DATA_REDIS_TIMEOUT: ${REDIS_COMMAND_TIMEOUT:-1s}
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD:?Thieu_Mat_Khau_Redis_trong_env}
       # Mail — mặc định Mailpit (local dev), điền SPRING_MAIL_* trong be/.env để chuyển
       # sang Gmail SMTP thật (production) mà không cần đổi file này (27/09/2026).

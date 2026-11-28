@@ -361,6 +361,7 @@ public class InstructorMaterialController {
     private final com.lms.material.repository.FlashcardReviewRepository flashcardReviewRepository;
     private final com.lms.material.service.MaterialAssignmentService materialAssignmentService;
     private final CourseRepository courseRepository;
+    private final com.lms.enrollment.repository.EnrollmentRepository enrollmentRepository;
     private final com.lms.catalog.service.CourseActivityLogService activityLogService;
 
     @PutMapping("/{id}/attach-lesson")
@@ -496,6 +497,15 @@ public class InstructorMaterialController {
     @PreAuthorize("isAuthenticated()")
     @Transactional(readOnly = true)
     public ResponseEntity<java.util.List<java.util.Map<String, Object>>> getMaterialsForCourse(Principal principal, @PathVariable Long courseId) {
+        // Trước đây chỉ cần đăng nhập là liệt kê được học liệu của MỌI khoá. Nay: giảng viên của khoá, quản trị viên, hoặc học viên còn ghi danh.
+        Course course = courseRepository.findById(courseId)
+                .orElseThrow(() -> new ResourceNotFoundException("Course", courseId));
+        boolean isAdmin = principal instanceof org.springframework.security.core.Authentication auth
+                && auth.getAuthorities().stream().anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
+        boolean isOwner = course.getInstructor().getEmail().equals(principal.getName());
+        if (!isAdmin && !isOwner && !enrollmentRepository.existsByUser_EmailAndCourse_Id(principal.getName(), courseId)) {
+            throw new AccessDeniedDomainException("Bạn chưa sở hữu khóa học này");
+        }
         // Fetch all generated materials for the course
         java.util.List<com.lms.material.entity.MaterialGeneration> generations = 
             materialGenerationRepository.findByCourse_IdAndIsDeletedFalseOrderByCreatedAtDesc(courseId);

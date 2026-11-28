@@ -1,0 +1,6 @@
+tạo luật tạm: HTTP 201 
+  + 10s trạng thái luật tạm: inactive
+  + 20s trạng thái luật tạm: firing
+luật đã kích hoạt; chờ 60 giây cho Telegram gửi tin...
+xoá luật tạm: HTTP 204
+luật tạm còn sót: không

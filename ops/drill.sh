@@ -5,8 +5,14 @@
 set -u
 B=https://46.224.175.90.nip.io
 what=${1:-}
-probe() { printf "%s:%s " "$1" "$(curl -s -o /dev/null -m 4 -w '%{http_code}' "$B$2")"; }
-sample() { printf "[%3ss] " "$1"; probe courses "/api/v1/courses?size=1"; probe categories /api/v1/categories; probe health /actuator/health; echo; }
+# Chờ tối đa 15 giây mỗi lần gọi (backend có timeout Redis 5 giây) và ghi cả thời gian trả lời: mã/giây
+probe() { curl -s -o /dev/null -m 15 -w "$1:%{http_code}/%{time_total}s" "$B$2"; }
+# gọi 3 địa chỉ SONG SONG để mỗi vòng đo chỉ mất ~5 giây khi backend chậm (timeout Redis 5 giây)
+sample() {
+  local d; d=$(mktemp -d)
+  probe courses "/api/v1/courses?size=1" > "$d/1" & probe categories /api/v1/categories > "$d/2" & probe health /actuator/health > "$d/3" & wait
+  printf "[%3ss] %s %s %s\n" "$1" "$(cat "$d/1")" "$(cat "$d/2")" "$(cat "$d/3")"; rm -rf "$d"
+}
 wait_healthy() { local c=$1 t0=$(date +%s); for i in $(seq 1 120); do [ "$(docker inspect "$c" --format '{{.State.Health.Status}}' 2>/dev/null)" = healthy ] && { echo $(( $(date +%s) - t0 )); return; }; sleep 2; done; echo "quá 240"; }
 [ -n "$what" ] || { echo "Dùng: $0 redis|mysql|backend"; exit 1; }
 echo "=== TRƯỚC KHI THỬ"; sample 0
